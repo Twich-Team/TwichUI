@@ -1,4 +1,4 @@
--- TwichUI settings: Target dragon artwork (targetart/). The switch and whether EllesmereUI's target frame was found,
+-- TwichUI settings: Target Portrait Decorations (targetart/). The switch and whether EllesmereUI's target frame was found,
 -- the artwork for each kind of enemy, how it is placed and drawn, and a preview: a sample frame of this window's own
 -- (always there, clearly not your target) and, on request, the chosen artwork on your real target frame. Every value
 -- is checked and saved by the core's targetart/Config.lua; this file only describes rows that call its Get/Set. Nothing
@@ -10,7 +10,7 @@ local P = {}
 R.TargetArtPage = P
 
 local W = 644                  -- the settings window's content width
-local HOST_H = 300
+local HOST_H = 584
 local CANVAS_W, CANVAS_H = 430, 200
 local CHOICE_STEP = 25        -- the artwork buttons beside the sample, one under another
 local SAMPLE_W, SAMPLE_H = 181, 52   -- EllesmereUI's default target frame, when the real one can't be measured
@@ -19,6 +19,7 @@ local function Wg() return R.SettingsWidgets end
 local function TA() return R.TargetArt end
 local function D() return R.TargetArtDisplay end
 local function On() return R:Enabled("targetArt") end
+local function Legacy() return TA().Get("style") == "legacy" end
 
 ---------------------------------------------------------------------------
 -- The sample frame
@@ -32,7 +33,9 @@ local function SampleSize()
     local host = s.host
     if host then
         local w, h = host:GetWidth(), host:GetHeight()
-        if type(w) == "number" and type(h) == "number" and w >= 1 and h >= 1 then
+        if not (issecretvalue and (issecretvalue(w) or issecretvalue(h)))
+            and type(w) == "number" and type(h) == "number" and w >= 1 and h >= 1
+            and w < math.huge and h < math.huge then
             return math.min(w, CANVAS_W - 80), h, true
         end
     end
@@ -48,16 +51,30 @@ local function Refresh()
     f.size:SetText(real and ("Drawn at your target frame's size, %d x %d."):format(math.floor(w + 0.5), math.floor(h + 0.5))
         or ("Drawn at EllesmereUI's default target frame size, %d x %d (your frame isn't available to measure)."):format(w, h))
     local id = d.PreviewArt()
-    local p = ta.Placement(id, h, nil, placement)
+    local modern = not Legacy()
+    if modern and not ta.MODERN[id] then id = "boss" end
+    local p = modern and ta.ModernPlacement(id, h, h, placement) or ta.Placement(id, h, nil, placement)
     local tex = f.art
-    tex:SetTexture(ta.ART[id].path)
+    tex:SetTexture((modern and ta.MODERN[id] or ta.ART[id]).path)
     tex:SetTexCoord(p.l, p.r, p.t, p.b)
     tex:SetSize(p.w, p.h)
     tex:ClearAllPoints()
-    tex:SetPoint(p.point, f.sample, p.relPoint, p.x, p.y)
-    tex:SetAlpha(ta.Get("opacity") / 100)
-    tex:SetDrawLayer(ta.Get("layer") == "behind" and "BACKGROUND" or "OVERLAY", 1)
-    for _, b in ipairs(f.choices) do b.mark:SetShown(b.id == id) end
+    if modern then tex:SetPoint("CENTER", f.portrait, "CENTER", p.x, p.y)
+    else tex:SetPoint(p.point, f.sample, p.relPoint, p.x, p.y) end
+    tex:SetAlpha(modern and 1 or ta.Get("opacity") / 100)
+    tex:SetDrawLayer(not modern and ta.Get("layer") == "behind" and "BACKGROUND" or "OVERLAY", 1)
+    f.portrait:SetSize(h, h)
+    f.portrait:SetShown(modern)
+    for _, b in ipairs(f.choices) do
+        b:SetShown(not modern or ta.MODERN[b.id] ~= nil)
+        b.mark:SetShown(b.id == id)
+    end
+    for _, card in ipairs(f.styles) do
+        card.mark:SetShown(card.id == ta.Get("style"))
+        card.selected:SetText(card.id == ta.Get("style") and "Selected" or "Choose style")
+    end
+    f.live:ClearAllPoints()
+    f.live:SetPoint("TOPLEFT", f.choices[1]:GetParent(), "TOPLEFT", CANVAS_W + 20, -40 - ((modern and 3 or #ta.ART_ORDER) + 1) * CHOICE_STEP)
     f.live:SetText(d.PreviewActive() and "Stop" or "Show on my target frame")
     f.liveNote:SetText(d.PreviewActive()
         and "Showing on your target frame whatever you target. Target something to see it; it stops when you close these settings or enter combat."
@@ -68,12 +85,59 @@ local function Build()
     built = true
     local G, ta = Wg(), TA()
     local pal = G.pal
-    f.about = G.Text(f, "small")
+    f.styles = {}
+    for i, style in ipairs({
+        { "modern", "Modern Portrait Frames", "Automatically fits your target portrait.", "Default" },
+        { "legacy", "Legacy Dragons", "Customizable positioning and sizing.", "Classic" },
+    }) do
+        local card = CreateFrame("Button", nil, f, "BackdropTemplate")
+        card:SetSize(310, 166)
+        card:SetPoint("TOPLEFT", 4 + (i - 1) * 324, -2)
+        G.Surface(card, pal.surface, 1, pal.bronzeLo, 0.8)
+        card.id = style[1]
+        card:SetScript("OnClick", function()
+            TA().Set("style", style[1])
+            K.RefreshOverview()
+            Refresh()
+        end)
+        card.mark = card:CreateTexture(nil, "OVERLAY")
+        card.mark:SetColorTexture(pal.teal[1], pal.teal[2], pal.teal[3], 1)
+        card.mark:SetPoint("TOPLEFT", 1, -1)
+        card.mark:SetPoint("TOPRIGHT", -1, -1)
+        card.mark:SetHeight(3)
+        local title = G.Text(card, "heading")
+        title:SetPoint("TOPLEFT", 12, -12)
+        title:SetText(style[2])
+        local caption = G.Text(card, "meta")
+        caption:SetPoint("TOPLEFT", 12, -32)
+        caption:SetText(style[3])
+        local badge = G.Text(card, "meta")
+        badge:SetPoint("BOTTOMLEFT", 12, 12)
+        badge:SetText(style[4])
+        card.selected = G.Text(card, "meta")
+        card.selected:SetPoint("BOTTOMRIGHT", -12, 12)
+        local art = card:CreateTexture(nil, "ARTWORK")
+        if style[1] == "modern" then
+            art:SetTexture(ta.MODERN.boss.path)
+            art:SetSize(140, 140)
+            art:SetPoint("CENTER", 0, -12)
+        else
+            art:SetTexture(ta.ART.boss.path)
+            art:SetTexCoord(0, ta.ART.boss.width / ta.TEXTURE_SIZE, 0, ta.ART.boss.height / ta.TEXTURE_SIZE)
+            art:SetSize(68, 95)
+            art:SetPoint("CENTER", 0, -5)
+        end
+        f.styles[i] = card
+    end
+    local body = CreateFrame("Frame", nil, f)
+    body:SetSize(W, 400)
+    body:SetPoint("TOPLEFT", 0, -184)
+    f.about = G.Text(body, "small")
     f.about:SetPoint("TOPLEFT", 4, -2)
     f.about:SetWidth(W - 8)
     f.about:SetText("Choose artwork on the right to try it on this sample. Preview choices are never saved.")
 
-    local canvas = CreateFrame("Frame", nil, f, "BackdropTemplate")
+    local canvas = CreateFrame("Frame", nil, body, "BackdropTemplate")
     canvas:SetSize(CANVAS_W, CANVAS_H)
     canvas:SetPoint("TOPLEFT", 4, -32)
     G.Well(canvas)
@@ -92,19 +156,22 @@ local function Build()
     local name = G.Text(sample, "body")
     name:SetPoint("LEFT", 8, 4)
     name:SetText("Sample enemy")
+    f.portrait = sample:CreateTexture(nil, "ARTWORK")
+    f.portrait:SetTexture([[Interface\Icons\Ability_Hunter_Pet_Bear]])
+    f.portrait:SetPoint("RIGHT", sample, "RIGHT", 0, 0)
     f.art = sample:CreateTexture(nil, "OVERLAY", nil, 1)
 
-    f.size = G.Text(f, "meta")
+    f.size = G.Text(body, "meta")
     f.size:SetPoint("TOPLEFT", canvas, "BOTTOMLEFT", 0, -4)
     f.size:SetWidth(CANVAS_W)
 
     local x = CANVAS_W + 20
-    local label = G.Text(f, "heading")
+    local label = G.Text(body, "heading")
     label:SetPoint("TOPLEFT", x, -34)
     label:SetText("Artwork in this preview")
     f.choices = {}
     for i, id in ipairs(ta.ART_ORDER) do
-        local b = G.Button(f, ta.ART[id].label, 170, "secondary", function()
+        local b = G.Button(body, ({ boss = "Boss", elite = "Elite", rare = "Rare" })[id] or ta.ART[id].label, 170, "secondary", function()
             D().SetPreviewArt(id)
             Refresh()
             K.RefreshOverview()   -- the fine-tune rows follow this choice
@@ -117,20 +184,20 @@ local function Build()
         b.mark:SetPoint("LEFT", 4, 0)
         f.choices[i] = b
     end
-    f.live = G.Button(f, "Show on my target frame", 170, "secondary", function()
+    f.live = G.Button(body, "Show on my target frame", 170, "secondary", function()
         local d = D()
         if d.PreviewActive() then d.PreviewStop()
         else
             local ok, why = d.PreviewStart()
             if not ok then
-                R.Print(why == "combat" and "the preview waits until you are out of combat." or "turn the target dragon artwork on first.")
+                R.Print(why == "combat" and "the preview waits until you are out of combat." or "turn Target Portrait Decorations on first.")
             end
         end
         Refresh()
         K.RefreshOverview()
     end)
     f.live:SetPoint("TOPLEFT", x, -34 - (#ta.ART_ORDER + 1) * CHOICE_STEP - 6)
-    f.liveNote = G.Text(f, "meta")
+    f.liveNote = G.Text(body, "meta")
     f.liveNote:SetPoint("TOPLEFT", f.live, "BOTTOMLEFT", 0, -4)
     f.liveNote:SetWidth(W - x - 8)
 end
@@ -159,29 +226,30 @@ local STATUS = {
     combat = { "Waits for combat to end", "The artwork is put on the target frame as soon as combat ends.", "quiet" },
     ready = { "Attached", "Decorating EllesmereUI's target frame.", "ok" },
     absent = { "EllesmereUI not loaded", "EllesmereUI's unit frames are not loaded, so there is no frame to decorate. Nothing is drawn anywhere else.", "warn" },
+    portrait = { "Portrait unavailable", "Modern artwork needs a visible, compatible target portrait. Enable the EllesmereUI target portrait or choose Legacy Dragons.", "quiet" },
     noFrame = { "No EllesmereUI target frame", "EllesmereUI is loaded but draws no target frame of its own (it can be set to use Blizzard's or none). Nothing is drawn anywhere else.", "warn" },
     incompatible = { "Not recognised", "Something named like EllesmereUI's target frame was found, but it is not a target frame TwichUI recognises (a different EllesmereUI version?). Nothing is drawn.", "warn" },
 }
 
 K.Page({
-    key = "targetArt", icon = "targetArt", name = "Target dragon artwork", order = 97, group = "addons",
-    description = "A dragon on EllesmereUI's target frame for bosses, rares and elites, in the artwork you choose for each. Off until you turn it on.",
-    keywords = "ellesmereui ellesmere unit frame target frame dragon elite rare boss world boss rare elite classification artwork decoration portrait silver gold wings",
+    key = "targetArt", icon = "targetArt", name = "Target Portrait Decorations", order = 97, group = "addons",
+    description = "Decorate your target's portrait with unique artwork for bosses, elites, and rare enemies.",
+    keywords = "target portrait decorations modern portrait frames legacy dragons automatic fit ellesmereui ellesmere unit frame target frame dragon elite rare boss world boss rare elite classification artwork decoration portrait silver gold wings",
     overview = {
-        label = "Target dragon artwork", tip = "A dragon on EllesmereUI's target frame for bosses, rares and elites.",
+        label = "Target Portrait Decorations", tip = "Decorate the target portrait based on enemy classification.",
         when = function() return R.TargetArt ~= nil end,
         status = function() return K.OnOff(On()) end,
     },
     when = function() return R.TargetArt ~= nil and R.TargetArtDisplay ~= nil end,
-    host = function() return P.Frame() end, hostAfter = "Preview", hostHeight = HOST_H,
+    host = function() return P.Frame() end, hostAfter = "Artwork style", hostHeight = function() return Legacy() and HOST_H or HOST_H - 100 end,
     build = function()
         local Header, Toggle, Under = K.Header, K.Toggle, K.Under
         local BOOL, STRING, NUMBER = K.BOOL, K.STRING, K.NUMBER
         local ta = TA()
 
-        Header("Target dragon artwork", "Decorates EllesmereUI's target frame with a dragon chosen by the kind of enemy you target. It only draws: it never changes EllesmereUI's frame, its settings or what you can click, and draws nothing without EllesmereUI's own target frame.")
-        local main = Toggle("targetArt", "Show dragon artwork on the target frame",
-            "When your target is one of the kinds below, draws the artwork you chose for it at the target frame's corner. The kind comes from the game: its boss flag first, then its classification (world boss, rare elite, elite, rare). Ordinary enemies, players and anything the game won't say get none.\n\nNeeds EllesmereUI's unit frames with EllesmereUI's own target frame. Turn it off to remove it completely: nothing listens for the game's events and the artwork is hidden.")
+        Header("Target Portrait Decorations", "Decorate your target's portrait with unique artwork for bosses, elites, and rare enemies.")
+        local main = Toggle("targetArt", "Enable Target Portrait Decorations",
+            "Decorate your target according to its boss flag and classification. Modern frames automatically fit the visible EllesmereUI target portrait. Legacy Dragons keep their customizable placement. Ordinary targets and unreadable classifications show no decoration.")
         Under(K.Status("EllesmereUI target frame",
             function() return STATUS[D().Status()] and STATUS[D().Status()][1] or "Unknown" end,
             function() return STATUS[D().Status()] and STATUS[D().Status()][2] end,
@@ -192,12 +260,23 @@ K.Page({
         local function Shared(key, varType, label, set)
             local setting = K.Proxy("targetArt" .. key:sub(1, 1):upper() .. key:sub(2), varType, label, ta.DEFAULTS[key],
                 function() return ta.Get(key) end, set or function(value) ta.Set(key, value) end)
-            if setting then resettable[#resettable + 1] = { setting = setting, default = ta.DEFAULTS[key] } end
+            if setting and key ~= "style" then resettable[#resettable + 1] = { setting = setting, default = ta.DEFAULTS[key] } end
             return setting
         end
         local function Whole(key) return function(v) ta.Set(key, math.floor(v + 0.5)) end end
         local function Bool(key) return function(v) ta.Set(key, v and true or false) end end
 
+        Header("Artwork style", "Choose a portrait frame or a classic dragon. Legacy adjustments are kept when switching styles.")
+        K.Dropdown(Shared("style", STRING, "Artwork style", function(value)
+            ta.Set("style", value)
+            K.RefreshOverview()
+        end), function() return {
+            { "modern", "Modern Portrait Frames" }, { "legacy", "Legacy Dragons" },
+        } end, "Choose automatically fitted portrait frames or classic dragons. Your legacy customization is kept when switching styles.")
+        local automatic = K.Status("Automatic fit", function() return "Artwork follows your target portrait's size and position." end)
+        automatic:AddShownPredicate(function() return not Legacy() end)
+
+        local legacyStart = #K.current.rows + 1
         local hide = Under(K.Checkbox(Shared("hideEllesmere", BOOL, "Hide EllesmereUI's own target dragon while this one shows", Bool("hideEllesmere")),
             "EllesmereUI can draw a dragon of its own on the target (Elite Enemy Dragon, or the Elite/Rare Indicator's Pixels Dragon style). With this on, that dragon is made invisible while TwichUI's artwork shows, and comes back as soon as TwichUI's goes (another target, turning this off, or turning the artwork off). EllesmereUI's settings are not changed. The small Elite/Rare badge, and a dragon painted into a stock frame style, are left as they are."), main, On)
         K.Note(hide, function()
@@ -232,7 +311,7 @@ K.Page({
         Under(K.Dropdown(Shared("layer", STRING, "Draw it"), function() return ta.CHOICES.layer end,
             "In front of the frame draws over EllesmereUI's bars and text; at the default place the dragon sits outside the frame, so nothing is covered. Behind the frame draws under all of it, so only what reaches outside shows. It stays within the target frame's own layer either way and never takes the mouse."), main, On)
 
-        Header("Preview", "See the artwork without finding a rare or a boss.")
+
 
         -- One artwork's own adjustment: the rows follow the artwork chosen in the preview above, so it can be watched.
         Header("Fine-tune each artwork", "Adjusts only the artwork chosen in the preview above, on top of the appearance settings, so one dragon can sit differently from the others. Choose another artwork in the preview to adjust it.")
@@ -259,7 +338,11 @@ K.Page({
         if tuneReset then tuneReset.reset = true end
 
         Header("Reset", "Puts this page's settings back to their defaults. Whether the artwork is on is kept.")
-        K.ResetButton("Target dragon artwork settings", resettable, function() ta.ResetSettings() end,
+        K.ResetButton("Legacy dragon settings", resettable, function() ta.ResetSettings(); ta.Set("style", "legacy") end,
             "Puts the artwork for each kind of enemy, the appearance, every artwork's own adjustment and the EllesmereUI dragon option back to their defaults. The switch is kept.")
+        for i = legacyStart, #K.current.rows do
+            local row = K.current.rows[i]
+            row:AddShownPredicate(Legacy)
+        end
     end,
 })

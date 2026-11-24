@@ -11,6 +11,12 @@
     "dependencies": ["settings"],
     "simulators": [{"script": "smoke"}, {"script": "settings"}]
   },
+  "target-portrait": {
+    "tests": ["test_target_art.lua", "test_target_portrait*.lua", "test_target_portrait*.py", "test_twichui_share.lua"],
+    "syntax": ["!!!TwichUI/targetart/**/*.lua", "!!!TwichUI/setup/TwichConfig.lua", "TwichUI_Settings/pages/TargetArt.lua"],
+    "dependencies": ["class-portrait", "settings"],
+    "simulators": [{"script": "smoke"}, {"script": "settings", "args": ["targetArt"]}]
+  },
   "class-portrait": {
     "tests": ["test_class_portrait*.lua", "test_class_portrait*.py", "test_twichui_share.lua"],
     "syntax": ["!!!TwichUI/classportrait/**/*.lua", "!!!TwichUI/setup/TwichConfig.lua", "TwichUI_Settings/pages/ClassPortrait.lua"],

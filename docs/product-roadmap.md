@@ -33,6 +33,14 @@ implementation is selected. F22 remains a **separate major initiative**, Dispel
 Indicator Studio [PR #139](https://github.com/Twich-Team/TwichUI/pull/139), outside
 Batch 12. #143, #117, #98, #91 and #139 remain untouched.
 
+## Target Portrait Decorations — November 24, 2026
+
+Owner-requested modernization implemented for review: supplied Boss, Elite and Rare
+portrait frames become the default style of the existing target artwork feature.
+Legacy Dragons retains its configuration and feature switch; player class artwork
+is unaffected. [Architecture, profile compatibility and focused native checks](target-art.md).
+No merge or release is authorized; native verification remains owner-directed.
+
 ## Product North Star
 
 **Premium, cohesive, responsive, dependable WoW: Forever experience.** TwichUI should feel like a crafted game interface, not a pile of utilities. For developers and AI agents, favor clear subsystem ownership, safe data contracts, small reversible changes, proportional offline tests and concise reviewable PRs. Keep real-game verification **owner-directed** and **nonblocking** for release decisions.

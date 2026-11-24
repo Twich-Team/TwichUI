@@ -98,11 +98,14 @@ assert(not proxies.TWICHUI_showAdvanced, "there is no 'Show advanced options' se
 local IMAGE_ONLY = { ["Background tiling"] = true, ["Background tile size"] = true, ["Background inset"] = true,
   -- only while a card (not the shared look) is being edited in the notification appearance page
   ["Give this card its own look"] = true, ["Reset this card"] = true }
+assert(R.TargetArt.Get("style") == "modern", "modern portrait frames are the default")
+R.TargetArt.Set("style", "legacy") -- these checks include the preserved legacy customization controls
 for _, i in ipairs(initializers) do
   local name = i:GetName()
   -- (a status line of the troubleshooting page is shown or folded away by whether its addon is there: test_status.lua)
   if name and i.kind ~= "header" and i.kind ~= "status" then assert(IMAGE_ONLY[name] or i:Shown(), name .. " is drawn") end
 end
+R.TargetArt.Set("style", "modern")
 for _, name in ipairs({"Upgrade hints in item tooltips", "Mark upgrades in my bags", "Weigh gear for", "Stat weights",
   "Configuration sharing", "Let friends send me addon configurations", "Hide addon welcome messages",
   "How big a gain counts", "Show the reasoning", "Show possible upgrades too", "Hint at gear for higher levels",

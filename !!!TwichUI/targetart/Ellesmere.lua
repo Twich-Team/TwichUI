@@ -1,4 +1,4 @@
--- TwichUI: Target dragon artwork, the EllesmereUI side
+-- TwichUI: Target Portrait Decorations, the EllesmereUI side
 -- Finds EllesmereUI's target frame and, only when asked, keeps EllesmereUI's own target dragon invisible while
 -- TwichUI's shows. Nothing in EllesmereUI is replaced, hooked or saved; this file only reads its frames.
 --
@@ -46,8 +46,20 @@ function E.Find()
     end
     if not IsFrame(f) then return nil, "incompatible" end
     local ok, unit = pcall(f.GetAttribute, f, "unit")
-    if not ok or unit ~= "target" then return nil, "incompatible" end
+    if not ok or (issecretvalue and issecretvalue(unit)) or unit ~= "target" then return nil, "incompatible" end
     return f
+end
+
+
+-- Same verified direct portrait backdrop contract as ClassPortrait.Display.Find.
+-- Disabled portraits are never replaced with a guessed target-frame rectangle.
+function E.Portrait(frame)
+    local element = frame and frame.Portrait
+    local p = type(element) == "table" and element.backdrop
+    if type(p) ~= "table" or type(p.GetParent) ~= "function" or p:GetParent() ~= frame
+        or type(p.GetWidth) ~= "function" or type(p.GetHeight) ~= "function"
+        or type(p.HookScript) ~= "function" or type(p.IsShown) ~= "function" then return nil end
+    return p
 end
 
 ---------------------------------------------------------------------------

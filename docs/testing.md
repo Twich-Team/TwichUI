@@ -72,6 +72,7 @@ Replace `workshop-settings` with one of these nonempty groups:
 | `loot-rolls` | Loot Rolls rules, cards, automatic rolling and settings pages; the synthetic-roll simulator catalog is run by hand with `bash tools/simlab/loot.sh` |
 | `healer-watch` | Healer monitoring/alerts, guarded hover communication and Settings |
 | `execute-range` | Execute threshold configuration, verified EllesmereUI adapters, overlay lifecycle and settings/sharing |
+| `target-portrait` | Modern target portrait fitting, legacy dragon compatibility, artwork packaging, settings/sharing and Class Portrait Decorations regressions |
 | `navigation` | Navigation, maps, pins, NPCs and guild locations |
 | `settings` | Settings contracts, framework, pages and feature settings |
 | `shared-ui` | Frame styling, notifications, themes, reachability and shared window components |
