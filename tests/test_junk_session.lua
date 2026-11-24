@@ -269,4 +269,30 @@ assert(nodes>25,'fixture is large: '..nodes)
 local t0=os.clock()
 for i=1,5000 do L.JunkJudge(100+i,2,{quality=i%6,upgrade=false},rowsBig) end
 assert(os.clock()-t0<5,'5000 judgements over 8 large rules finished quickly')
+---------------------------------------------------------------- rule icon: draft, undo, save, copy, bad data
+do
+    local real=R.Artwork
+    R.Artwork={Check=function(ref)
+        if type(ref)~='table' then return nil end
+        if ref.kind=='automatic' then return {kind='automatic'} end
+        if (ref.kind=='art' or ref.kind=='icon') and type(ref.id)=='string' then return {kind=ref.kind,id=ref.id} end
+    end}
+    Reset(0)
+    assert(S.BeginNew('Iconic') and S.Artwork()==nil and not S.Dirty())
+    assert(not S.SetArtwork({kind='bogus'}),'an invalid icon is refused')
+    assert(S.SetArtwork({kind='art',id='reminder-bronze-bell'}) and S.Dirty() and S.Artwork().id=='reminder-bronze-bell')
+    assert(S.Undo() and S.Artwork()==nil and S.Redo() and S.Artwork().id=='reminder-bronze-bell')
+    S.Add('kind')
+    assert(S.Save(),'the icon saves with the rule')
+    assert(S.Rows()[1].artwork.id=='reminder-bronze-bell','the list rows carry the icon')
+    assert(S.Begin(1) and S.Artwork().id=='reminder-bronze-bell' and not S.Dirty(),'a reopened rule keeps its icon')
+    assert(S.BeginCopy() and S.Artwork().id=='reminder-bronze-bell','a copy starts with the same icon')
+    S.Cancel()
+    assert(S.Begin(1) and S.SetArtwork({kind='automatic'}) and S.Artwork()==nil,'automatic clears the icon')
+    assert(S.Save() and S.Rows()[1].artwork==nil)
+    -- an unreadable stored icon never costs the rule
+    db.ui.workshopJunk.rules.rows[1].artwork={kind='nope'}
+    local rows,held=L.JunkRules();assert(not held and rows[1] and rows[1].artwork==nil)
+    R.Artwork=real
+end
 print('PASSED junk session: creation, every condition, nesting, undo/redo, save/cancel, duplicate/delete, legacy data, protections and limits')
