@@ -67,7 +67,7 @@ Page("barGlowsSpells", "Choose spells and customize their glow.")
 Page("skins", "Make supported addons feel at home with TwichUI.")
 Page("restedxp", "Choose your guide's behavior and appearance.", { "Window background and border", "Current step", "Header and footer", "Text size", "Spacing", "Scroll bar", "Waypoint arrow", "Timer bars", "Timer bar background and border" })
 Page("classPortrait", "Add class artwork around your EllesmereUI player portrait.")
-Page("targetArt", "Choose dragon artwork for your target frame.", { "Fine-tune each artwork", "Reset" })
+Page("targetArt", "Decorate your target portrait by enemy classification.", { "Fine-tune each artwork", "Reset" })
 Page("sharing", "Share selected configurations and review incoming changes.", { "Sending options", "Inspect saved data" })
 Page("profiles", "Choose the settings this character uses.", { "Delete or reset" })
 Page("troubleshooting", "Check status, then open the tools you need.", { "Temporary tracing" })
@@ -130,8 +130,7 @@ local TASKS = {
         { "Reading", "Text", "Current step", "Text size", "Spacing" },
         { "Surfaces", "Window background and border", "Header and footer", "Scroll bar" },
         { "Arrow / timers", "Waypoint arrow", "Timer bars", "Timer bar background and border" } },
-    targetArt = { { "Choose artwork", "Target dragon artwork", "Artwork for each kind of enemy", "Preview" },
-        { "Appearance", "Appearance", "Fine-tune each artwork", "Reset" } },
+
     troubleshooting = { { "Status", "Status", "Optional integrations" },
         { "Tools", "Performance and support", "Layout setup", "Full report", "Temporary tracing" } },
 }

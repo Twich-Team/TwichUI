@@ -1,0 +1,115 @@
+{
+  "package_name": "TwichUI Target Frame Variants Production",
+  "version": "1.1",
+  "description": "Production-ready mirrored target-frame artwork variants for Boss, Elite, and Rare enemies.",
+  "canvas_consistency": "All files share the same 1254x1254 canvas. The portrait opening is intended to align as a consistent right-side square opening across variants.",
+  "assets": [
+    {
+      "variant": "Boss",
+      "filename": "TwichUI_Target_Boss.png",
+      "dimensions": {
+        "width": 1254,
+        "height": 1254
+      },
+      "portrait_opening_bbox_px": {
+        "left": 672,
+        "top": 406,
+        "right": 1047,
+        "bottom": 788,
+        "width": 376,
+        "height": 383
+      },
+      "portrait_opening_bbox_norm": {
+        "x0_norm": 0.5359,
+        "y0_norm": 0.3238,
+        "x1_norm": 0.8357,
+        "y1_norm": 0.6292
+      },
+      "notes": {
+        "frame_side": "right",
+        "ridge_direction": "left",
+        "background": "transparent",
+        "intended_use": "mirrored target frame decoration"
+      }
+    },
+    {
+      "variant": "Elite",
+      "filename": "TwichUI_Target_Elite.png",
+      "dimensions": {
+        "width": 1254,
+        "height": 1254
+      },
+      "portrait_opening_bbox_px": {
+        "left": 672,
+        "top": 411,
+        "right": 1047,
+        "bottom": 787,
+        "width": 376,
+        "height": 377
+      },
+      "portrait_opening_bbox_norm": {
+        "x0_norm": 0.5359,
+        "y0_norm": 0.3278,
+        "x1_norm": 0.8357,
+        "y1_norm": 0.6284
+      },
+      "notes": {
+        "frame_side": "right",
+        "ridge_direction": "left",
+        "background": "transparent",
+        "intended_use": "mirrored target frame decoration"
+      }
+    },
+    {
+      "variant": "Rare",
+      "filename": "TwichUI_Target_Rare.png",
+      "dimensions": {
+        "width": 1254,
+        "height": 1254
+      },
+      "portrait_opening_bbox_px": {
+        "left": 673,
+        "top": 407,
+        "right": 1045,
+        "bottom": 788,
+        "width": 373,
+        "height": 382
+      },
+      "portrait_opening_bbox_norm": {
+        "x0_norm": 0.5367,
+        "y0_norm": 0.3246,
+        "x1_norm": 0.8341,
+        "y1_norm": 0.6292
+      },
+      "notes": {
+        "frame_side": "right",
+        "ridge_direction": "left",
+        "background": "transparent",
+        "intended_use": "mirrored target frame decoration"
+      }
+    }
+  ],
+  "recommended_common_opening_bbox_px": {
+    "left": 672,
+    "top": 406,
+    "right": 1047,
+    "bottom": 788,
+    "width": 376,
+    "height": 383
+  },
+  "recommended_common_opening_bbox_norm": {
+    "x0_norm": 0.5359,
+    "y0_norm": 0.3238,
+    "x1_norm": 0.8357,
+    "y1_norm": 0.6292
+  },
+  "integration_guidance": {
+    "anchor_variant": "Boss",
+    "fit_strategy": "Align the right-side transparent portrait opening to the target portrait region using the recommended common opening bbox or the per-file bbox values.",
+    "supported_variants": [
+      "Boss",
+      "Elite",
+      "Rare"
+    ]
+  }
+}

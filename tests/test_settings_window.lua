@@ -1882,6 +1882,33 @@ do
   for _, setting in ipairs(K.settings) do assert(before[setting.variable] == setting:GetValue(), "tasks and samples preserve " .. setting.variable) end
 end
 
+-- Target artwork style changes hide whole legacy sections and keep their controls reusable.
+do
+  local ta = R.TargetArt
+  local style = S.variables.TWICHUI_targetArtStyle
+  ta.Set("style", "modern")
+  R:OpenSettings("targetArt")
+  local view = UI.View("targetArt")
+  local appearance
+  for _, section in ipairs(view.sections) do
+    if section.header and section.header:GetName() == "Appearance" then appearance = section end
+  end
+  assert(appearance and not appearance.card.shown, "modern hides the entire legacy appearance section")
+  assert(not K.rowsById.targetArtScale:Shown(), "modern omits manual scale")
+  local beforeStyle = made
+  style:SetValue("legacy")
+  assert(appearance.card.shown and K.rowsById.targetArtScale:Shown(), "legacy restores its settings immediately")
+  assert(made == beforeStyle, "switching styles reuses its frames")
+  style:SetValue("modern")
+  assert(not appearance.card.shown, "returning to modern hides legacy sections again")
+  local found = false
+  for _, result in ipairs(R.SettingsSearch.Run("target portrait")) do
+    if result.entry.page == "targetArt" then found = true end
+  end
+  assert(found, "feature is searchable by its new name")
+  UI.Close()
+end
+
 ---------------------------------------------------------------------------
 -- Quick access: the shortcuts under the list's fixed groups, and which navigation teaches them
 ---------------------------------------------------------------------------
@@ -2040,5 +2067,6 @@ do
 
   UI.Close(); QA.Now = function() return time() end; Reset()
 end
+
 
 print("PASSED")

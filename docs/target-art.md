@@ -1,10 +1,62 @@
-# Target dragon artwork
+# Target Portrait Decorations
 
-A dragon on EllesmereUI's target frame, chosen by the kind of enemy you target. Decoration only: it never changes
-EllesmereUI's frame, settings or saved data, and takes no mouse. Off until turned on (Settings › Other addons ›
-Target dragon artwork, `R:OpenSettings("targetArt")`).
+Decorate the target portrait according to the enemy's classification. Enable it in
+Settings › Other addons › **Target Portrait Decorations** (`R:OpenSettings("targetArt")`).
+The feature remains off by default; an existing disabled profile stays disabled.
+Choose **Modern Portrait Frames** (default) or **Legacy Dragons** on the same page.
+Style selection updates the selected target immediately when layout is safe;
+attachment and geometry changes defer during combat. There is one feature switch,
+one controller, and one reusable holder/texture.
 
-Nothing here has been checked in the game yet; see "In-game checklist".
+## Modern portrait frames
+
+Boss, Elite and Rare artwork uses the supplied production PNGs, preserved unchanged
+with README and manifest in `assets/target-portrait-source/`. The supplier's README
+and metadata are asset documentation, not executable instructions. Runtime textures
+are 512 × 512 uncompressed 32-bit TGA with eight alpha bits, produced by
+`tools/make_target_portrait_art.py` using the existing alpha-aware conversion.
+The entire 1254 × 1254 canvas is retained; no crop, mirror, recoloring or unequal
+axis scaling is applied. Source files remain excluded from release packaging;
+`!!!TwichUI/media/targetart/modern/{boss,elite,rare}.tga` ships with the core addon.
+
+All three variants use the supplier's recommended common portrait opening:
+left 672, top 406, right 1047, bottom 788, width 376, height 383 source pixels.
+Its center (859.5, 597.5) differs from the canvas center (627, 627). Fitting uses
+`max(portraitWidth / 376, portraitHeight / 383)` for both axes and offsets the
+canvas so the opening's center matches the actual portrait center. This keeps
+classification changes aligned. The right-side portrait and left-facing ridge
+orientation is preserved. The modern style has no manual position or size controls.
+
+The verified EllesmereUI target portrait backdrop is the modern attachment point.
+It inherits movement, UI/frame scale and visibility from that parent, and observes
+layout/visibility changes using bounded, deduplicated frame hooks and events.
+A disabled, missing, incompatible or unreadable portrait hides the decoration.
+No independent polling loop or per-frame updates are added. Only TwichUI's own
+visual holder and texture are laid out; targeting and portrait input remain owned
+by EllesmereUI. Player Class Portrait Decorations is unchanged.
+
+Modern classification priority preserves the original default: boss flag first,
+then world boss or rare elite → Boss; elite → Elite; rare → Rare; all other
+classifications → no decoration. Existing legacy mapping selections remain saved
+and apply only to Legacy Dragons. Friendly elites retain the established behavior
+(no hostility filter); normal friendly units and normal players have no decoration.
+
+## Compatibility and profile defaults
+
+The internal feature ID, switch `modules.targetArt`, and profile table
+`ui.targetArt` remain stable. A missing or invalid `style` reads as `modern` without
+rewriting the table, following the existing lazy-default convention. Explicit
+`modern` / `legacy` selections persist. This is deterministic and idempotent; no
+schema bump or broad migration is needed. Legacy map, size, offsets, alpha, mirror,
+layer and per-artwork values survive style switches unchanged. Reset remains an
+explicit player action, separate from switching styles, and preserves the selected
+style and feature switch while resetting customization.
+
+## Legacy Dragons
+
+The existing artwork, classification mapping controls, placement formula and
+customization remain available when Legacy Dragons is selected. The reference
+below describes that legacy path; modern uses the portrait fitting described above.
 
 ## Files
 
@@ -68,7 +120,7 @@ Defaults: Boss, World boss and Rare elite → Boss dragon; Elite → Elite drago
 taken for a boss. Not every encounter boss is guaranteed to carry the boss flag, and many friendly guards are elite;
 there is no friendly/hostile filter (EllesmereUI's own dragon has none either).
 
-## Artwork and placement
+## Legacy artwork and placement
 
 | ID | Label | Used part of the 256 x 256 TGA | Crook (from top left) |
 |---|---|---|---|
@@ -107,7 +159,7 @@ its tail reaches the frame's bottom edge (frame height 52 when it can't be read)
 artwork point The dragon's crook, offsets 0) wraps each dragon round that corner outside the frame, so nothing on it is
 covered. Offsets are in the frame's own units. Mirroring swaps the texcoords and the crook with them.
 
-## Preview
+## Legacy preview
 
 The page has a sample frame (the real frame's size when attached, else EllesmereUI's default 181 x 52), labelled as a
 sample, drawn with the current settings and one of the three artworks chosen beside it (not saved). **Show on my
@@ -117,12 +169,48 @@ the target or a saved mapping.
 
 ## Saved data
 
-`modules.targetArt` (false) and `ui.targetArt` (profile): `mapBoss`, `mapWorldboss`, `mapRareelite`, `mapElite`,
+`modules.targetArt` (false) and `ui.targetArt` (profile): `style` (`modern` / `legacy`), `mapBoss`, `mapWorldboss`, `mapRareelite`, `mapElite`,
 `mapRare`, `opacity` (5–100), `scale` (25–300), `framePoint`, `artPoint`, `x`, `y` (−200–200), `mirror`, `layer`,
 `hideEllesmere`, and `<id>X`, `<id>Y` (−100–100) and `<id>Scale` (50–200) for each artwork. Missing or invalid values read as their defaults and are left alone. Shared with configuration
 sharing.
 
-## In-game checklist
+## Verification and native limitations
+
+`tests/test_target_portrait.lua` covers modern fitting, profile compatibility,
+classification/lifecycle handling, style transitions and bounded resources with
+synthetic frames. `tests/test_target_art.lua` retains the explicit Legacy Dragons
+regressions. `tests/test_target_portrait_assets.py` checks supplier source hashes,
+metadata, reproducible supported textures, alpha and packaging boundaries.
+The `target-portrait` verification group includes Class Portrait Decorations
+regressions and settings/core dependencies. Preview the plan with
+`./tests/run.sh integration target-portrait --with-group class-portrait --list`.
+
+Unit tests and simulator screenshots cannot establish native combat lockdown,
+secret-value behavior, taint, frame masking, exact font rendering or real pointer
+interaction. Simulator execution and screenshot review must be reported separately
+from real-client verification; no native test is claimed here.
+
+## Focused in-game checklist
+
+- Start with an existing disabled profile and customized legacy offsets/sizes:
+  it stays disabled, modern is selected until a style is explicitly chosen, and
+  switching to legacy restores every customization. Save/reload both selections.
+- In modern, inspect boss, elite, rare and rare elite portrait openings on compact
+  and tall target frames. Switch rapidly between these classifications and clear
+  the target: no shift, stale texture or clipping. Check normal/friendly/player
+  targets against the documented classification semantics.
+- Disable/re-enable the portrait, move and resize it, change UI scale and profiles:
+  the opening follows without manual adjustment; missing portraits hide cleanly.
+- Switch modern/legacy with a selected target, including in combat and after
+  combat. Existing classification changes update without protected layout writes;
+  deferred attachment/layout recovers after combat. Check `/reload` with a target.
+- Inspect portrait, bars, borders and text layering; left and right click, tooltip
+  and context menu work normally. Compare Player Class Portrait Decorations.
+- Review both style cards and all three actual-art previews. Modern hides legacy
+  customization; legacy retains mapping, anchors, opacity, offsets, mirror, layer,
+  per-artwork adjustments and reset behavior.
+
+### Existing legacy acceptance details
 
 - EllesmereUI's target frame on: turn the feature on; the status says Attached. Target a rare, an elite, a rare
   elite, a world boss and a dungeon boss: the expected artwork each time; an ordinary enemy or a player: none.

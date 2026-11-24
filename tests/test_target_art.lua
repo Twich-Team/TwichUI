@@ -124,6 +124,9 @@ local function Showing() local t = Tex() return t and t.shown and t.texture or n
 local function Art(id) return TA.ART[id].path end
 local function Events() return D.Snapshot().events end
 local function On() R:SetEnabled("targetArt", true) end
+-- Exercise the unchanged legacy contract explicitly; modern has independent coverage.
+local function ResetLegacy() TA.ResetSettings(); TA.Set("style", "legacy") end
+TA.Set("style", "legacy")
 local function Off() R:SetEnabled("targetArt", false) end
 local function ReadTga(path)
   local fh = assert(io.open(path, "rb"))
@@ -158,7 +161,7 @@ do
   Check(TA.Set("mapBoss", "class") and TA.Set("mapElite", "elite"))
   Check(TA.Pick("elite", true) == "elite" and TA.Pick("normal", true) == nil, "Same as its classification")
   Check(not TA.Set("mapElite", "class"), "only the Boss row can say \"class\"")
-  TA.ResetSettings()
+  ResetLegacy()
   Check(TA.Get("mapBoss") == "boss" and c.TwichUIDB.ui.targetArt.mapElite == nil, "reset forgets the values")
 end
 
@@ -179,6 +182,7 @@ do
   TA.Set("y", 3); TA.Set("y", 3)
   Check(told == 1, "an unchanged value tells nobody")
   c.TwichUIDB.ui.targetArt = nil
+  TA.Set("style", "legacy")
 end
 
 ---------------------------------------------------------------------------
@@ -201,7 +205,7 @@ do
   TA.Set("scale", 200)
   Check(math.abs(TA.Placement("rare", 52).h - 2 * TA.BaseHeight("rare", 52)) < 1e-9, "scale is percent of the base")
   Check(TA.BaseHeight("rare", nil) == TA.BaseHeight("rare", 52) and TA.BaseHeight("rare", 0) == TA.BaseHeight("rare", 52), "unreadable height falls back")
-  TA.ResetSettings()
+  ResetLegacy()
   -- one artwork's own adjustment adds to the shared placement and leaves the others alone
   local before = TA.Placement("boss", 52, nil, {})
   local other = TA.Placement("rare", 52, nil, {})
@@ -215,7 +219,7 @@ do
   Check(same.x == other.x and same.y == other.y and same.h == other.h, "the other artworks are not moved")
   TA.Set("x", 5)
   Check(math.abs(TA.Placement("boss", 52, nil, {}).x - after.x - 5) < 1e-9, "the shared offset still moves it")
-  TA.ResetSettings()
+  ResetLegacy()
   Check(TA.Get("bossScale") == 100, "the page reset covers each artwork's values")
   TA.Set("mirror", true)
   local p = TA.Placement("elite", 52)
@@ -224,7 +228,7 @@ do
   TA.Set("artPoint", "BOTTOMLEFT"); TA.Set("x", 7); TA.Set("y", -3)
   p = TA.Placement("elite", 52)
   Check(p.point == "BOTTOMLEFT" and p.x == 7 and p.y == -3, "an ordinary point uses the offsets as they are, no rest")
-  TA.ResetSettings()
+  ResetLegacy()
 end
 
 ---------------------------------------------------------------------------
@@ -340,7 +344,7 @@ do
   Check(Showing() == Art("elite"), "a mapping change redraws at once")
   TA.Set("mapRare", "none")
   Check(Showing() == nil, "mapped to None")
-  TA.ResetSettings()
+  ResetLegacy()
   Check(Showing() == Art("rare") and t.alpha == 1, "reset redraws")
   -- EllesmereUI's frame resized (a settings pass, UI scale): the holder's own OnSizeChanged lays out again
   target.h = 80
@@ -374,7 +378,7 @@ do
   Target("rare")
   TA.Set("hideEllesmere", false)
   Check(native.alpha == 0.9, "option off: given back")
-  TA.ResetSettings()
+  ResetLegacy()
   rawset(target, "_eliteDragonHolder", nil); rawset(target, "Portrait", nil)
 end
 
@@ -396,7 +400,7 @@ do
   Check(Showing() == Art("elite"), "drawn after combat")
   Check(D.Snapshot().events == 3, "the combat event is dropped again")
   target = again
-  TA.ResetSettings()
+  ResetLegacy()
   -- on and off ten times: one holder, the same events
   local frames = #all
   for _ = 1, 10 do Off(); On() end
@@ -417,7 +421,7 @@ do
   D.SetPreviewArt("rare")
   Check(Showing() == Art("rare"), "switching art")
   local saved = c.TwichUIDB.ui.targetArt
-  Check(saved == nil or next(saved) == nil, "the preview saves nothing")
+  Check(saved and saved.style == "legacy" and next(saved, "style") == nil, "the preview saves nothing beyond the selected style")
   D.PreviewStop()
   Check(Showing() == nil, "back to the real target")
   D.PreviewStart()
@@ -444,16 +448,26 @@ do
   Check(page and page.kind == "hosted" and page.group == "addons", "a page under Other addons, with its preview")
   local labels = {}
   for _, row in ipairs(page.rows) do if row.GetName then labels[row:GetName()] = row end end
-  for _, l in ipairs({ "Show dragon artwork on the target frame", "EllesmereUI target frame", "Boss", "World boss", "Rare elite",
+  for _, l in ipairs({ "Enable Target Portrait Decorations", "EllesmereUI target frame", "Boss", "World boss", "Rare elite",
     "Elite", "Rare", "Opacity", "Scale", "Point on the target frame", "Point on the artwork", "Horizontal offset",
     "Vertical offset", "Mirror the artwork", "Draw it", "Hide EllesmereUI's own target dragon while this one shows" }) do
     Check(labels[l], "row: " .. l)
   end
+  Check(page.name == "Target Portrait Decorations", "player-facing feature renamed")
+  Check(labels["Artwork style"] and labels["Automatic fit"], "style selection and automatic fitting explanation")
+  TA.Set("style", "modern")
+  for _, label in ipairs({ "Scale", "Horizontal offset", "Appearance", "Fine-tune each artwork", "Legacy dragon settings" }) do
+    Check(not labels[label]:Shown(), "modern hides legacy controls: " .. label)
+  end
+  Check(labels["Automatic fit"]:Shown(), "modern explains fitting")
+  TA.Set("style", "legacy")
+  Check(labels["Scale"]:Shown() and labels["Appearance"]:Shown() and not labels["Automatic fit"]:Shown(), "legacy controls return immediately")
   local v = S.variables
+  Check(v.TWICHUI_targetArtStyle and v.TWICHUI_targetArtStyle:GetValue() == "legacy", "style is a searchable persisted setting")
   Check(v.TWICHUI_targetArt and v.TWICHUI_targetArtMapRareelite and v.TWICHUI_targetArtOpacity, "the settings exist")
   v.TWICHUI_targetArtOpacity:SetValue(55)
   Check(TA.Get("opacity") == 55, "a row writes through the feature")
-  local text = S.ClickReset(labels["Target dragon artwork settings"])
+  local text = S.ClickReset(labels["Legacy dragon settings"])
   Check(TA.Get("opacity") == 100 and text:find("1 of the", 1, true), "the reset asks, then resets")
   -- the fine-tune rows follow the artwork chosen in the preview
   Check(labels["This artwork's horizontal offset"] and labels["This artwork's size"] and labels["Put this artwork back"], "fine-tune rows")
@@ -473,6 +487,13 @@ do
   f.shown = true
   f.scripts.OnShow(f)
   Check(f.art and f.art.texture == Art("rare") and f.sample.w == 181 and f.sample.h == 52, "the sample frame at EllesmereUI's default size")
+  Check(#f.styles == 2 and f.styles[1].id == "modern" and f.styles[2].id == "legacy", "two actual-art style cards")
+  local previousX = TA.Get("x")
+  f.styles[1].scripts.OnClick(f.styles[1])
+  Check(TA.Get("style") == "modern" and f.art.texture == TA.MODERN.rare.path, "modern card selects and redraws contextual preview")
+  Check(f.portrait.shown and not f.choices[4].shown, "modern preview shows portrait and hides legacy variants")
+  f.styles[2].scripts.OnClick(f.styles[2])
+  Check(TA.Get("style") == "legacy" and TA.Get("x") == previousX and f.choices[4].shown, "legacy card restores controls without changing legacy values")
   f.choices[2].scripts.OnClick(f.choices[2])
   -- the status line says why nothing is drawn
   R:SetEnabled("targetArt", true)

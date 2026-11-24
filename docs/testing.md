@@ -73,6 +73,7 @@ Replace `workshop-settings` with one of these nonempty groups:
 | `fishing` | TwichUI Fishing (load-on-demand `TwichUI_Fishing`) and its core launcher: the fishing key's decisions, reel overrides and combat, lures, gear snapshots and restoration, catch attribution, the container queue, sessions and saved data; Stage 2's Fishing Mode (camera, fading, the Quiet screen hold, cast bar, catch list, notifications, recovery) and its artwork; no simulator catalog (offline captures: `tools/render_fishing_hud.py`) |
 | `healer-watch` | Healer monitoring/alerts, guarded hover communication and Settings |
 | `execute-range` | Execute threshold configuration, verified EllesmereUI adapters, overlay lifecycle and settings/sharing |
+| `target-portrait` | Modern target portrait fitting, legacy dragon compatibility, artwork packaging, settings/sharing and Class Portrait Decorations regressions |
 | `navigation` | Navigation, maps, pins, NPCs and guild locations |
 | `settings` | Settings contracts, framework, pages and feature settings |
 | `shared-ui` | Frame styling, notifications, themes, reachability and shared window components |

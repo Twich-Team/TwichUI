@@ -1,4 +1,4 @@
--- TwichUI: Target dragon artwork, configuration
+-- TwichUI: Target Portrait Decorations, configuration
 -- What the artwork stores, which artwork a target gets, and where it goes. Nothing here touches a frame or the game.
 --
 -- What is stored (in the profile in use, TwichUIDB.ui.targetArt; flat, every value checked on the way in and out, an
@@ -68,7 +68,16 @@ TA.KINDS = {
     { "rare", "Rare", "The game's rare classification (not elite)." },
 }
 
+-- One common supplier aperture keeps classification switches perfectly stationary.
+-- Coordinates use inclusive pixel bounds from manifest.json (672,406)-(1047,788).
+TA.MODERN = {}
+for _, id in ipairs({ "boss", "elite", "rare" }) do
+    TA.MODERN[id] = { path = MEDIA .. "modern\\" .. id, canvas = 1254,
+        x = 859.5, y = 597.5, w = 376, h = 383 }
+end
+
 TA.DEFAULTS = {
+    style = "modern",
     mapBoss = "boss", mapWorldboss = "boss", mapRareelite = "boss", mapElite = "elite", mapRare = "rare",
     opacity = 100, scale = 100,
     framePoint = "TOPRIGHT", artPoint = "crook", x = 0, y = 0,
@@ -109,6 +118,7 @@ local artPoints = { { "crook", "The dragon's crook", "The inside corner of the d
 for _, p in ipairs(POINTS) do artPoints[#artPoints + 1] = p end
 
 TA.CHOICES = {
+    style = { { "modern", "Modern Portrait Frames (Default)" }, { "legacy", "Legacy Dragons" } },
     map = ArtChoices(false),
     mapBoss = ArtChoices(true),
     framePoint = POINTS,
@@ -128,7 +138,7 @@ local function Set(list)
     return s
 end
 
-TA.ENUM = { framePoint = Set(TA.CHOICES.framePoint), artPoint = Set(TA.CHOICES.artPoint), layer = Set(TA.CHOICES.layer) }
+TA.ENUM = { style = Set(TA.CHOICES.style), framePoint = Set(TA.CHOICES.framePoint), artPoint = Set(TA.CHOICES.artPoint), layer = Set(TA.CHOICES.layer) }
 for _, k in ipairs(TA.KINDS) do
     local key = TA.MapKey(k[1])
     TA.ENUM[key] = Set(k[1] == "boss" and TA.CHOICES.mapBoss or TA.CHOICES.map)
@@ -159,7 +169,7 @@ function TA.Subscribe(fn) subscribers[#subscribers + 1] = fn end
 function TA.Invalidate(key)
     for _, fn in ipairs(subscribers) do
         local ok, err = pcall(fn, key)
-        if not ok then R.Fault("target dragon artwork", err) end
+        if not ok then R.Fault("target portrait decorations", err) end
     end
 end
 
@@ -198,13 +208,13 @@ function TA.Set(key, value)
     return true
 end
 
--- Every setting back to its default (forgotten, so a better default later still applies). The switch stays.
+-- Restore legacy customization defaults. Keep the feature switch and explicit style.
 function TA.ResetSettings()
     local t = Saved(false)
     if not t then return end
     local changed = false
     for key in pairs(TA.DEFAULTS) do
-        if t[key] ~= nil then t[key] = nil; changed = true end
+        if key ~= "style" and t[key] ~= nil then t[key] = nil; changed = true end
     end
     if changed then TA.Invalidate(nil) end
 end
@@ -268,5 +278,23 @@ function TA.Placement(id, frameH, get, out)
     local bottom = art.height / TA.TEXTURE_SIZE
     if mirror then out.l, out.r = right, 0 else out.l, out.r = 0, right end
     out.t, out.b = 0, bottom
+    return out
+end
+
+-- Modern classification preserves the original default priority, independently
+-- of the retained, customizable legacy mappings (rare elite intentionally boss).
+function TA.PickModern(classification, isBoss)
+    if isBoss == true or classification == "worldboss" or classification == "rareelite" then return "boss" end
+    if classification == "elite" or classification == "rare" then return classification end
+end
+
+function TA.ModernPlacement(id, pw, ph, out)
+    local a = TA.MODERN[id]
+    if not a or not Finite(pw) or not Finite(ph) or pw < 1 or ph < 1 then return nil end
+    out = out or {}
+    local scale = math.max(pw / a.w, ph / a.h)
+    out.w, out.h = a.canvas * scale, a.canvas * scale
+    out.x, out.y = (a.canvas / 2 - a.x) * scale, (a.y - a.canvas / 2) * scale
+    out.l, out.r, out.t, out.b = 0, 1, 0, 1
     return out
 end

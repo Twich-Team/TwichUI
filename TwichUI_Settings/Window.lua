@@ -896,7 +896,7 @@ function Layout(view)
     local placed = false
     local sectionGap = view.qol and view.cardRenderer.gap or GAP
     for _, sec in ipairs(view.sections) do
-        local active = not view.tasks or Design.TaskFor(page, sec.header and sec.header:GetName()) == view.task
+        local active = (not sec.header or sec.header:Shown()) and (not view.tasks or Design.TaskFor(page, sec.header and sec.header:GetName()) == view.task)
         if not active then
             sec.card:Hide()
             for _, row in ipairs(sec.rows) do row.frame:Hide(); row.y = nil end

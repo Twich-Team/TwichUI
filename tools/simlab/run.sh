@@ -3,8 +3,8 @@
 set -euo pipefail
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 install="$(realpath -e -- "${WOWSIM_INSTALL:-$(dirname "$repo")/wow-ui-sim-lab}")"
-case "${1:-}" in loot|smoke|interact|diagnose|auctionproof|auctionpreview|workshop|testlab|settings|reminders|mapdiag) scenario="$1"; shift ;;
-  *) echo 'usage: bash tools/simlab/run.sh loot|smoke|interact|diagnose|auctionproof|auctionpreview|workshop|testlab|settings|reminders|mapdiag [scenario arguments]' >&2; exit 2 ;;
+case "${1:-}" in loot|smoke|interact|diagnose|auctionproof|auctionpreview|workshop|testlab|settings|reminders|mapdiag|portraits) scenario="$1"; shift ;;
+  *) echo 'usage: bash tools/simlab/run.sh loot|smoke|interact|diagnose|auctionproof|auctionpreview|workshop|testlab|settings|reminders|mapdiag|portraits [scenario arguments]' >&2; exit 2 ;;
 esac
 [ -x "$install/release/wow-ui-sim-v0.1.37-forever-linux-x86_64/wow-sim" ] \
   && [ -d "$install/deps/lib" ] && [ -d "$install/xdg/cache/wow-ui-sim/blizzard-ui" ] \
