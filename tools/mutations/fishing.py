@@ -25,3 +25,14 @@ MUTATIONS.append(dict(id="fishing.loot.preclose-confirmation", file="TwichUI_Fis
     replace="if #held == 0 then return end",
     why="discarding self-loot confirmation before close loses native auto-looted clam contents and their value",
     tests=("test_fishing_native_loot.lua",), smoke=True, expect="killed"))
+
+MUTATIONS.append(dict(id="fishing.loot.external-open-reservation", file="TwichUI_Fishing/Containers.lua",
+    find="C_Timer.After(0, Observe)", replace="C_Timer.After(3, Observe)",
+    why="waiting beyond the next external clam open loses the per-window shell consumption and provenance",
+    tests=("test_fishing_external_containers.lua",), smoke=True, expect="killed"))
+
+MUTATIONS.append(dict(id="fishing.loot.external-window-boundary", file="TwichUI_Fishing/Containers.lua",
+    find="if not attr.consumed then attr.expired = true end",
+    replace="if false then attr.expired = true end",
+    why="an unrelated older item window steals a later clam's bag transition and fishing provenance",
+    tests=("test_fishing_external_containers.lua",), smoke=True, expect="killed"))

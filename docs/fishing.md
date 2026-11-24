@@ -151,8 +151,14 @@ call the item openable (`hasLoot`), which is then learned. It joins the queue as
   casts or the open key. `auto` also opens from addon code after a catch, but never in combat, during a line or while
   looting; the first block (`ADDON_ACTION_BLOCKED`/`FORBIDDEN`) stops it for good (`capability.autoOpen`). `off` records
   only.
-- **Attribution:** the loot window that opens within 3 s of an opening press belongs to that lot. A clam the player opens by
-  hand is matched only when exactly one queued item has exactly one fewer in the last settled bag counts.
+- **Attribution:** the loot window that opens within 3 s of an opening press belongs to that lot. External opens (right-click
+  or another addon, including EllesmereUI Auto Open Containers) match only when exactly one queued item loses one shell.
+  The source lot is reserved at the first settled event turn after close or a bag update, before the next external open;
+  contents still wait for the bounded loot-confirmation window. This prevents rapid openings from all comparing a stale
+  baseline against the final empty bag. Fresh catches seed the baseline from pre-loot counts plus confirmed receipts,
+  so an external open before `BAG_UPDATE_DELAYED` does not inherit a stale zero. Source references survive queue exhaustion
+  until their contents settle, preserving the original session and catch zone. An unresolved older window cannot borrow
+  a later window's shell consumption; ambiguous sources remain unattributed. No other addon's actions are changed.
 - **Opened or not:** a container counts as opened once it leaves the bags. One that stays (loot left in it) stays queued,
   marked `partial`.
 - **Failures:** a press with no loot window is counted as `failed`. A locked container (`ERR_ITEM_LOCKED`) is marked
@@ -238,6 +244,7 @@ Diagnostics has the scopes `fishing.load`, `fishing.decide`, `fishing.loot` and 
 | `test_fishing_journal_zones.lua` | The Journal's place lists and the Collections to Locations navigation, old and new records together, multi-zone sessions, empty and interrupted sessions, the summary card, the window's remembered position (drag, reopen, reload, size, Reset, off-screen recovery), extension points, and a large history (measurements printed) |
 | `test_fishing_store.lua` | New file, unversioned and damaged data repaired field by field, repeatable load, newer schema held, plain saved values, no prices |
 | `test_fishing_timing.lua` | Active line versus session time; exact manual-stop duration; completed Journal/summary after waiting/reopening/reload; hidden HUD handlers; reveal/combat; idle checkpoint; logout line settlement; late catches retain the original ended session |
+| `test_fishing_external_containers.lua` | Rapid external/automatic clam openings, fresh receipts before bag updates, immutable per-open session/zone provenance, late bag consumption, estimates, duplicate replay and unrelated-container exclusion |
 | `test_fishing_native_loot.lua` | Open-window self-loot confirmations, late-readable links, duplicate slot/chat channels and identical stacks; Today’s Catch, Journal and valuation; partial lots and later-session/reload provenance |
 | `test_fishing_ellesmere_overlays.lua` | Separate cast/quest overlays and item layer; owner alpha, reveal, stop/recover/disable, combat/logout/reload and visible chat |
 | `test_fishing_toast_polish.lua` | Bounded flourish, readable treasure/repeat layouts, value line, measured geometry, reduced motion and frame reuse |

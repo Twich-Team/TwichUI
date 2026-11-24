@@ -55,7 +55,7 @@ end
 local function Take(capture, item, q)
     if capture.kind == "fishing" then
         Ses.Item(capture.sid, item, q, capture.zone)
-        C.Caught(capture.sid, item, q, capture.zone)
+        C.Caught(capture.sid, item, q, capture.zone, capture.bags and capture.bags[item])
     elseif capture.kind == "container" or capture.kind == "maybe" then
         capture.taken[#capture.taken + 1] = { item = item, q = q }
     end
@@ -101,10 +101,12 @@ local function Begin(fromItem)
         if cur.kind == "maybe" and fromItem ~= nil then Resolve(cur, fromItem) end
         return
     end
+    C.BeginLoot()
     Lo.windows = Lo.windows + 1
     cur = { at = F.Clock(), slots = ReadSlots(), taken = {}, chats = {} }
     if F.Readable(IsFishingLoot and IsFishingLoot()) == true then
         cur.kind = "fishing"
+        cur.bags = C.CatchCounts(cur.slots)
         Lo.lastFishing = cur.at
         -- where the line was, read now, at the confirmed fishing loot window: items reach the bags later (and a container
         -- is opened later still), but they were caught here
@@ -161,6 +163,7 @@ function Lo.OnClosed()
     if capture.kind == "maybe" then capture.kind = "unrelated" end
     if F.Action and F.Action.OnLootState then F.Action.OnLootState(false, capture.kind) end
     if capture.kind == "unrelated" then capture.done = true return end
+    if capture.kind == "container" then C.LootClosed(capture.attr) end
     -- Native auto-loot can report its self-loot chat before any slot-clear or
     -- close event. Pair those messages only once all clear events are known;
     -- otherwise a message for slot 2 could falsely confirm an identical slot 1

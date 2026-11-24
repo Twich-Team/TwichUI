@@ -35,6 +35,8 @@ F.Containers = C
 local pending = nil       -- { lot, item, at, count, via }: a press or an automatic open, waiting for its loot window
 local candidates = {}     -- [itemID] = { { sid, q }... }: items from fishing loot not known yet to be containers
 local candidatesAt = 0
+local closing = {}       -- closed captures awaiting consumption evidence (runtime only, bounded by Loot.held)
+local observing = false
 C.OPEN_SECONDS = 3
 
 local function Queue()
@@ -50,7 +52,7 @@ local function Lot(id)
     return nil
 end
 
-local function Enqueue(sid, item, q, zone)
+local function Enqueue(sid, item, q, zone, baseline)
     local c = S.Char()
     if not c then return end
     local queue = c.queue
@@ -66,15 +68,27 @@ local function Enqueue(sid, item, q, zone)
         queue[#queue + 1] = { id = c.nextLot, item = item, n = q, sid = sid, t = F.Now(), zone = zone }
         c.nextLot = c.nextLot + 1
     end
+    -- A fresh catch may be opened by another addon before BAG_UPDATE_DELAYED.
+    -- Its pre-loot count plus confirmed receipts is authoritative, not a stale remembered zero.
+    C.counts[item] = baseline and (baseline.before + baseline.q) or math.max(G.BagCount(item), q)
     Ses.ContainerCaught(sid, item, q, zone)
     F.Emit("CONTAINER", "caught", item, q, sid)
     F.Emit("QUEUE")
 end
 
 -- Loot.lua: an item taken from a fishing loot window.
-function C.Caught(sid, item, q, zone)
+function C.CatchCounts(slots)
+    local out = {}
+    for _, e in pairs(slots) do
+        if S.IsKnownContainer(e.item) and not out[e.item] then out[e.item] = { before = G.BagCount(e.item), q = 0 } end
+    end
+    return out
+end
+
+function C.Caught(sid, item, q, zone, baseline)
+    if baseline then baseline.q = baseline.q + q end
     if S.IsKnownContainer(item) then
-        Enqueue(sid, item, q, zone)
+        Enqueue(sid, item, q, zone, baseline)
         return true
     end
     local list = candidates[item]
@@ -221,31 +235,70 @@ local function TakeFromLot(lot)
     end
 end
 
--- The container loot window closed and the bags have settled. taken: { { item, q } } from that window.
--- Returns the lot it was attributed to (nil: unattributed, nothing recorded).
-function C.Settle(attr, taken)
-    if pending and attr.lot and pending.lot == attr.lot then pending = nil end
-    local lot
+-- Reserve a consumed shell at close (or its first settled bag update), before
+-- another addon can open the next one. Contents can still await chat confirmation.
+-- Keep the lot reference even if exhausting it removes it from the saved queue.
+local function Claim(attr)
+    if attr.settled or attr.consumed or attr.expired then return end
+    local lot = attr.source or (attr.lot and Lot(attr.lot))
+    local item, before
     if attr.lot then
-        lot = Lot(attr.lot)
-        if lot then
-            if G.BagCount(lot.item) < (attr.count or 0) then TakeFromLot(lot) elseif #taken > 0 then lot.partial = true end
-        end
+        if lot then item, before = lot.item, attr.count end
     elseif attr.manual then
-        local match, n = nil, 0
-        for item, before in pairs(attr.manual) do
-            if G.BagCount(item) == before - 1 then match, n = item, n + 1 end
+        local matches = 0
+        for id, n in pairs(attr.manual) do
+            if G.BagCount(id) == n - 1 then item, before, matches = id, n, matches + 1 end
         end
-        if n == 1 then
-            for _, l in ipairs(Queue() or {}) do if l.item == match and not l.locked then lot = l break end end
-            if lot then TakeFromLot(lot) end
-        else
-            F.Note("unattributed", "a container loot window matched no single queued container")
-        end
+        if matches ~= 1 then return end
+        for _, l in ipairs(Queue() or {}) do if l.item == item and not l.locked then lot = l break end end
     end
+    if lot and before and (attr.lot or C.counts[item] == before) and G.BagCount(item) == before - 1 then
+        attr.source, attr.consumed = lot, true
+        TakeFromLot(lot)
+        C.counts[item] = before - 1
+        F.Emit("QUEUE")
+    end
+end
+
+-- A later loot window is a hard evidence boundary: an unresolved older window
+-- cannot borrow that window's shell decrement (e.g. an unrelated crate before a clam).
+function C.BeginLoot()
+    for _, attr in ipairs(closing) do if not attr.consumed then attr.expired = true end end
+end
+
+function C.LootClosed(attr)
+    if not attr or attr.closed then return end
+    attr.closed = true
+    closing[#closing + 1] = attr
+    C.ObserveBags()
+end
+
+function C.ObserveBags()
+    if observing or #closing == 0 then return end
+    -- Coalesce the event turn: partial containers can briefly leave a bag slot
+    -- before their retained shell reappears. Reserve after that turn, rather
+    -- than two seconds later when another external open may already have run.
+    local function Observe()
+        observing = false
+        for _, attr in ipairs(closing) do Claim(attr) end
+    end
+    if C_Timer and C_Timer.After then observing = true; C_Timer.After(0, Observe) else Observe() end
+end
+
+-- At most five captures are held by Loot.lua. This does not persist an economic ledger.
+function C.Settle(attr, taken)
+    if attr.settled then return nil end
+    Claim(attr)
+    attr.settled = true
+    for i, a in ipairs(closing) do if a == attr then table.remove(closing, i) break end end
+    if pending and attr.lot and pending.lot == attr.lot then pending = nil end
+    local lot = attr.source or (attr.lot and Lot(attr.lot))
     if lot then
+        if not attr.consumed and #taken > 0 then lot.partial = true end
         for _, x in ipairs(taken) do Ses.Content(lot.sid, lot.item, x.item, x.q, lot.zone) end
         F.Emit("CONTAINER", "opened", lot.item, lot.sid)
+    elseif attr.manual then
+        F.Note("unattributed", attr.expired and "container source unresolved before the next loot window" or "a container loot window matched no single queued container")
     end
     F.Emit("QUEUE")
     return lot
