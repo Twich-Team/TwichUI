@@ -8,11 +8,25 @@ local c,S=SettingsClient({beforeInit=function(c)
 end})
 dofile(TESTS.."mi_mock.lua")
 c.UIParent=MIFake("Frame");c.UIParent:SetSize(1600,1200)
-c.CreateFrame=function(kind,_,parent)
+c.CreateFrame=function(kind,_,parent,template)
     local frame=MIFake(kind,parent)
+    -- the game gives a frame backdrop methods only when it is made with BackdropTemplate
+    if not (type(template)=='string' and template:find('BackdropTemplate',1,true)) then
+        local mt=getmetatable(frame);local index=mt.__index
+        local none={SetBackdrop=true,SetBackdropColor=true,SetBackdropBorderColor=true,GetBackdrop=true,GetBackdropColor=true,GetBackdropBorderColor=true}
+        mt.__index=function(t,k) if none[k] then return nil end return index(t,k) end
+    end
     frame.UnregisterAllEvents=function(self) self.events={} end
     if kind=='Frame' then frame.IsEnabled=function() error('a plain Frame has no IsEnabled in the game') end end
     frame.Click=function(self) if self:IsEnabled() and self:GetScript("OnClick") then self:GetScript("OnClick")(self) end end
+    if kind=='Button' then
+        -- the game refuses edit-box scripts on a Button (the rule icon button once broke the window this way)
+        local hook=frame.HookScript
+        frame.HookScript=function(self,script,...)
+            if tostring(script):lower():find('editfocus') then error("Button:HookScript(): Cannot assign script handler for '"..script.."'") end
+            return hook(self,script,...)
+        end
+    end
     return frame
 end
 local R=c.TwichUI
@@ -47,6 +61,29 @@ B.New()
 assert(SS.Active() and SS.IsNew() and #L.JunkRules()==0,'a new rule is a draft, not a saved rule')
 assert(not f.rule.blank:IsShown() and f.rule.name:IsShown())
 assert(f.rule.art and f.rule.art:IsShown(),'the rule header has an icon button for the art selector')
+-- the rule icon: the button opens the shared picker, applying an icon changes the draft, and the rail and header draw it
+do
+    local picks,closed={},0
+    local realPicker,realArt=R.SettingsArtworkPicker,R.Artwork
+    R.Artwork=R.Artwork or {}
+    local check,draw=R.Artwork.Check,R.Artwork.Draw
+    R.Artwork.Check=function(ref) if type(ref)=='table' and (ref.kind=='art' or ref.kind=='automatic') then return {kind=ref.kind,id=ref.id} end end
+    R.Artwork.Draw=function() return true end
+    R.SettingsArtworkPicker={Open=function(owner,opts) picks[#picks+1]=opts;return true end,Close=function() closed=closed+1 end}
+    assert(f.rule.art:GetScript('OnClick'),'the icon button is clickable');f.rule.art:Click()
+    local opts=assert(picks[1],'clicking the icon button opens the picker')
+    assert(opts.IsCurrent() and opts.automatic and opts.automatic.Draw,'the picker offers the automatic icon')
+    assert(opts.OnApply({kind='art',id='reminder-bronze-bell'}) and SS.Artwork().id=='reminder-bronze-bell','applying changes the draft')
+    assert(SS.Dirty(),'an icon change is an unsaved change')
+    assert(not opts.OnApply({kind='bogus'}),'an invalid icon is refused')
+    B.Refresh()
+    assert(opts.OnApply({kind='automatic'}) and SS.Artwork()==nil,'automatic clears it')
+    B.Refresh()
+    B.New()
+    assert(not opts.IsCurrent(),'a picker left open for another rule stops applying')
+    R.SettingsArtworkPicker,R.Artwork.Check,R.Artwork.Draw=realPicker,check,draw
+    if not realArt then R.Artwork=nil end
+end
 assert(B.Snapshot().groups>=1)
 assert(f.rule.templates and f.rule.templates.buttons[1]:IsShown(),'an empty rule offers examples')
 assert(f.palette.where:GetText()=='Adding to: Top level','the next condition goes to the top level')
