@@ -244,7 +244,7 @@ end
 ---------------------------------------------------------------------------
 local function Since(s)
     if L.preview then return "Preview: sample catches, not your records" end
-    local sec = F.Session.Elapsed() or 0
+    local sec = F.Session.FishingTime() or 0
     if sec < 60 then return "Fishing for under a minute" end
     if sec < 3600 then local m = math.floor(sec / 60) return ("Fishing for %d minute%s"):format(m, m == 1 and "" or "s") end
     return "Fishing for " .. H.Duration(sec)

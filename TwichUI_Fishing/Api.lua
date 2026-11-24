@@ -34,6 +34,7 @@ function API.Session()
     if not s then return nil end
     local copy = F.Copy(s)
     copy.elapsed = Ses.Elapsed()
+    copy.line = Ses.FishingTime()
     return copy
 end
 
@@ -53,7 +54,7 @@ function API.SessionByID(id)
     if not s then return nil end
     local copy = F.Copy(s)
     local cur = Ses.Current()
-    if cur and cur.id == id then copy.elapsed = Ses.Elapsed() end
+    if cur and cur.id == id then copy.elapsed = Ses.Elapsed(); copy.line = Ses.FishingTime() end
     return copy
 end
 
@@ -210,7 +211,10 @@ function API.Metrics(scope)
     if not rec then return nil end
     local seconds = rec == c.session and Ses.Elapsed() or rec.seconds
     if rec == c.totals and c.session then seconds = (seconds or 0) + Ses.Elapsed() end
-    return { seconds = seconds, casts = rec.casts }
+    local line = rec.line or 0
+    if rec == c.session then line = Ses.FishingTime() or line
+    elseif rec == c.totals and c.session then line = line + (Ses.FishingTime() or 0) - (c.session.line or 0) end
+    return { id = rec.id, seconds = seconds, casts = rec.casts, line = line }
 end
 
 function API.Provenance(scope)

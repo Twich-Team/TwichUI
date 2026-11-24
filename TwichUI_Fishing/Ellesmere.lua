@@ -23,7 +23,12 @@
 --                 with the unit frames.
 --   panels        the player aura bars, EllesmereUIPlayerAuraBars_Buffs / _Debuffs, with the other optional panels.
 -- Never touched: EllesmereUIMicroMenu and its buttons (EllesmereUI warns that an alpha change breaks their secure chain),
--- the extra action button and encounter bar (gameplay), cast bars, and anything not listed.
+-- the extra action button and encounter bar (gameplay), and anything not listed.
+-- Immersive overlays (cast bar and quest tracker) are included with fade.ellesmere, independent of optional aura panels.
+-- Read again at EllesmereUI 9.9.3, d84a1e19 (2026-11-24): Resource Bars creates ERB_CastBarFrame under UIParent; its
+-- SetElementVisibility writes alpha only at visibility edges. Forever's EUI_CustomQuestTracker is also under UIParent;
+-- its SetAlpha hook forwards alpha to its separate secure item layer. The noncustom tracker uses ObjectiveTrackerFrame
+-- plus EllesmereUIQTBackground. Alpha cover preserves all three owners' visibility/layout rules and settings.
 --
 -- Unverified in the real client: every name above comes from reading the source, not from a running game. A name that
 -- does not exist (the module is off, or another version names it otherwise) is simply not faded, and the settings page and
@@ -49,13 +54,23 @@ E.MODULES = {
     { addon = "EllesmereUIRaidFrames", label = "Party and raid frames" },
     { addon = "EllesmereUIResourceBars", label = "Resource bars" },
     { addon = "EllesmereUIDamageMeters", label = "Damage meters" },
+    { addon = "EllesmereUIQuestTracker", label = "Quest tracker" },
 }
 E.NEVER = { EllesmereUIMicroMenu = true, EllesmereEAB_ExtraActionButton = true, EllesmereEAB_EncounterBar = true }
 
 local BAR_KEYS = { "MainBar", "Bar2", "Bar3", "Bar4", "Bar5", "Bar6", "Bar7", "Bar8", "Bar9", "Bar10", "StanceBar", "PetBar" }
 
 -- Role lists: { name, group, role, label }.
-local LIST = {}
+local LIST = {
+    { name = "ERB_CastBarFrame", group = "immersive", role = "castbar", label = "Player cast bar",
+        module = "EllesmereUIResourceBars" },
+    { name = "EUI_CustomQuestTracker", group = "immersive", role = "quest-tracker", label = "Quest tracker",
+        module = "EllesmereUIQuestTracker" },
+    { name = "ObjectiveTrackerFrame", group = "immersive", role = "quest-tracker", label = "Quest tracker (stock)",
+        module = "EllesmereUIQuestTracker", requireModule = true },
+    { name = "EllesmereUIQTBackground", group = "immersive", role = "quest-background", label = "Quest tracker background",
+        module = "EllesmereUIQuestTracker" },
+}
 for _, key in ipairs(BAR_KEYS) do
     LIST[#LIST + 1] = { name = "EABBar_" .. key, group = "bars", role = "actionbar", label = "Action bar (" .. key .. ")",
         module = "EllesmereUIActionBars" }
@@ -129,7 +144,7 @@ function E.Targets(groups)
     local out = {}
     if not E.Detected() then return out end
     for _, t in ipairs(LIST) do
-        if groups[t.group] and not E.NEVER[t.name] and IsRegion(t.resolve and t.resolve() or rawget(_G, t.name)) then
+        if groups[t.group] and (not t.requireModule or Loaded(t.module)) and not E.NEVER[t.name] and IsRegion(t.resolve and t.resolve() or rawget(_G, t.name)) then
             -- the game's Minimap is EllesmereUI's only while its minimap module runs; otherwise the game's own list has it
             if (t.role ~= "minimap" and t.role ~= "minimap-host") or Loaded(t.module) then out[#out + 1] = t end
         end
@@ -165,8 +180,8 @@ function E.Models()
 end
 
 function E.Status()
-    local found = { bars = 0, units = 0, minimap = 0, panels = 0, meters = 0 }
-    local all = { bars = true, units = true, minimap = true, panels = true, meters = true }
+    local found = { bars = 0, units = 0, minimap = 0, panels = 0, meters = 0, immersive = 0 }
+    local all = { bars = true, units = true, minimap = true, panels = true, meters = true, immersive = true }
     for _, t in ipairs(E.Targets(all)) do found[t.group] = found[t.group] + 1 end
     local EUI = rawget(_G, "EllesmereUI")
     return {

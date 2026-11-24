@@ -41,7 +41,7 @@ moves `TwichUI_Fishing` beside the core, and `tools/release.py` expects it in th
 Everything returns a copy. Nothing builds frames or loads anything. `R.Fishing.API`:
 
 - `State()` returns `"idle"` (no session), `"ready"`, `"line"` or `"looting"`.
-- `Session()` returns the session in progress plus `elapsed`, or nil. `Sessions(n)` returns the newest summaries first.
+- `Session()` returns the session in progress plus `elapsed` (session span) and `line` (observed active fishing seconds), or nil. `Sessions(n)` returns the newest summaries first.
   `Totals()` returns the lifetime totals.
 - `Provenance(scope)` takes `"session"`, `"lifetime"` or a session id. It returns `{ direct, containers = { caught, opened,
   unopened }, contents }`. Containers are never in `direct`, and contents are never catches. Valuation must count an opened
@@ -116,11 +116,31 @@ gear. The record is saved immediately (`chars[...].gear`), so it survives reload
 ## Catches
 
 Each loot window gets one capture. A window with `IsFishingLoot()` is one catch. Each item is counted when its
-`LOOT_SLOT_CLEARED` arrives, once per slot. A slot still uncleared at close waits 2 s for the client's own `CHAT_MSG_LOOT`
-line before counting; otherwise it was left (full bags). Duplicate `LOOT_READY`, `LOOT_OPENED`, `LOOT_CLOSED` and slot
+`LOOT_SLOT_CLEARED` arrives, once per slot. The client's own `CHAT_MSG_LOOT` line also confirms an item, including
+when auto-loot delivers it **before** the window closes. At close those messages are paired with cleared slots (even identical
+stacks taken in reverse order), so the two channels never count an item twice. Newly readable slots are captured at
+`LOOT_OPENED`. A slot still unconfirmed at close waits 2 s for a later self-loot line before counting; otherwise it was left (full bags). Duplicate `LOOT_READY`, `LOOT_OPENED`, `LOOT_CLOSED` and slot
 events are ignored, and money slots are not items. Loot that is neither fishing nor a fishing container is unrelated and
 never recorded. A fishing line that ends with no fishing loot within 1.5 s, and was not interrupted, counts as `missed`.
 Bag changes are never evidence of a catch.
+
+## Session time and active fishing time
+
+`/tui fish stop` fixes the session's `stop` and `seconds` once, settles any observed live-line time, hides the HUD and
+stops its timers. Completed Journal rows and the summary use that stored duration, including after waiting or reopening.
+A delayed catch from the already-cast line keeps its original session; it cannot start another session or extend the ended
+session's duration. Turning Fishing itself off also ends the session.
+
+Leaving **Fishing Mode** only hides the presentation; session recording continues until manual stop or idle timeout.
+The command says so. Session duration is the wall-clock span between start and stop, including gaps between casts and a
+short reload, as before. Estimated gold/hour continues to use that session span. **Time fishing**, shown in the HUD and
+Journal Overview, counts observed seconds with a fishing line out, including the current line; it stays fixed between casts.
+Sessions and the completion summary retain the separate session duration and on-the-line breakdown.
+
+The idle timeout stores the last real activity time, including the end of a line; the deferred missed-cast verdict cannot
+extend it. Logout snapshots a live line before unloading. A short reload resumes the existing session span without restarting
+that line or the HUD. A long disconnect ends at the saved last activity. Combat/reveal leave session identity and timing intact;
+channel stop/interruption events settle line time. No timer for completed sessions runs when their Journal is reopened.
 
 ## Containers
 
@@ -217,6 +237,10 @@ Diagnostics has the scopes `fishing.load`, `fishing.decide`, `fishing.loot` and 
 | `test_fishing_location_limits.lua` | Approaching and exceeding the location bounds (species and containers), exact totals, overflow counted and shown by the Journal, sessions bounded too, reload, damaged overflow fields, a file already full before overflow was counted, migration from schema 1 then filling, very large quantities, and recording immediate with the Journal open (one redraw per burst) |
 | `test_fishing_journal_zones.lua` | The Journal's place lists and the Collections to Locations navigation, old and new records together, multi-zone sessions, empty and interrupted sessions, the summary card, the window's remembered position (drag, reopen, reload, size, Reset, off-screen recovery), extension points, and a large history (measurements printed) |
 | `test_fishing_store.lua` | New file, unversioned and damaged data repaired field by field, repeatable load, newer schema held, plain saved values, no prices |
+| `test_fishing_timing.lua` | Active line versus session time; exact manual-stop duration; completed Journal/summary after waiting/reopening/reload; hidden HUD handlers; reveal/combat; idle checkpoint; logout line settlement; late catches retain the original ended session |
+| `test_fishing_native_loot.lua` | Open-window self-loot confirmations, late-readable links, duplicate slot/chat channels and identical stacks; Today’s Catch, Journal and valuation; partial lots and later-session/reload provenance |
+| `test_fishing_ellesmere_overlays.lua` | Separate cast/quest overlays and item layer; owner alpha, reveal, stop/recover/disable, combat/logout/reload and visible chat |
+| `test_fishing_toast_polish.lua` | Bounded flourish, readable treasure/repeat layouts, value line, measured geometry, reduced motion and frame reuse |
 | `test_fishing_present.lua` | Stage 2: Fishing Mode's lifecycle, presentations, camera, fading policy, combat, reload and logout recovery, errors, missing client functions, controller keys, Stage 1 underneath, preview |
 | `test_fishing_hud.lua` | Stage 2: the cast bar, catch list and notifications, missing art and fonts, late item names, moving and scaling |
 | `test_fishing_ellesmere.lua` | Stage 2: EllesmereUI (`tests/ellesmere_mock.lua`, modelled on its source): detection, bars, unit frames through their parent, portraits, minimap, its own writes, mouse-over, combat, frames made or rebuilt, contested frames, turning it off and on, repeated use, errors, absent |
@@ -306,6 +330,13 @@ addon at login, as the fishing key does.
 ### Fading (`Fade.lua`, `Ellesmere.lua`)
 
 - **Groups:** `fade bars|units|minimap|panels|meters|twichui on|off`. Everything but panels is on.
+  - With `fade.ellesmere` enabled, the separate `ERB_CastBarFrame`, Forever `EUI_CustomQuestTracker`, quest background,
+    and stock quest tracker owned by EllesmereUI's QuestTracker module fade during immersion even when optional panels
+    are off. These are independent children of UIParent, outside the unit-frame hider. Verified against EllesmereUI 9.9.3
+    source commit `d84a1e19`; its quest tracker forwards alpha to its separate secure item layer. Fishing uses its existing
+    alpha ownership hooks, never changes settings, reparents frames or alters visibility drivers; reveal/stop/combat/logout
+    restore the owner's latest alpha, including an owner-hidden cast bar. Chat remains visible. Native appearance and
+    protected-client behavior still need owner acceptance.
   - Bars: the game's action, stance, pet and possess bars, the micro menu, the bags bar and the experience and reputation
     bars.
   - Units: the game's player, target, focus, pet and party frames.
@@ -392,7 +423,7 @@ its owner, left to its owner or skipped (and why), and how the interface came ba
   - The results: `Caught!`, `Nothing on the line`, `Interrupted` and `Couldn't cast`.
 - **No bite signal:** the timer times the line. The game gives no bite signal, and none is shown or guessed.
 - **Under the bar:**
-  - The session's length and catches, and the lure's time left, each after its glyph from the texture pack (the bobber, the
+  - Observed active fishing time (labelled "Fishing") and catches, and the lure's time left, each after its glyph from the texture pack (the bobber, the
     fish mark, the feather), as in the mockup.
   - The estimated value, only from a connected valuation.
   - A warning when your own gear is still to go back on (and the key that does it), or when the saved data is held.
@@ -402,7 +433,7 @@ its owner, left to its owner or skipped (and why), and how the interface came ba
 ### Catch list (`CatchList.lua`)
 
 - **Look:** on the right, drawn straight over the world, as in the approved mockup.
-  - "Today's Catch" (or "This Session's Catch" for a session that began on an earlier day) and how long it has lasted.
+  - "Today's Catch" (or "This Session's Catch" for a session that began on an earlier day) and how long fishing lines have actually been out.
   - The game's item icons in the texture pack's bronze icon frame, with the quantity on the icon's corner.
   - Ivory names, warm "N caught" lines and a large "×N".
   - The pack's fine bronze rule under the headings and, faintly, between the rows.
@@ -429,7 +460,9 @@ its owner, left to its owner or skipped (and why), and how the interface came ba
 - **Placement:** left of the middle, clear of the bobber and the cast bar (`toast.x/y/scale`).
 - **Merging:** the same item again while its notice is up adds to it (`x3`). At most three show at once, and up to six
   wait.
-- **Timing:** each shows for `toast.hold` seconds (default 3.5) with a short slide and fade. `toasts off` turns them off.
+- **Timing:** each shows for `toast.hold` seconds (default 3.5) with a short slide and fade, staggered text, a brief
+  rim-light sweep and small icon glint using Fishing artwork. Treasures have a warmer emphasis. Repeat catches merge
+  without replaying the flourish; reduced motion keeps the fade only. `toasts off` turns them off.
 - **Value line:** shown only with a connected valuation, and asked when the catch arrives.
 
 ### Controller
@@ -597,8 +630,7 @@ contents), `API.SessionByID(id)` and `API.Retention()`.
 - **There is no catalogue of fish**, so no "N of M discovered": only what has been caught is listed, and one "?" tile ends the
   list as a reminder that more exist.
 - **First and latest catch dates** come from the records' own `first` and `last` and are "not recorded" when absent.
-- **Catch rate** is catches (fishing loot windows) over casts. **Time fishing** is the sessions' lengths including the one in
-  progress; **time on the line** is the seconds a line was out. Neither is a per-hour or a value figure.
+- **Catch rate** is catches (fishing loot windows) over casts. **Time fishing** and **time on the line** count observed seconds a line was out; **session duration** includes gaps between casts and a short reload. These are time figures, not proceeds.
 - **Containers opened before the Journal's records, or without their contents being seen, show counts only.** Contents are
   listed only when seen coming out of a container.
 - Item names arrive from the game a moment after an item is first seen; until then a row says "Item <id>" and fills in by itself.

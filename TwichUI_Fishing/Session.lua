@@ -148,12 +148,12 @@ end
 function Ses.Cast(castGUID)
     castGUID = F.Readable(castGUID)
     if type(castGUID) == "string" then
-        if seenCasts[castGUID] then return false end
+        if seenCasts[castGUID] then return false, "duplicate" end
         seenCasts[castGUID] = true
         seenOrder[#seenOrder + 1] = castGUID
         if #seenOrder > 50 then seenCasts[table.remove(seenOrder, 1)] = nil end
     end
-    if not Ses.Ensure("cast") then return false end
+    if not Ses.Ensure("cast") then return false, "unavailable" end
     Ses.Touch()
     Add("casts", 1, Ses.Zone())
     F.Emit("CAST", castGUID)
@@ -164,32 +164,49 @@ end
 function Ses.Lost(kind)
     if kind ~= "failed" and kind ~= "interrupted" and kind ~= "missed" then return end
     if not Ses.Current() then return end
-    Ses.Touch()
+    -- A missed-line verdict is deferred; its timer is not fishing activity.
+    if kind ~= "missed" then Ses.Touch() end
     Add(kind, 1)
     F.Emit("CAST_FAILED", kind)
 end
 
-function Ses.Line(seconds)
+function Ses.Line(seconds, sid, zone)
+    local current = Ses.Current()
+    if not current or (sid and current.id ~= sid) then return end
     seconds = F.Num(seconds)
     if not seconds or seconds <= 0 or seconds > 120 then return end
     seconds = math.floor(seconds + 0.5)
-    Add("line", seconds, Ses.Zone())
+    Add("line", seconds, zone or Ses.Zone())
+    Ses.Touch()
+end
+
+-- Active fishing time excludes the gaps between casts. Never reads a completed record against the wall clock.
+function Ses.FishingTime()
+    local s = Ses.Current()
+    if not s then return nil end
+    local l = F.Action and F.Action.Line and F.Action.Line()
+    local live = l and l.sid == s.id and not l.timed and math.min(120, math.max(0, F.Clock() - l.start)) or 0
+    return (s.line or 0) + math.floor(live + 0.5)
 end
 
 -- A successful fishing interaction, at `zone` (the map the line was in when the loot window opened; the current one when not
 -- given). Returns the session id the catch belongs to.
-function Ses.Catch(zone)
-    local s = Ses.Ensure("catch")
-    if not s then return nil end
+function Ses.Catch(zone, sid)
+    local s = sid and Ses.Find(sid) or (not sid and Ses.Ensure("catch"))
+    local c = S.Char()
+    if not c then return nil end
     local now = F.Now()
-    Ses.Touch()
-    Add("catches", 1, F.Count(zone) or Ses.Zone())
-    local _, t = Both()
-    for _, rec in ipairs({ s, t }) do
-        rec.first = rec.first or now
-        rec.last = now
+    if s == c.session then Ses.Touch() end
+    zone = F.Count(zone) or Ses.Zone()
+    for _, rec in ipairs({ s or false, c.totals }) do
+        if rec then
+            rec.catches = (rec.catches or 0) + 1
+            local z = Zone(rec, zone); z.catches = z.catches + 1
+            rec.first = rec.first or now
+            rec.last = now
+        end
     end
-    return s.id
+    return sid or (s and s.id)
 end
 
 -- The completed session summary with this id, if it is still kept.
@@ -301,6 +318,8 @@ function Ses.End(reason, at)
     if not s then return nil end
     local stop = F.Num(at) and math.floor(at) or F.Now()
     if stop < s.start then stop = s.start end
+    -- Finalize a live line before publishing the immutable summary. Its eventual STOP cannot count it twice.
+    if F.Action and F.Action.FinishTiming then F.Action.FinishTiming(s.id) end
     s.stop, s.ended = stop, reason
     s.seconds = stop - s.start
     s.recent = nil

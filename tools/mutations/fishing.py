@@ -19,3 +19,9 @@ MUTATIONS.append(dict(id="fishing.economy.partial-lot-marker", file="TwichUI_Fis
     replace="    lot.partial = nil\n    Ses.ContainerOpened(lot.sid, lot.item, lot.zone)",
     why="finishing one shell clears uncertainty for other partially looted shells in the same lot",
     tests=("test_fishing_partial_lots.lua",), smoke=True, expect="killed"))
+
+MUTATIONS.append(dict(id="fishing.loot.preclose-confirmation", file="TwichUI_Fishing/Loot.lua",
+    find="if #held == 0 and not Lo.Open() then return end",
+    replace="if #held == 0 then return end",
+    why="discarding self-loot confirmation before close loses native auto-looted clam contents and their value",
+    tests=("test_fishing_native_loot.lua",), smoke=True, expect="killed"))

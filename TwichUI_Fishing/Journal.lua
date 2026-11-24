@@ -16,7 +16,7 @@
 --     location recording (the remainder, "earlier"), and never presents the last as exact or guesses it from the zones fished.
 --   * There is no catalogue of fish to compare with, so no "N of M discovered" is possible; only what has been caught is shown.
 --   * Catch rate is catches / casts: a catch is a fishing loot window, a cast is a line that was cast.
---   * Time fishing is the sessions' lengths (the one in progress included); time on the line is the seconds a line was out.
+--   * Session time includes gaps between casts (and a short reload); time fishing counts only observed seconds with a line out.
 --
 -- Answers are cached until the records change (the Fishing events that change them bump `serial`), so opening a page twice
 -- costs one pass; the pages draw a fixed number of rows however long a list is.
@@ -51,9 +51,13 @@ J.SESSIONS_PER_ZONE = 4
 -- session in progress, never a finished one, so the finished sessions (the costly copies) are not taken again per catch.
 J.history = 0
 for _, e in ipairs({ "ITEM", "CONTAINER", "QUEUE", "CATCH", "CAST", "CAST_FAILED", "SESSION_START", "SESSION_END" }) do
-    F.Subscribe(e, function(_, _, _, how)
+    F.Subscribe(e, function(_, first, _, how, sid)
         J.serial = J.serial + 1
-        if e == "SESSION_START" or e == "SESSION_END" or e == "CONTAINER" or e == "QUEUE" or (e == "ITEM" and how == "content") then
+        -- A catch already in flight can finish after an explicit stop; refresh its historical detail once.
+        local target = (e == "ITEM" and how == "direct" and sid) or (e == "CATCH" and first)
+        local current = target and F.API.Metrics("session")
+        local late = target and (not current or current.id ~= target)
+        if e == "SESSION_START" or e == "SESSION_END" or e == "CONTAINER" or e == "QUEUE" or (e == "ITEM" and how == "content") or late then
             J.history = J.history + 1
         end
     end)
@@ -202,6 +206,8 @@ function J.Overview()
     if not t then return { available = false, retention = J.Retention(), favorites = {}, recent = {}, lifetime = {} } end
     local cur = API().Session()
     local seconds = (t.seconds or 0) + (cur and (cur.elapsed or 0) or 0)
+    local timing = API().Metrics("lifetime")
+    local line = timing and timing.line or t.line
     local species = J.Collection().species
     local favorites = {}
     for i = 1, math.min(J.TOP, #species) do favorites[i] = species[i] end
@@ -212,7 +218,7 @@ function J.Overview()
     end
     return {
         available = true,
-        lifetime = { casts = t.casts, catches = t.catches, items = t.items, seconds = seconds, line = t.line, sessions = t.sessions,
+        lifetime = { casts = t.casts, catches = t.catches, items = t.items, seconds = seconds, line = line, sessions = t.sessions,
             failed = t.failed, interrupted = t.interrupted, missed = t.missed, first = t.first, last = t.last,
             kinds = #species },
         rate = J.Rate(t.catches, t.casts),

@@ -478,7 +478,7 @@ function P.Command(word, rest)
     if word == "mode" then
         if sub == "" then
             local ok, why = P.Toggle()
-            if on then Say("Fishing Mode on (%s).", P.Mode()) elseif ok == false and why then Say("%s", WHY[why] or why) else Say("Fishing Mode off.") end
+            if on then Say("Fishing Mode on (%s).", P.Mode()) elseif ok == false and why then Say("%s", WHY[why] or why) else Say(F.Session.Current() and "Fishing Mode off. Session recording continues until /tui fish stop or the idle timeout." or "Fishing Mode off.") end
         elseif PRESET_WORDS[sub] then
             Set("present.mode", sub, "Fishing Mode looks " .. sub .. ".")
         elseif sub == "auto" then
