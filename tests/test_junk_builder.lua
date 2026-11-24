@@ -46,6 +46,7 @@ assert(f.save and not f.save:IsEnabled() and not f.cancel:IsEnabled() and not f.
 B.New()
 assert(SS.Active() and SS.IsNew() and #L.JunkRules()==0,'a new rule is a draft, not a saved rule')
 assert(not f.rule.blank:IsShown() and f.rule.name:IsShown())
+assert(f.rule.art and f.rule.art:IsShown(),'the rule header has an icon button for the art selector')
 assert(B.Snapshot().groups>=1)
 assert(f.rule.templates and f.rule.templates.buttons[1]:IsShown(),'an empty rule offers examples')
 assert(f.palette.where:GetText()=='Adding to: Top level','the next condition goes to the top level')

@@ -453,6 +453,9 @@ local function RuleCopy(r)
         out[key]=r[key] or "any"
     end
     if r.tree~=nil then out.tree=T.Copy(r.tree);if not out.tree or out.tree.type~="group" then return nil end end
+    -- A picked icon is cosmetic: an unreadable one falls back to the automatic icon and never costs the rule.
+    local art=r.artwork~=nil and R.Artwork and R.Artwork.Check(r.artwork) or nil
+    if art and art.kind~="automatic" then out.artwork={kind=art.kind,id=art.id} end
     return out
 end
 function L.JunkRules()
@@ -477,6 +480,7 @@ local function SameRows(expected,rows)
         local e=expected[i]
         if type(e)~="table" or not T.Equal(e.tree,r.tree) then return false end
         for _,key in ipairs(RULE_KEYS) do if e[key]~=r[key] then return false end end
+        if not T.Equal(e.artwork,r.artwork) then return false end
     end
     return true
 end
