@@ -277,3 +277,93 @@ See [the Batch 12 roadmap status](product-roadmap.md#owner-authorized-batch-12--
 Native checks remain unchecked. F09 Loot Received Cards is owner-confirmed
 existing; F22 is separate Dispel Indicator Studio #139. Active Fishing,
 Opportunities, Ledger and Reminders glow branches are not batch integration bases.
+
+## F30 — Magic Inventory Quick Actions
+
+Roadmap: [F30](product-roadmap.md#f30--magic-inventory-bank-and-guild-bank-quick-actions).
+These stages are proposed, not selected implementation work. Only F30-A is
+**Ready (discovery only)** for an explicitly authorized batch; subsequent
+stages are **Blocked** until their dependencies and applicable owner design
+decisions are satisfied. Do not count the entire initiative as one small task.
+
+| ID | Status | Scope | Dependency / ownership |
+|---|---|---|---|
+| F30-A | Ready (discovery only) | Source/API review, transfer safety contract, mockup | Inventory + Advisor read-only review |
+| F30-B | Blocked | Personal bank category withdrawal and Quick Actions UI | A accepted; Inventory |
+| F30-C | Blocked | Workshop Advisor withdrawal shortcuts | B; authoritative Advisor readiness verified |
+| F30-D | Blocked | Guild bank categories and accessible tab scope | B; native permissions/transfer contract verified |
+| F30-E | Blocked | Deposit direction, Crafting Plan and Restock | B–D accepted; owner selects extensions |
+| F30-F | Blocked | Custom actions, artwork and final polish | Stable action contract; owner selects extensions |
+
+### F30-A — Discovery and design
+
+- **Start:** Read AGENTS.md and relevant engineering, architecture and feature
+  rules; inspect `!!!TwichUI/inventory/Window.lua`, `Run.lua`, `Items.lua`,
+  existing bank/guild adapters, rule protections, and Workshop Advisor sources
+  (verify paths and current open PRs). Identify supported Forever operations,
+  metadata readiness and existing confirmation/transfer lifecycle.
+- **Deliver:** Compact source-backed feasibility note, premium two-tab mockup
+  with category/recommendation groups and preview/progress states, and a
+  proposed shared action/transfer boundary. Identify uncertain native behavior
+  and optional owner-directed checks. No runtime changes or real transfers.
+- **Acceptance:** Explain how personal/guild withdrawals differ, how partial
+  stacks/capacity/permissions are handled, and how pending Advisor decisions
+  fail closed. Specify supported action granularity and explicit click
+  requirements; do not assume unrestricted bulk moves.
+- **Subagents:** If expressly permitted, at most two independent workers:
+  inventory/native feasibility and Advisor/design review. Coordinator reconciles
+  findings; no competing runtime edits. Review open inventory/Advisor PRs first.
+
+### F30-B — Personal bank category actions
+
+- Reuse Magic Inventory's review and confirmed-transfer lifecycle. Preserve
+  existing Inventory page and mailbox behavior; add illustrated Quick Actions
+  and preview counts for cloth, meat, fish, herbs, ore/bars, leather, gems and
+  enchanting materials using verified categories. Unknown metadata stays
+  excluded until resolved. Use shared style primitives and existing art where
+  suitable; no global redesign.
+- Acceptance: explicit review and click before movement; never transfer
+  protected items or exceed capacity; revalidate source slot/item/count before
+  each allowed move, respect locks/combat/session changes, and show confirmed
+  progress, skips, Stop and partial results. Existing rules remain unchanged.
+- Verification: focused category, transfer and UI regression tests; simulated
+  empty/full bags, stale slots, partial stacks, cancellation and frame closure;
+  normal/narrow layout captures if useful. Native uncertainties documented.
+
+### F30-C — Workshop recommendations
+
+- Reuse authoritative Auction/Vendor/Disenchant recommendation logic and
+  readiness/freshness policy; do not create independent pricing rules or
+  use a provisional local recommendation while required Market data loads.
+- Acceptance: parity with the complete Advisor for the same item/context,
+  pending/unknown results excluded, revalidation before movement; transfer
+  only, no sales, posting, disenchanting or spending.
+- Verification: focused parity tests with delayed Market/local inputs,
+  conflicting recommendations, unavailable data and changed recommendations.
+
+### F30-D — Guild bank
+
+- Reuse the proven category/action contract; validate current/selected/all
+  accessible tab scope against actual native capabilities. Unseen or stale
+  tab data is incomplete, never silently counted as complete.
+- Acceptance: respect view/withdraw permissions, remaining limits and stack
+  semantics; revalidate on tab/session/permission changes, stop safely on
+  failure, never touch inaccessible tabs. Explicit authorization remains.
+- Verification: simulated limited permissions, inaccessible tabs, exhausted
+  allowance, partial completion and cancellation; document native-only gaps.
+
+### F30-E/F — Optional follow-ups
+
+- E: separate scoped proposals for bidirectional category actions and
+  remaining Crafting Plan/Restock quantities; no spending or automatic actions.
+- F: custom shortcut names/icons/order/visibility using existing rule builder
+  and artwork picker, safe persistence/defaults, art and visual polish.
+  Unknown saved rules fail safely; preserve existing rule semantics.
+- Each extension needs its own acceptance criteria and owner selection before
+  promotion to Ready. Use focused tests and targeted visual checks.
+
+**Isolation and stop conditions:** Sequence runtime stages sharing Inventory
+files; check P01/F12/UX02 and current inventory PRs. Coordinate F30-C with
+Advisor, Market and junk-marking correctness work; do not change shared
+pricing semantics incidentally. No merge/release authorization, native
+transactions, unrelated refactors or automatic execution from this register.
