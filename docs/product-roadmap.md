@@ -9,7 +9,7 @@ are retained; these outcomes supersede earlier candidate labels for this batch.
 
 | ID | Status for review | Outcome and remaining limit |
 |---|---|---|
-| W27 | Implemented; Opportunities surface Deferred | [Item-quality audit](workshop/batch12-quality.md): actual material/item names use verified game quality across Crafting materials, Shopping, Compact Travel, Advisor, Strategy, Ledger and AH lists; recipe/actions/categories and quantity/price/status colors remain separate. `ViewOpportunities.lua` deferred while #117 is open. |
+| W27 | Implemented, including W27 follow-up | [Item-quality audit](workshop/batch12-quality.md): actual material/item names use verified game quality across Crafting materials, Shopping, Compact Travel, Advisor, Strategy, Ledger and AH lists; recipe/actions/categories and quantity/price/status colors remain separate. Follow-up covers Opportunities through separate presentation hunks; #117 history/pricing changes still apply cleanly. |
 | W10 | Implemented quote fallback; purchases Blocked | [Live merchant quote](workshop/batch12-vendor-assistance.md), current ShoppingPlan + live listings, bundle/partial stock/money disclosures, no spending. Native limited-stock and transaction sequencing evidence remains missing. Explicit confirmation policy is resolved by Batch 12; no auto-buy authorized. |
 | F13 | Investigated; runtime Deferred | [Implementation-ready specification](design/batch12-leave-me-alone.md); Fishing #143 remains open and changes QuietScreen ownership/state. No competing runtime edits. |
 | F18 | Investigated; markers Blocked | [Position evidence finding and owner test](design/batch12-party-death-markers.md): party APIs exist but death-time freshness/corpse semantics are unverified. No misleading pins or Party Wipe work. |
@@ -26,7 +26,7 @@ from verified metadata; missing/pending quality stays readable neutral; delayed
 metadata refreshes; pooled rows and selection changes reset; quantities, prices,
 sources and status labels keep their semantic colors in normal/narrow layouts.
 No changes to pricing, rarity, recommendations, ordering, ownership or tooltips.
-Opportunities remains explicitly deferred to avoid active #117 overlap.
+Follow-up presentation edits cover Opportunities; the actual #117 history/chart hunks remain unchanged and apply cleanly.
 
 F09 Loot Received Cards is **Verified Existing (owner-confirmed)**; no new receipt
 implementation is selected. F22 remains a **separate major initiative**, Dispel

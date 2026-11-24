@@ -1,7 +1,7 @@
 # Batch 12 verification
 
-Runtime source: `9467adb`, based on main `eb866ce`. Final documentation/evidence
-commits do not change runtime source. All player/native checks remain unchecked.
+Initial Batch 12 runtime source: `9467adb`, based on main `eb866ce`. The later
+W27 missing-color follow-up is documented below. All player/native checks remain unchecked.
 
 ## Unit-tested
 
@@ -74,3 +74,19 @@ Purchases require native stock/transaction evidence, F13 runtime waits for open
 Fishing #143 and eligible audio capability proof, F18 needs fresh death-position
 evidence, and automatic craft credit needs operation-correlated Forever events.
 These evidence gates do not block review of the completed presentation/probe work.
+
+## W27 missing-color follow-up (after `149d94a`)
+
+- Unit-tested: `./tests/run.sh development workshop` — 104 modules, zero failures,
+  syntax passed. Strengthened non-vacuous queue/Shopping window assertions then
+  passed their focused rerun; helper tests cover a cached name with pending
+  quality, quality-only API lookup, request-on-missing-quality, secrets/errors,
+  and preserving recipe/action labels.
+- Simulator-tested: `SIMLAB_WORKER=1 SIMLAB_ONLY='craft wrong' bash tools/simlab/run.sh workshop`
+  — wrapper and assertion verdict pass with the same known limitations.
+- Source compatibility: the actual #117 ViewOpportunities history patch passes
+  `git apply --check` over the independent name-color edits. No pricing/history
+  code or PR #117 branch was modified.
+- Mixed-quality captures and RGB assertions are described in the
+  [quality evidence](../evidence/batch12-quality/README.md). Native installation,
+  real item metadata and client appearance are not verified by these fixtures.

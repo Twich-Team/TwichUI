@@ -174,7 +174,7 @@ local function RenderCraft()
     for _, r in ipairs(rows) do
         local e = r.entry
         local word = r.state == "short" and ("Missing " .. r.missing) or WORD[r.state]
-        data[#data + 1] = { item = e.outItem, icon = e.icon, title = e.crafts .. " \195\151 " .. e.name, word = word, done = e.id,
+        data[#data + 1] = { item = e.outItem, icon = e.icon, title = e.crafts .. " \195\151 " .. UI.QualityText(e.name, UI.OutputQuality(e)), word = word, done = e.id,
             tone = r.state == "collect" and "collect2" or r.state, lines = { { ("%d %s left"):format(e.crafts, e.crafts == 1 and "craft" or "crafts") } } }
     end
     local text

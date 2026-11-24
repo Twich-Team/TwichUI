@@ -236,7 +236,13 @@ function O.ItemFacts(item)
         local ok, n, _, q = pcall(C_Item.GetItemInfo, item)
         if ok then name, quality = Text(n, 80), Int(q, 0, 8) end
     end
-    if not name and C_Item and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, item) end
+    -- Name and quality can become readable independently. A cached name is not
+    -- proof that the full GetItemInfo record (including quality) has arrived.
+    if quality == nil and C_Item and C_Item.GetItemQualityByID then
+        local ok, q = pcall(C_Item.GetItemQualityByID, item)
+        if ok then quality = Int(q, 0, 8) end
+    end
+    if (not name or quality == nil) and C_Item and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, item) end
     return name, icon, quality
 end
 

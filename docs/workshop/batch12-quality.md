@@ -1,7 +1,10 @@
 # W27 — Workshop item-quality presentation
 
-Implemented for review, with the Opportunities material list deferred to avoid
-competing with open PR #117. No price, recommendation, ordering, ownership,
+Implemented for review. The follow-up after the owner's missing-color report
+also covers verified output-item names in the queue, recipe picker, Opportunities,
+Overview and Compact Craft. PR #117's actual history/chart hunks remain unchanged
+and `git apply --check --include=TwichUI_Workshop/ViewOpportunities.lua` confirms
+that its patch still applies cleanly over the presentation-only edits. No price, recommendation, ordering, ownership,
 recipe identity, tooltip or transaction behavior changed.
 
 `Style.lua` provides two small presentation helpers: `UI.ItemQuality` for an
@@ -16,12 +19,12 @@ price or category.
 
 | Surface | Treatment |
 |---|---|
-| Overview | Its opportunity and queue entries name recipes; profession, status and action labels retain semantic colors. No actual material-name list is present. |
-| Opportunities | Recipe headings/rows remain recipe labels. Its actual material names need the same helper, but changes to `ViewOpportunities.lua` are deferred while #117 remains open. |
+| Overview | A top-profit label matching its verified output item uses quality only on the item-name span; profession, status and action labels retain semantic colors. |
+| Opportunities | Verified output-item labels and material names use quality in rows and selected details. Distinct recipe/action names remain neutral. Pricing/history code is unchanged. |
 | Item Advisor | Existing item-name coloring now shares the helper, including neutral unknown metadata and selected-item resets. |
-| Craft Queue and selected craft | Entries/heading name recipes and retain their original text color. Their **Materials needed** list colors actual material names only. |
+| Craft Queue and selected craft | Entries/headings matching the verified output item name use its quality. Recipe actions with different names and non-item outputs remain neutral. Materials use their own item quality. The recipe picker follows the same distinction. |
 | Shopping | Actual materials in rows/details and verified recipe-output names in consumer rows use quality colors. Recipe-only consumer fallbacks stay neutral. |
-| Compact Travel | Only the material-name span is colored; quantity and source/status stay unchanged. Compact Craft entries name recipes and remain neutral. |
+| Compact Travel | Only the material-name span is colored; quantity and source/status stay unchanged. Compact Craft colors verified output-item name spans while leaving craft counts/status alone. |
 | Crafting Strategy | Buy/collect material-name suffixes use quality; action words and counts retain their original color. Craft steps identify recipes. |
 | Gold Ledger | Actual identified transaction item-name prefixes and realized-result names use current item quality. Counts, character suffixes, money, source labels and unattributed notes keep their colors. No recorder/query changes overlap #98. |
 | AH Browse/Owned/Sell/Shopping/Market | Existing item-name coloring shares the verified-quality helper; selected details and empty selections reset consistently. Category/data-quality labels retain their original colors. |
@@ -76,3 +79,26 @@ required for final-branch evidence.
 
 Final combined-branch evidence, including the wrapper cache exception and passing
 Crafting/negative-control rerun: [Batch 12 verification](batch12-verification.md).
+
+## W27 follow-up after the in-game report
+
+The first pass missed output-item labels in the queue and deferred Opportunities.
+Those presentation paths are now covered, without changing label text, recipe
+identity, quantities, pricing or tooltips. `UI.OutputQuality` colors a recipe
+label only when its text matches the verified output item's name; it never
+infers quality from that text. Different action names such as Smelt Bronze and
+non-item recipes stay neutral.
+
+`Observe.ItemFacts` now tries the source-verified `C_Item.GetItemQualityByID`
+when the full item record has no readable quality, and requests item data when
+**either** name or quality is pending. Previously a cached name prevented that
+request even with unknown quality. Secret/nil/error results still remain unknown.
+Forever source `bebcb6b`, `ItemDocumentation.lua`, declares that quality getter
+and its nullable ItemQuality result.
+
+Follow-up checks: 104-module Workshop development profile passed, focused
+strengthened window/helper checks passed, and Crafting/wrong-control simulation
+passed with known simulator limitations. [Mixed-quality captures](../evidence/batch12-quality/README.md)
+exercise actual rows in Craft Queue, Shopping and Opportunities, with read-back
+RGB assertions. These are synthetic metadata/palette inputs, not native-client
+proof or assertions about the actual rarity of those example item names.

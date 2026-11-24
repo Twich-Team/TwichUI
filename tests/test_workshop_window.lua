@@ -991,6 +991,25 @@ do
   tip = {}
   Check(mat.scripts.OnEnter ~= nil and mat.scripts.OnClick ~= nil, "it has an item tooltip and a chat link on Shift-click")
 
+  -- Follow-up: real Opportunities output/material fonts, then queue and Shopping.
+  -- Metadata source uses source-grounded quality enums with synthetic RGB values.
+  do
+    local oldNames, oldQuality, oldGetter = g.names, g.quality, c.C_Item.GetItemQualityColor
+    g.names = { [10]="Peacebloom",[11]="Silverleaf",[501]="Healing Potion",[502]="Mana Potion" }
+    g.quality = { [10]=2,[11]=1,[501]=3,[502]=4 }
+    c.C_Item.GetItemQualityColor = function(q) return q/16,.5,.75 end
+    Fire("GET_ITEM_INFO_RECEIVED",501,true); Flush(); Win.Render()
+    local row = Win.Lists().opps.rows[1]
+    Same(row.name.qualityColor[1], g.quality[row.rec.outItem]/16, "Opportunities output name is colored")
+    Same(opps.detail.name.qualityColor[1], 3/16, "selected output name is rare")
+    Same(opps.detail.mats[1].name.qualityColor[1], 2/16, "Opportunities material name is uncommon")
+    Same(opps.detail.mats[1].qty:GetText(), "\195\1512", "material quantity stays separate")
+    g.names,g.quality,c.C_Item.GetItemQualityColor=oldNames,oldQuality,oldGetter
+    Fire("GET_ITEM_INFO_RECEIVED",501,true); Flush()
+    Win.SetMode("opps"); Win.Render()
+    Same(opps.detail.name.qualityColor[1],W.UI.K.text[1],"unknown selected output resets its previous color")
+  end
+
   -- Crafting: the left card's two lists, the plan's estimates and totals
   Win.SetMode("craft"); Win.Render()
   local cr = Win.Craft()
@@ -1003,6 +1022,36 @@ do
   S.Add(rec[1]); S.Add(rec[2])
   S.SetCrafts(1, 2)
   Win.Render()
+  do
+    local oldNames, oldQuality, oldGetter = g.names, g.quality, c.C_Item.GetItemQualityColor
+    local wasRecipes = cr.segRecipes.on
+    g.names = { [10]="Peacebloom",[11]="Silverleaf",[501]="Healing Potion",[502]="Mana Potion" }
+    g.quality = { [10]=2,[11]=1,[501]=3,[502]=4 }
+    c.C_Item.GetItemQualityColor = function(q) return q/16,.5,.75 end
+    cr.segQueue:GetScript("OnClick")(cr.segQueue)
+    Win.Render()
+    local queueNames = 0
+    for _, qr in ipairs(Win.Lists().queue.rows) do
+      if qr:IsShown() and qr.entry and g.quality[qr.entry.outItem] then
+        Same(qr.name.qualityColor[1],g.quality[qr.entry.outItem]/16,"queue output name is colored")
+        queueNames = queueNames + 1
+      end
+    end
+    Same(queueNames,2,"both queued output names were checked")
+    Win.SetMode("shop"); Win.Render()
+    local shopNames = 0
+    for _, sr in ipairs(Win.Lists().shop.rows) do
+      if sr:IsShown() and sr.data and g.quality[sr.data.item] then
+        Same(sr.name.qualityColor[1],g.quality[sr.data.item]/16,"Shopping material name is colored")
+        shopNames = shopNames + 1
+      end
+    end
+    Check(shopNames>=1,"at least one actual Shopping row was checked")
+    g.names,g.quality,c.C_Item.GetItemQualityColor=oldNames,oldQuality,oldGetter
+    Fire("GET_ITEM_INFO_RECEIVED",501,true); Flush()
+    Win.SetMode("craft"); Win.Render()
+    if wasRecipes then cr.segRecipes:GetScript("OnClick")(cr.segRecipes) end
+  end
   -- Healing Potion x2: cost 2 x 200, sells 2 x 1000, profit 2 x 800. Mana Potion x1: cost 100 + 50, sells 300, profit 150.
   local byId, tot = S.PlanEstimates()
   Same(byId[1].cost, 400); Same(byId[1].sellLow, 2000); Same(byId[1].profitLow, 1600)

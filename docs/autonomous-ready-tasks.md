@@ -257,8 +257,9 @@ Owner selected exactly W27/W10/F13/F18/W13 for one consolidated draft PR, with
 up to two isolated workers. No next batch, merge, deployment or release selected.
 See [the Batch 12 roadmap status](product-roadmap.md#owner-authorized-batch-12--november-23-2026).
 
-- **W27 — Implemented for review**, except Opportunities material colors Deferred
-  while #117 is open. Small shared presentation helper, verified quality and
+- **W27 — Implemented for review**, including the missing-color follow-up for
+  queue/output labels and Opportunities. #117 history/chart hunks are unchanged
+  and its patch still applies cleanly. Small shared presentation helper, verified quality and
   neutral unknowns, delayed refresh and pooled reset; [audit](workshop/batch12-quality.md).
 - **W10 — Implemented read-only quote fallback; purchasing Blocked.** Explicit
   spending confirmation is now the chosen policy; no remembered auto-buy. Live

@@ -155,6 +155,7 @@ local function MakeOppRow(parent)
         if rec.outItem then _, icon = O.ItemFacts(rec.outItem) end
         self.icon:SetTexture(icon or rec.icon or UI.ICON_BLANK)
         self.name:SetText(rec.name)
+        UI.ItemQuality(self.name, UI.OutputQuality(rec))
         -- the second line, shortest first: the profession, then what matters about this craft right now
         local detail = rec.profName or ""
         local makes = W.PerCraft(e.outMin, e.outMax)
@@ -252,6 +253,7 @@ local function RenderDetail(rows,positions)
     d.icon:SetTexture(icon or rec.icon or UI.ICON_BLANK)
     d.item=rec.outItem
     d.name:SetText(rec.name)
+    UI.ItemQuality(d.name, UI.OutputQuality(rec))
     d.prof:SetText(rec.profName or "")
     d.profitLabel:SetText(Op.ProfitLabel(r))
     if e.state == "ok" then
@@ -286,10 +288,11 @@ local function RenderDetail(rows,positions)
     for i, line in ipairs(d.mats) do
         local m = e.mats and e.mats[i]
         if m and i <= MAT_ROWS then
-            local _, mi = O.ItemFacts(m.item)
+            local _, mi, quality = O.ItemFacts(m.item)
             line.item = m.item
             line.icon:SetTexture(mi or UI.ICON_BLANK)
             line.name:SetText(UI.ItemName(m.item))
+            UI.ItemQuality(line.name, quality)
             line.qty:SetText("\195\151" .. m.qty)
             line.value:SetText(m.total and UI.Money(m.total) or (m.unavailable == "few" and "too few" or "no price"))
             UI.Paint(line.value, m.total and K.textDim or K.bronzeText)

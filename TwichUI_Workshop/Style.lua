@@ -72,6 +72,13 @@ local function ItemColor(quality)
             and r >= 0 and r <= 1 and g >= 0 and g <= 1 and b >= 0 and b <= 1 then return r, g, b end
     end
 end
+-- A recipe label can also be the actual output item's name. Only color that
+-- case; actions such as "Smelt Bronze" and non-item recipes remain neutral.
+function UI.OutputQuality(rec)
+    if not (rec and rec.outItem and W.Observe) then return nil end
+    local name, _, quality = W.Observe.ItemFacts(rec.outItem)
+    if name and name == rec.name then return quality end
+end
 function UI.ItemQuality(fs, quality)
     local r, g, b = ItemColor(quality)
     if r then fs:SetTextColor(r, g, b) else UI.Paint(fs, UI.K.text) end
