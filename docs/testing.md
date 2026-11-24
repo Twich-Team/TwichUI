@@ -74,6 +74,7 @@ Replace `workshop-settings` with one of these nonempty groups:
 | `healer-watch` | Healer monitoring/alerts, guarded hover communication and Settings |
 | `execute-range` | Execute threshold configuration, verified EllesmereUI adapters, overlay lifecycle and settings/sharing |
 | `navigation` | Navigation, maps, pins, NPCs and guild locations |
+| `guild-locations` | Guild location communication, inspection, synthetic preview and diagnostic panel; navigation/settings dependency checks, smoke and the focused Guild Locations settings/panel scenario |
 | `settings` | Settings contracts, framework, pages and feature settings |
 | `shared-ui` | Frame styling, notifications, themes, reachability and shared window components |
 | `core` | Initialization, defaults, profiles, persistence, routing, storage and group/guild diagnostic isolation |

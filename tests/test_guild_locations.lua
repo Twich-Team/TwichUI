@@ -105,7 +105,7 @@ local function Boot(name, saved, opts)
   }
   c.UnitClassBase = function() return "MAGE" end
   for _, f in ipairs({ "pins/Pins.lua", "npcs/Kinds.lua", "npcs/Store.lua", "npcs/Search.lua", "guildloc/State.lua", "guildloc/Roster.lua",
-    "guildloc/Comm.lua", "diag/Diagnostics.lua", "diag/GuildLoc.lua" }) do
+    "guildloc/Comm.lua", "guildloc/Diagnostics.lua", "diag/Diagnostics.lua", "diag/GuildLoc.lua" }) do
     local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
   end
   -- the real AceComm, with its sends counted by priority
@@ -970,6 +970,39 @@ do
   local e2, k2 = RS.Lookup(A)
   Check(e2 and k2 == kA and e2.level == 60 and e2.class == "WARRIOR", "unchanged data survives a pass")
   Check(RS.Serial() == s0 + 1 and RS.Stamp() == t0, "unchanged pass: serial once, stamp at the pass")
+end
+
+Section("14 transient map metadata and truthful send readiness")
+do
+  Fresh({ A, B })
+  local c = Boot(A)
+  local api = c.C_Map.GetMapInfo
+  c.C_Map.GetMapInfo = function(id) if id == 1453 then return nil end return api(id) end
+  Move(c, 0.5, 0.5, 1453)
+  Advance(21)
+  Check(c.GL.Snapshot().lastSkip == "no-position" and #c.WIRE == 0, "unavailable map metadata holds sending back")
+  local ready, reason = c.GL.SendStatus()
+  Check(not ready and reason == "no-position", "settings readiness does not claim an unreadable position can send")
+  Msg(c, B, P(T0 + 1000, 1, 1453))
+  Check(not c.GL.Peek(B) and c.GL.Snapshot().drops["unknown-map"] == 1, "unavailable metadata rejects received map")
+  c.C_Map.GetMapInfo = api
+  Check(c.GL.SendStatus(), "metadata recovery is visible without a reload")
+  Advance(16)
+  Check(#c.WIRE > 0, "sending recovers after the temporary map miss")
+  Msg(c, B, P(T0 + 1000, 2, 1453))
+  Check(c.GL.Peek(B), "receiving also recovers without a reload")
+  c.LOCK = true
+  ready, reason = c.GL.SendStatus()
+  Check(not ready and reason == "blocked", "the game blocking messages is reported before calling it ready")
+  c.LOCK = false
+  c.ChatThrottleLib.bQueueing = true
+  ready, reason = c.GL.SendStatus()
+  Check(not ready and reason == "queueing", "a shared library queue is reported as waiting")
+  local bad = Boot(B, { guildLoc = { state = "sharing", lastEpoch = "broken" } })
+  bad.GL.SetState("invisible"); bad.GL.SetState("sharing")
+  ready, reason = bad.GL.SendStatus()
+  Check(not ready and reason == "bad-epoch", "a corrupt epoch remains fail closed, rather than being guessed")
+  Check(bad.GL.Diagnostics.Report(A):find("Toggling Sharing cannot safely repair", 1, true), "the diagnostic explains the actual recovery limitation")
 end
 
 print(("guild locations: %d checks PASSED"):format(checks))

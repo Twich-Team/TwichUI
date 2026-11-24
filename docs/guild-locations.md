@@ -1,5 +1,78 @@
 # Guild Locations
 
+## Self-service diagnostics (2026-11-24)
+
+Open **Guild Locations → Diagnostics** in TwichUI settings, or use
+`/tui diagnostics guild [Full Name]`. Opening the lazily constructed window sends
+nothing. Core sharing and diagnostics do not require opening settings.
+
+- **Inspect / refresh:** enter a guildmate's full name. Shows current roster match,
+  held position age, selected-member receive decisions and why a badge is drawn or
+  suppressed (group, different map, conversion, bounds, drawing limit, closed map
+  or unavailable provider). An explicit inspection watches only this member for
+  120 seconds. It does not save positions, payloads or a history.
+- **Local self-test:** runs synthetic decoding, ordering, withdrawal and expiry
+  checks using the live parser and record reducer with an isolated inbox. With
+  the map open it also shows a noninteractive **SYNTHETIC** badge at the viewport
+  center for 10 seconds. It never changes real guild records or saved choices and
+  sends nothing, including while Off. The badge needs visual confirmation; this
+  test does not prove network delivery, roster identity or cross-map projection.
+- **Test with member:** a 90-second check with four small polls (0, 20, 50, 80 s).
+  A compatible online member's addon replies automatically; their player need not
+  run a debugger or send output. Results distinguish a control round trip from a
+  normal location update actually held by the peer, and compare its epoch/sequence
+  with the last position your game accepted. Both clients' receive/display
+  results are available on your client. Peer status is labeled as a snapshot.
+  No reply is **inconclusive**: an old addon, Off, offline, roster mismatch or
+  blocked delivery can all cause silence. The test never forces either player
+  to share, requests a fresh position or changes normal update timing.
+
+Diagnostic controls use **the same `TwichUIGuild` prefix and GUILD route** as
+positions. The v1 position/withdrawal wire format and its 64-byte bound stay
+unchanged. The optional extension is `1:q:<id>:<target full name>` and
+`1:r:<id>:<state>:<send reason>:<receive reason>:<render reason>:<epoch>:<sequence>:<age>`
+(at most 220 bytes). Replies carry no coordinates, locations or third-party
+records. Names appear only as the request's target and in the local focused
+window, never routine exports. Validate channel, game-provided sender, roster,
+target, correlation ID, field-specific enums and canonical number ranges. Older
+clients safely reject these unknown controls and continue normal sharing.
+
+Off never sends or answers diagnostic controls. Invisible answers minimal status
+without sending positions. One local inspection/test and one automatic responder
+lease are held at most; checks have a 10-second restart cooldown, replies at most
+one per 10 seconds, and correlated responses are accepted at most every 4 seconds.
+The responder lease expires 95 seconds after its last valid request. Local data
+expires 120 seconds after inspection/start; closing or stopping clears it sooner.
+State and guild changes cancel transient work; late responses are ignored. Queued
+library controls cannot be recalled but contain no positions.
+
+Reliability corrections: temporary map metadata failures are retried rather than
+cached for the whole session; settings says **Ready to send** only with a usable
+position and unblocked transport; guild badges refresh on seamless-map view
+changes. Invalid saved epochs remain fail closed and are explicitly diagnosed:
+toggling the sharing choice cannot safely reconstruct missing message ordering.
+
+Implementation: `guildloc/Diagnostics.lua`, `guildloc/Window.lua`, the shared
+record reducer in `Comm.lua`, and `Map.Explain`/`Map.SelfTest`. Core code stays
+loaded; the focused window's frames are created on first open. Routine reports
+show counts/codes only. Scope `guildloc.diagnostic` and gauges
+`guildloc.diagnosticHeld`/`guildloc.map.synthetic` expose bounded work and leases;
+the existing timers/events gauges include diagnostic/preview work.
+
+Evidence: unit tests use synthetic clients and the bundled AceComm/ChatThrottleLib.
+Real-client delivery and appearance are not established by these tests. The
+milestone notes below are historical evidence, not the current diagnostic workflow.
+
+Verification: `./tests/run.sh feature guild-locations` selects navigation and
+settings dependency tests, smoke, and the Guild Locations settings/panel scenario.
+Use `SIMLAB_SETTINGS_TASK='"diagnostics"' bash tools/simlab/run.sh settings guildLocations`
+to capture the focused panel (optionally `SIMLAB_SETTINGS_POSE=narrow`). Panel
+construction, explicit inspection, self-test controls, visible report bounds and
+cleanup are simulator-tested; screenshots use fallback fonts and provide structural
+evidence only. Full-world-map preview simulation encountered missing Blizzard map
+APIs, so preview rendering/cleanup is unit-tested and still needs owner-directed
+in-game confirmation. No simulator engine or Blizzard reference source was changed.
+
 Guild members using TwichUI share their own current map position over the guild's hidden addon channel and (from M3) see one
 another on the world map as class badges. **M0 to M4 exist: the policy wording, the core in `guildloc/`
 (`State.lua`, `Roster.lua`, `Comm.lua`) with its tests, the settings page, the launcher's right-click menu, the map markers
@@ -137,7 +210,8 @@ or protocol unless the task is about it. Party pins and map pings share places t
 - `TwichUIDB` held (newer schema): inactive for the session, reads as Off with reason `held`; nothing is written.
 - An interval other than 10/15/30/60 reads as 15.
 - `lastEpoch` present but unusable (not a whole number in 0..2^32-1): no epoch can be allocated, so **nothing is sent** until the
-  player chooses a state again; it is never reused or wrapped. At 2^32-1 it fails the same way.
+  saved ordering can be recovered safely; choosing a state alone cannot repair it.
+  It is never reused, wrapped or guessed. At 2^32-1 it fails the same way.
 - Being outside a guild never prevents choosing or saving a state; the guild only decides whether anything can be sent.
 - `Toggle` swaps Sharing and Invisible and does nothing from Off.
 

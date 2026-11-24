@@ -949,4 +949,41 @@ if key=="junkMarking" and params.editor then
         Lab.Settle(.2)
     end)
 end
+if key == "guildLocations" then
+    Lab.Step("Guild Locations diagnostic panel", function()
+        local GL = R.GuildLoc
+        local before, record = GL.Snapshot(), TwichUIDB.guildLoc
+        Lab.Check("init", "diagnostic panel opens", true, GL.Window.Show())
+        Lab.Check("state", "panel visible", true, GL.Window.IsShown())
+        Lab.Check("privacy", "opening sends no diagnostic requests", 0, GL.Diagnostics.Snapshot().requests)
+        Lab.Check("privacy", "opening preserves saved record", record, TwichUIDB.guildLoc)
+        local frame = _G.TwichUIGuildLocationsDiagnostics
+        frame.member:SetText("Synthetic Member")
+        frame.member:GetScript("OnEnterPressed")(frame.member)
+        Lab.Check("interact", "explicit inspection watches the selected member", true, GL.Diagnostics.Snapshot().watching)
+        Lab.Check("state", "inspection identifies the selected member", true, GL.Window.Text():find("Member: Synthetic Member", 1, true) ~= nil)
+        local result = GL.Diagnostics.SelfTest()
+        Lab.Check("state", "synthetic protocol checks pass", false, result:find("FAIL:", 1, true) ~= nil)
+        Lab.Check("privacy", "self-test preserves real records", before.records, GL.Snapshot().records)
+        Lab.Check("privacy", "self-test sends no diagnostic requests", 0, GL.Diagnostics.Snapshot().requests)
+        GL.Window.Hide()
+        Lab.Check("cleanup", "closing cancels inspection", false, GL.Diagnostics.Snapshot().watching)
+        Lab.Check("cleanup", "closing removes synthetic preview", false, GL.Map.Snapshot().synthetic)
+        Lab.Check("init", "reopening reuses panel", true, GL.Window.Show())
+        Lab.Check("state", "local report readable", true, GL.Window.Text():find("Guild Locations diagnostics", 1, true) ~= nil)
+        local clicked = false
+        for _, child in ipairs({ frame:GetChildren() }) do
+            if child.text and child.text.GetText and child.text:GetText() == "Local self-test" then
+                child:Click(); clicked = true break
+            end
+        end
+        Lab.Check("interact", "actual self-test button runs", true, clicked)
+        Lab.Check("state", "self-test results appear in the report", true, GL.Window.Text():find("PASS: Decode", 1, true) ~= nil)
+        Lab.Check("construct", "report has visible height", true, frame.edit:GetHeight() > 0)
+        Lab.Say("guild diagnostic geometry", "report-height=" .. frame.edit:GetHeight(), "report-width=" .. frame.edit:GetWidth(),
+            "report-lines=" .. frame.edit:GetNumLines(), "report-shown=" .. tostring(frame.edit:IsShown()))
+        if params.task ~= "diagnostics" then GL.Window.Hide() end
+        Lab.Settle(.3)
+    end)
+end
 Lab.Finish()

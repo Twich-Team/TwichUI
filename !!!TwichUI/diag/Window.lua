@@ -244,7 +244,7 @@ D.OnChange(W.RefreshStatus)
 ---------------------------------------------------------------------------
 -- /tui diagnostics
 ---------------------------------------------------------------------------
-local USAGE = "start | stop | clear | status | memory [collect] | test friend [real] | test sound [stock] | probe"
+local USAGE = "start | stop | clear | status | guild [full name] | memory [collect] | test friend [real] | test sound [stock] | probe"
 
 local function Status()
     local s = D.Status()
@@ -260,6 +260,7 @@ end
 
 function W.Command(arg)
     local word, rest = (arg or ""):match("^%s*(%S*)%s*(.-)%s*$")
+    local member = rest
     word, rest = word:lower(), rest:lower()
     if word == "" or word == "open" or word == "report" then
         W.Show()
@@ -288,6 +289,9 @@ function W.Command(arg)
         else Say("usage: /tui diagnostics test friend [real] | test sound [stock]. Tests are not real events: they show the card or chime works, not that real events arrive; friend real puts one of your own friends on the card.") end
     elseif word == "memory" then
         if R.DiagMemory then R.DiagMemory.Command(rest) else Say("the memory reading isn't available right now.") end
+    elseif word == "guild" then
+        local GW = R.GuildLoc and R.GuildLoc.Window
+        if GW then GW.Show(member) else Say("Guild Locations diagnostics are unavailable.") end
     elseif word == "probe" then
         if R.FoodDrinkProbe then R.FoodDrinkProbe.Run() else Say("the consumables probe isn't available right now.") end
     else

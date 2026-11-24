@@ -37,10 +37,16 @@ local function Snapshot()
     Line("messages reaching this prefix: %d (own echoes ignored %d)", st.heard, st.echoes)
     Line("skipped ticks: %s", Codes(s.skips))
     Line("messages set aside: %s", Codes(s.drops))
+    local m = GL.Map and GL.Map.Snapshot() or {}
+    Line("map: %s; provider %s; drawn %d; capped layouts %d; synthetic preview %s", D.Flag(m.open), D.Flag(m.installed), m.drawn or 0,
+        m.capped or 0, D.Flag(m.synthetic))
+    local gd = GL.Diagnostics and GL.Diagnostics.Snapshot() or {}
+    Line("peer checks: running %s; requests %d, replies %d, inconclusive timeouts %d; rejected controls %d", D.Flag(gd.running),
+        gd.requests or 0, gd.replies or 0, gd.timeouts or 0, gd.rejected or 0)
     local ready = s.state ~= "off" or s.pending
     return { configured = s.state ~= "off", initialized = s.session, status = ready and "ready" or "off", lines = lines,
         limits = {
-            "Checked offline only; docs/guild-locations.md lists what has to be seen in the game with two accounts.",
+            "/tui diagnostics guild opens local inspection, an isolated self-test and an automatic peer check.",
             "Sent means the game took the message, not that anyone received it. The roster's names are matched, not proven.",
         },
     }
