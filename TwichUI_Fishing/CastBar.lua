@@ -172,7 +172,7 @@ function CB.StatsText()
     end
     local s = F.Session.Current()
     if s then
-        parts[#parts + 1] = H.Glyph("glyph-time", 20) .. " " .. H.Duration(F.Session.Elapsed() or 0)
+        parts[#parts + 1] = H.Glyph("glyph-time", 20) .. " Fishing: " .. H.Duration(F.Session.FishingTime() or 0)
         parts[#parts + 1] = H.Glyph("mark", 20) .. " " .. (s.catches == 1 and "1 Catch" or (s.catches .. " Catches"))
         local value = P and P.Value and P.Value("session")
         if value and value.text then parts[#parts + 1] = "|TInterface\\MoneyFrame\\UI-GoldIcon:16:16|t " .. value.text .. (value.perHourText and (" · " .. value.perHourText) or "") end
@@ -214,7 +214,7 @@ function CB.NoteText()
 end
 
 function CB.RefreshLines()
-    if not frame then return end
+    if not frame or not frame:IsShown() then return end
     ui.stats:SetText(CB.StatsText())
     local text, warn = CB.NoteText()
     ui.note:SetText(text)
@@ -229,7 +229,7 @@ local function Paint()
     ui.label:SetText(LABEL[state] or "")
     H.Color(ui.label, (state == "caught") and H.GOLD or (state == "ending" and H.MUTED) or H.IVORY)
     if state == "line" then
-        Animate(true)
+        Animate(frame:IsShown() and not CB.preview)
     else
         Animate(false)
         if state == "caught" then SetProgress(1); ui.time:SetText("")
@@ -304,6 +304,8 @@ function CB.Show()
     end
     frame:SetAlpha(1)
     frame:Show()
+    if state == "line" then Animate(true) end
+    CB.RefreshLines()
     R:On("UNIT_SPELLCAST_SENT", OnSent)
     if not ticker and C_Timer and C_Timer.NewTicker then ticker = C_Timer.NewTicker(1, CB.RefreshLines) end
 end
@@ -313,6 +315,7 @@ function CB.Hide()
     R:Off("UNIT_SPELLCAST_SENT", OnSent)
     if not frame then return end
     Animate(false)
+    if resultTimer then resultTimer:Cancel(); resultTimer = nil end
     frame:Hide()
 end
 

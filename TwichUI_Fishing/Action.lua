@@ -402,21 +402,35 @@ end
 function A.OnChannelStart(unit, guid, spellID)
     if unit ~= "player" then return end
     if not (IsFishing(spellID) or A.Channel() == "fishing") then return end
-    line = { start = F.Clock(), guid = F.Readable(guid) }
-    Ses.Cast(line.guid)
+    guid = F.Readable(guid)
+    if line and type(guid) == "string" and line.guid == guid then return end
+    -- Dedupe before starting a session: an old start replay must not reopen completed records.
+    local accepted, why = Ses.Cast(guid)
+    if not accepted and why ~= "unavailable" then return end
+    local s = Ses.Current()
+    line = { start = F.Clock(), guid = guid, sid = s and s.id, zone = Ses.Zone() }
     A.ApplyTargeting()
     A.Sync()
     A.Refresh()
     if F.Main and F.Main.Listen then F.Main.Listen() end
 end
 
+-- Settle a line once, including a manual session stop while the channel is still out.
+-- This only records observed time; it never cancels or casts a spell.
+function A.FinishTiming(sid)
+    local l = line
+    if not l or l.timed or (sid and l.sid ~= sid) then return end
+    l.timed = true
+    Ses.Line(F.Clock() - l.start, l.sid, l.zone)
+end
+
 function A.OnChannelStop(unit)
     if unit ~= "player" or not line then return end
     local l = line
+    A.FinishTiming(l.sid)
     line = nil
     l.stop = F.Clock()
     lastLine, lastEnd = l, l.stop
-    Ses.Line(l.stop - l.start)
     A.Sync()
     A.RestoreTargeting()
     A.Refresh()
@@ -427,6 +441,8 @@ end
 -- A line that ended with no fishing loot window after it, and was not interrupted: nothing was caught.
 function A.CheckMissed(l)
     if l.caught or l.interrupted or l.checked then return end
+    local s = Ses.Current()
+    if not s or s.id ~= l.sid then return end
     l.checked = true
     Ses.Lost("missed")
 end
@@ -439,9 +455,21 @@ local function Once(guid)
     return true
 end
 
+-- Late results from a stopped line belong to its old session, never the next session's idle clock.
+local function OldResult(guid)
+    guid = F.Readable(guid)
+    local s = Ses.Current()
+    for _, l in ipairs({ line or false, lastLine or false }) do
+        if l and type(guid) == "string" and l.guid == guid then
+            return not s or l.sid ~= s.id
+        end
+    end
+    return false
+end
+
 function A.OnFailed(unit, guid, spellID)
     if unit ~= "player" or not IsFishing(spellID) then return end
-    if not Once(guid) then return end
+    if OldResult(guid) or not Once(guid) then return end
     Ses.Lost("failed")
 end
 
@@ -449,7 +477,7 @@ function A.OnInterrupted(unit, guid, spellID)
     if unit ~= "player" or not IsFishing(spellID) then return end
     local l = line or lastLine
     if l then l.interrupted = true end
-    if not Once(guid) then return end
+    if OldResult(guid) or not Once(guid) then return end
     Ses.Lost("interrupted")
 end
 

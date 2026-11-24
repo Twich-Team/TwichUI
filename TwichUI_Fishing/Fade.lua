@@ -1,6 +1,6 @@
 -- TwichUI Fishing: fading the interface around Fishing Mode (Stage 2)
 -- While Fishing Mode is immersive the parts of the interface the player doesn't need for fishing fade out, and come back as
--- they were afterwards. Never UIParent itself, never anything that carries a warning, an error, a cast bar, loot or a window
+-- they were afterwards. Never UIParent itself, never anything that carries a warning, an error, loot or a window
 -- the player opened.
 --
 -- What fades (config fade.*; each group its own switch):
@@ -9,7 +9,10 @@
 --   units     the game's player, target, focus, pet and party frames; with EllesmereUI, all of its unit frames (through the
 --             one frame they share), their 3D portraits, its party and raid frames and its resource bars
 --   minimap   the minimap cluster (with EllesmereUI's minimap module, the map itself: its blips may stay)
---   panels    (off by default) the quest tracker, buff and debuff frames, the durability figure, EllesmereUI's aura bars
+--   panels    (off by default) the stock quest tracker, buff and debuff frames, the durability figure, EllesmereUI's aura bars
+--   immersive EllesmereUI's player cast bar and quest tracker, including its separate background; always with
+--             fade.ellesmere, since these overlays otherwise cover the fishing view. The custom tracker mirrors its
+--             frame alpha to its own item-button layer, so no private or secure child needs a separate write.
 --   extra     frames another addon draws that the player names (/tui fish fade add <FrameName>)
 --   notices   TwichUI's own notification cards, reminders and glows, through the Quiet screen's hold (QuietScreen.lua): a
 --             hold of Fishing Mode's own, which never turns on, off or shows as the player's Quiet screen switch
@@ -252,7 +255,7 @@ end
 ---------------------------------------------------------------------------
 Fa.SWITCHES = { "bars", "units", "minimap", "panels", "meters", "twichui" }
 local function Groups()
-    local g = {}
+    local g = { immersive = true }
     for _, group in ipairs(Fa.SWITCHES) do g[group] = S.Get("fade." .. group) ~= false and S.Get("fade." .. group) and true or false end
     return g
 end

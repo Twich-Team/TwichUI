@@ -10,7 +10,8 @@
 --              quality). Nothing else is called a treasure: no rarity or value is guessed.
 -- The same item again while its notice is still up (several stacks from one catch, or a fast second catch) adds to that
 -- notice ("x3") instead of showing another. At most three show at once, newest at the bottom; up to six more wait.
--- Each comes in with a short slide and fade (only the fade with reduced motion), stays config toast.hold seconds, and fades
+-- Each comes in with a short slide and fade, a single light crossing the bronze rim and a brief icon glint (only the fade
+-- with reduced motion), stays config toast.hold seconds, and fades
 -- out. The value line is shown only when a valuation is connected (Present.Value, Stage 3).
 -- Notice frames are made once (three) and reused; their OnUpdate exists only while one is showing.
 
@@ -25,6 +26,7 @@ T.VISIBLE = 3
 T.QUEUE = 6
 T.MERGE = 2.5        -- seconds after its last update that a notice still takes the same item
 T.IN, T.OUT = 0.28, 0.6
+T.FLOURISH = 0.95   -- one quiet reveal, never restarted by merging repeated catches
 local K = 0.86
 
 local anchor
@@ -71,6 +73,16 @@ local function Make()
     f.artL = f:CreateTexture(nil, "ARTWORK", nil, 1)
     f.artM = f:CreateTexture(nil, "ARTWORK", nil, 1)
     f.artR = f:CreateTexture(nil, "ARTWORK", nil, 1)
+    -- Fishing's own feathered light and cast spark: the short reveal/afterglow
+    -- rhythm of the loot-win card, without its large burst, particles or sound.
+    f.sheen = f:CreateTexture(nil, "ARTWORK", nil, 2)
+    f.sheen:SetBlendMode("ADD")
+    H.Texture(f.sheen, "glint", { 1, 0.8, 0.4, 0 })
+    f.sheen:SetAlpha(0)
+    f.spark = f:CreateTexture(nil, "ARTWORK", nil, 2)
+    f.spark:SetBlendMode("ADD")
+    H.Texture(f.spark, "castspark", { 1, 0.8, 0.4, 0 })
+    f.spark:SetAlpha(0)
     f.title = Text(f, 19, "serif")
     f.name = Text(f, 15, "strong")
     f.name:SetJustifyH("LEFT")
@@ -97,6 +109,9 @@ local function Dress(f, kind)
     f.icon:ClearAllPoints()
     f.icon:SetPoint("CENTER", f, "TOPLEFT", cx, -cy)
     f.icon:SetSize(side, side)
+    f.spark:ClearAllPoints()
+    f.spark:SetPoint("CENTER", f, "TOPLEFT", (w[3] - 3) * K, -(w[2] + 5) * K)
+    f.spark:SetSize(kind == "treasure" and 22 or 16, kind == "treasure" and 22 or 16)
     f.glint:ClearAllPoints()
     f.glint:SetPoint("BOTTOM", f, "TOPLEFT", cx, -cy + side * 0.05)
     f.glint:SetSize(side * 1.9, side * 0.9)
@@ -107,6 +122,7 @@ local function Dress(f, kind)
     f.glint2:SetSize(side * 1.9, side * 0.9)
     f.glint2:Show()
     f.glow = kind == "treasure" and 1 or 0.6
+    f.sheen:SetSize(kind == "treasure" and 68 or 52, 14)
     local x = (w[3] + 20) * K      -- clear of the frame's right rim
     f.title:ClearAllPoints()
     f.title:SetText(kind == "treasure" and "Treasure!" or "Caught!")
@@ -155,6 +171,7 @@ Band = function(f)
         f.artR:SetTexCoord(U(b[2]), r, t, bt)
     end
     f:SetWidth(art.cw * K + extra)
+    f.sheenTravel = math.min(145, art.cw * K + extra - (f.textX or 0) - 35)
     f.name:SetWidth(art.cw * K + extra - (f.textX or 0) - 14)
 end
 
@@ -192,19 +209,52 @@ end
 
 local Release
 
+local function Smooth(p)
+    p = math.max(0, math.min(1, p))
+    return p * p * (3 - 2 * p)
+end
+
+local function Pulse(t, first, peak, last)
+    if t <= first or t >= last then return 0 end
+    if t < peak then return Smooth((t - first) / (peak - first)) end
+    return 1 - Smooth((t - peak) / (last - peak))
+end
+
+-- All geometry is bounded by this small notice, below the text. No item or
+-- pricing work belongs here. After the reveal only the existing exit clock runs.
+local function Flourish(f, age)
+    if f.flourishDone then return end
+    local moves = f.moves
+    local rich = f.kind == "treasure"
+    local reveal = moves and Smooth((age - 0.04) / 0.20) or 1
+    local name = moves and Smooth((age - 0.10) / 0.22) or 1
+    f.title:SetAlpha(reveal)
+    f.name:SetAlpha(name)
+    f.value:SetAlpha(name)
+    local glow = 0.4 + (moves and 0.42 * Pulse(age, 0.02, 0.26, T.FLOURISH) or 0)
+    f.glint:SetAlpha(glow * f.glow)
+    f.glint2:SetAlpha(glow * f.glow * 0.7)
+    local sweep = Smooth((age - 0.16) / 0.62)
+    f.sheen:ClearAllPoints()
+    f.sheen:SetPoint("CENTER", f, "TOPLEFT", f.textX + 4 + sweep * f.sheenTravel,
+        -(rich and H.ART.treasure.inner[1] or H.ART.toast.inner[1]) * K + 2)
+    f.sheen:SetAlpha(moves and (rich and 0.42 or 0.24) * Pulse(age, 0.16, 0.40, 0.80) or 0)
+    f.spark:SetAlpha(moves and (rich and 0.75 or 0.38) * Pulse(age, 0.12, 0.30, 0.66) or 0)
+    f.flourishDone = not moves or age >= T.FLOURISH
+end
+
 local function OnUpdate(f)
     local now = F.Clock()
     local t = now - f.phaseAt
+    Flourish(f, now - f.arrivedAt)
     if f.phase == "in" then
         local p = math.min(1, t / T.IN)
         local e = p * p * (3 - 2 * p)
         f:SetAlpha(e)
         f.slide = f.moves and (-14 * (1 - e)) or 0
-        f.glint:SetAlpha((0.35 + 0.5 * e) * (f.glow or 1)); f.glint2:SetAlpha(f.glint:GetAlpha() * 0.7)
         if p >= 1 then f.phase, f.phaseAt = "hold", now end
         Layout()
     elseif f.phase == "hold" then
-        f.glint:SetAlpha((0.85 - math.min(0.45, t * 0.25)) * (f.glow or 1)); f.glint2:SetAlpha(f.glint:GetAlpha() * 0.7)
         if t >= f.hold then f.phase, f.phaseAt = "out", now end
     elseif f.phase == "out" then
         local p = math.min(1, t / T.OUT)
@@ -233,6 +283,8 @@ function T.Show(entry)
     f.hold = S.Get("toast.hold") or 3.5
     f.moves = Motion()
     f.phase, f.phaseAt = "in", F.Clock()
+    f.arrivedAt, f.flourishDone = f.phaseAt, false
+    Flourish(f, 0)
     f.slide = f.moves and -14 or 0
     f:SetAlpha(0)
     active[#active + 1] = f
@@ -298,6 +350,7 @@ function T.Preview(on, unlock)
         T.Clear()
         T.Show({ id = 0, q = 2, kind = "catch", name = "Sample fish", icon = H.MEDIA .. H.ART.mark.file, at = F.Clock() })
         active[1].phase, active[1].hold = "hold", math.huge
+        Flourish(active[1], T.FLOURISH)
         active[1]:SetAlpha(1)
     else
         T.Clear()

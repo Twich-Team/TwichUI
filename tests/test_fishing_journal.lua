@@ -186,7 +186,7 @@ do
   -- the overview's numbers are on screen
   local function AllText() return Words(W) end
   local text = AllText()
-  Check(text:find("Fishing Overview", 1, true) and text:find("90", 1, true) and text:find("82.0%%") and text:find("2h 00m", 1, true), "overview: fish caught, catch rate and time fishing")
+  Check(text:find("Fishing Overview", 1, true) and text:find("90", 1, true) and text:find("82.0%%") and text:find("1h 06m", 1, true), "overview: fish caught, catch rate and active line time (not the two-hour session span)")
   Check(text:find("Raw Mithril Head Trout", 1, true) and text:find("×40", 1, true), "favourite catches with names and counts")
   -- a recent session opens on the Sessions page
   local pg = UI.Frame()
@@ -362,6 +362,7 @@ do
   W.Advance(1.2); W.Key("F"); W.Advance(2)
   c.TwichUI.RunCommand("fish stop"); W.Advance(0.2)
   Check(not UI.SummaryShown(), "no catch: no card")
+  W.StopLine()
   W.Advance(1.2); W.Key("F"); W.catch = { { FISH1, 1 } }; W.Interact(); W.Advance(2)
   W.combat = true
   c.TwichUI.RunCommand("fish stop"); W.Advance(0.2)

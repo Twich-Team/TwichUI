@@ -38,7 +38,11 @@ local function OnWorld()
     end
 end
 
-local function OnLogout() A.RestoreTargeting() end
+local function OnLogout()
+    -- A short reload may resume the session, but never its old live-line timer.
+    A.OnChannelStop("player")
+    A.RestoreTargeting()
+end
 
 local EVENTS = {
     UNIT_SPELLCAST_CHANNEL_START = A.OnChannelStart,
@@ -128,7 +132,7 @@ end)
 function M.SetEnabled(on)
     local ok, why = S.Set("enabled", on and true or false)
     if not ok then return false, why end
-    if not on then A.Teardown() end
+    if not on then Ses.End("off"); A.Teardown() end
     M.Listen()
     A.Sync()
     return true

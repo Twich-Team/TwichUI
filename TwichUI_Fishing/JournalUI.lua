@@ -417,7 +417,7 @@ local function BuildOverview(page)
         local cells = {
             { glyph = "mark", value = Num(L.items), label = "Fish caught" },
             { glyph = "glyph-lure", value = Num(L.casts), label = "Casts" },
-            { glyph = "glyph-time", value = H.Duration(L.seconds), label = "Time fishing" },
+            { glyph = "glyph-time", value = H.Duration(L.line), label = "Time fishing" },
             { glyph = "glyph-hook", value = Percent(o.rate), label = "Catch rate" },
         }
         for _, x in ipairs(o.extra) do cells[#cells + 1] = x end
@@ -1243,10 +1243,10 @@ end
 -- runs while the window is closed or no session is in progress.
 local clock
 function U.StartClock()
-    if clock or not (C_Timer and C_Timer.NewTicker) then return end
+    if clock or not F.Session.Current() or not (C_Timer and C_Timer.NewTicker) then return end
     clock = C_Timer.NewTicker(1, function()
-        if not U.Shown() then U.StopClock() return end
-        if F.Session.Current() then U.Refresh() end
+        if not U.Shown() or not F.Session.Current() then U.StopClock() return end
+        U.Refresh()
     end)
 end
 function U.StopClock() if clock then clock:Cancel(); clock = nil end end
@@ -1348,6 +1348,8 @@ end
 for _, e in ipairs({ "ITEM", "CONTAINER", "QUEUE", "CATCH", "CAST", "SESSION_START", "SESSION_END" }) do
     F.Subscribe(e, Changed)
 end
+F.Subscribe("SESSION_START", function() if U.Shown() then U.StartClock() end end)
+F.Subscribe("SESSION_END", U.StopClock)
 F.Subscribe("ECONOMY", Changed)
 
 ---------------------------------------------------------------------------

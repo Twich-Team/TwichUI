@@ -10,8 +10,9 @@
 --   Fishing loot (IsFishingLoot() true): one catch, counted at once, and its zone read at that moment (capture.zone, map id 0
 --   when the client gives none): every item of the window, however late it is taken, is attributed to it. Each item is counted when its slot is cleared (it
 --   reached the bags), so items left behind (full bags) are not counted, and an item is counted once however often the
---   event comes. A slot still not cleared when the window closes waits two seconds for the client's own
---   "You receive loot" line (CHAT_MSG_LOOT, LOOT_ITEM_SELF / _MULTIPLE) to confirm it; otherwise it was left.
+--   event comes. The client's own "You receive loot" line (CHAT_MSG_LOOT, LOOT_ITEM_SELF / _MULTIPLE) also confirms
+--   a slot, whether it arrives before or after the window closes. An uncleared slot waits two seconds after close;
+--   without either confirmation it was left.
 --   Other loot: a container the fishing key (or an automatic open) just used, or a queued container opened by hand
 --   (Containers.lua decides). Everything else (mobs, chests, other bags) is unrelated and not recorded.
 
@@ -60,6 +61,22 @@ local function Take(capture, item, q)
     end
 end
 
+-- Pair the chat and slot-clear channels before adding an item. Identical stacks
+-- may be looted in any order, so chat consumes a cleared slot's confirmation first.
+local function Confirm(capture, item, q)
+    local match
+    for _, e in pairs(capture.slots) do
+        if not e.chat and e.item == item and e.q == q then
+            match = e
+            if e.taken then break end
+        end
+    end
+    if not match then return false end
+    match.chat = true
+    if not match.taken then match.taken = true; Take(capture, item, q) end
+    return true
+end
+
 -- What a window that is not fishing loot is: a container's (attributed), possibly a hand-opened container's, or unrelated.
 local function Resolve(capture, fromItem)
     local attr = C.LootOpened(fromItem)
@@ -78,18 +95,24 @@ end
 local function Begin(fromItem)
     if cur and not cur.closed then
         Lo.duplicates = Lo.duplicates + 1
+        -- LOOT_READY can precede usable item links. Add newly readable slots at LOOT_OPENED, but never replace a
+        -- captured or confirmed slot: cleared slots can no longer be read from the live window.
+        for slot, e in pairs(ReadSlots()) do if not cur.slots[slot] then cur.slots[slot] = e end end
         if cur.kind == "maybe" and fromItem ~= nil then Resolve(cur, fromItem) end
         return
     end
     Lo.windows = Lo.windows + 1
-    cur = { at = F.Clock(), slots = ReadSlots(), taken = {} }
+    cur = { at = F.Clock(), slots = ReadSlots(), taken = {}, chats = {} }
     if F.Readable(IsFishingLoot and IsFishingLoot()) == true then
         cur.kind = "fishing"
         Lo.lastFishing = cur.at
         -- where the line was, read now, at the confirmed fishing loot window: items reach the bags later (and a container
         -- is opened later still), but they were caught here
         cur.zone = Ses.Zone()
-        cur.sid = Ses.Catch(cur.zone)
+        local line, recent
+        if F.Action and F.Action.Line then line, recent = F.Action.Line() end
+        if not line and recent and recent.stop and cur.at - recent.stop <= 1.5 and not recent.caught then line = recent end
+        cur.sid = Ses.Catch(cur.zone, line and line.sid)
         if F.Action and F.Action.OnCatch then F.Action.OnCatch() end
         local items = 0
         for _ in pairs(cur.slots) do items = items + 1 end
@@ -138,6 +161,12 @@ function Lo.OnClosed()
     if capture.kind == "maybe" then capture.kind = "unrelated" end
     if F.Action and F.Action.OnLootState then F.Action.OnLootState(false, capture.kind) end
     if capture.kind == "unrelated" then capture.done = true return end
+    -- Native auto-loot can report its self-loot chat before any slot-clear or
+    -- close event. Pair those messages only once all clear events are known;
+    -- otherwise a message for slot 2 could falsely confirm an identical slot 1
+    -- that was left behind. Container attribution still settles through its lot.
+    for _, chat in ipairs(capture.chats) do Confirm(capture, chat.item, chat.q) end
+    capture.chats = nil
     local waiting = false
     for _, e in pairs(capture.slots) do if not e.taken then waiting = true end end
     if waiting or capture.kind == "container" then
@@ -152,7 +181,7 @@ end
 function Lo.Waiting() return #held > 0 end
 
 ---------------------------------------------------------------------------
--- The client's own loot line confirms a slot that was never reported cleared (held captures only)
+-- The client's own loot line confirms a slot before close or during the bounded confirmation wait.
 ---------------------------------------------------------------------------
 local patterns
 local function Pattern(fmt)
@@ -187,17 +216,15 @@ function Lo.ParseChat(text)
 end
 
 function Lo.OnChat(text)
-    if #held == 0 then return end
+    if #held == 0 and not Lo.Open() then return end
     local id, q = Lo.ParseChat(text)
     if not id then return end
-    for _, capture in ipairs(held) do
-        for _, e in pairs(capture.slots) do
-            if not e.taken and e.item == id and e.q == q then
-                e.taken = true
-                Take(capture, id, q)
-                return
-            end
-        end
+    -- Closed windows are older and can still receive their delayed confirmation before the current window's loot.
+    for _, capture in ipairs(held) do if Confirm(capture, id, q) then return end end
+    if Lo.Open() then
+        -- A loot window has a bounded number of slots; unrelated/repeated chat
+        -- must not grow this short-lived buffer without bound.
+        if #cur.chats < 100 then cur.chats[#cur.chats + 1] = { item = id, q = q } end
     end
 end
 
