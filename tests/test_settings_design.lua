@@ -3,6 +3,9 @@ dofile(TESTS .. "settings_mock.lua")
 local c, S = SettingsClient({ beforeInit = function(c)
   -- Describe the optional Workshop settings without loading or opening its window.
   c.TwichUI.WorkshopLauncher = { JunkRules = function() return {} end, Loaded = function() return false end }
+  -- and Fishing's (a load-on-demand addon too): described, never loaded
+  c.TwichUI.FishingLauncher = { Loaded = function() return false end, State = function() return "unloaded" end,
+    KeyText = function() return nil end }
 end })
 local K, D = S.K, c.TwichUI.SettingsDesign
 assert(D and D.pages)
@@ -20,7 +23,8 @@ end
 for _, definition in ipairs(K.definitions) do
   assert(D.pages[definition.key], "every registered page needs a purposeful presentation review: " .. definition.key)
 end
-assert(#S.pages == 60, "all conditional pages are included for this synthetic Mage")
+assert(#S.pages == 61, "all conditional pages are included for this synthetic Mage")
+assert(not c.LOADED.TwichUI_Fishing, "describing Fishing never loads it")
 assert(not c.LOADED.TwichUI_Workshop, "describing Home and Workshop never loads the Workshop")
 assert(not c.TwichUIDB.ui.settingsWindow, "describing settings never writes a window size")
 local privacy = D.SectionSummary(K.pages.guildLocations, { GetName = function() return "Your location" end }, "On by default.")

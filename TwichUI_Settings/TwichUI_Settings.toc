@@ -68,6 +68,7 @@ pages\JunkSession.lua
 pages\JunkBuilder.lua
 pages\JunkMarking.lua
 pages\Workshop.lua
+pages\Fishing.lua
 pages\Skins.lua
 pages\RestedXP.lua
 pages\TargetArt.lua

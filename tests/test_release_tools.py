@@ -33,6 +33,8 @@ WIZARD_TOC = ("## Interface: 16001\n## Title: Layout Setup\n## Version: 1.0.0\n#
               "## LoadOnDemand: 1\n\nArt.lua\n")
 WORKSHOP_TOC = ("## Interface: 16001\n## Title: Workshop\n## Version: 1.0.0\n## RequiredDeps: !!!TwichUI\n"
                 "## LoadOnDemand: 1\n\nData.lua\n")
+FISHING_TOC = ("## Interface: 16001\n## Title: Fishing\n## Version: 1.0.0\n## RequiredDeps: !!!TwichUI\n"
+               "## LoadOnDemand: 1\n\nData.lua\n")
 
 
 class Repo:
@@ -52,6 +54,7 @@ class Repo:
         self.write(rel.TOCS[rel.LAYOUTS], LAYOUTS_TOC)
         self.write(rel.TOCS[rel.WIZARD], WIZARD_TOC)
         self.write(rel.TOCS[rel.WORKSHOP], WORKSHOP_TOC)
+        self.write(rel.TOCS[rel.FISHING], FISHING_TOC)
         self.n = 0
 
     def run(self, *args):
@@ -387,7 +390,7 @@ class NotesTests(unittest.TestCase):
 class StampTests(unittest.TestCase):
     def test_stamps_only_the_version_line(self):
         with tempfile.TemporaryDirectory() as d:
-            for rel_path, text in ((rel.TOCS[rel.CORE], CORE_TOC), (rel.TOCS[rel.SETTINGS], SETTINGS_TOC), (rel.TOCS[rel.NAVDATA], NAVDATA_TOC), (rel.TOCS[rel.DIAGNOSTICS], DIAG_TOC), (rel.TOCS[rel.LAYOUTS], LAYOUTS_TOC), (rel.TOCS[rel.WIZARD], WIZARD_TOC), (rel.TOCS[rel.WORKSHOP], WORKSHOP_TOC)):
+            for rel_path, text in ((rel.TOCS[rel.CORE], CORE_TOC), (rel.TOCS[rel.SETTINGS], SETTINGS_TOC), (rel.TOCS[rel.NAVDATA], NAVDATA_TOC), (rel.TOCS[rel.DIAGNOSTICS], DIAG_TOC), (rel.TOCS[rel.LAYOUTS], LAYOUTS_TOC), (rel.TOCS[rel.WIZARD], WIZARD_TOC), (rel.TOCS[rel.WORKSHOP], WORKSHOP_TOC), (rel.TOCS[rel.FISHING], FISHING_TOC)):
                 p = Path(d, rel_path)
                 p.parent.mkdir(parents=True)
                 p.write_bytes(text.replace("\n", "\r\n").encode())
@@ -412,7 +415,7 @@ class ArchiveTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
-        for rel_path, text in ((rel.TOCS[rel.CORE], CORE_TOC), (rel.TOCS[rel.SETTINGS], SETTINGS_TOC), (rel.TOCS[rel.NAVDATA], NAVDATA_TOC), (rel.TOCS[rel.DIAGNOSTICS], DIAG_TOC), (rel.TOCS[rel.LAYOUTS], LAYOUTS_TOC), (rel.TOCS[rel.WIZARD], WIZARD_TOC), (rel.TOCS[rel.WORKSHOP], WORKSHOP_TOC)):
+        for rel_path, text in ((rel.TOCS[rel.CORE], CORE_TOC), (rel.TOCS[rel.SETTINGS], SETTINGS_TOC), (rel.TOCS[rel.NAVDATA], NAVDATA_TOC), (rel.TOCS[rel.DIAGNOSTICS], DIAG_TOC), (rel.TOCS[rel.LAYOUTS], LAYOUTS_TOC), (rel.TOCS[rel.WIZARD], WIZARD_TOC), (rel.TOCS[rel.WORKSHOP], WORKSHOP_TOC), (rel.TOCS[rel.FISHING], FISHING_TOC)):
             (self.root / rel_path).parent.mkdir(parents=True)
             (self.root / rel_path).write_text(text)
 
@@ -425,6 +428,7 @@ class ArchiveTests(unittest.TestCase):
             rel.TOCS[rel.LAYOUTS]: LAYOUTS_TOC.replace("1.0.0", version),
             rel.TOCS[rel.WIZARD]: WIZARD_TOC.replace("1.0.0", version),
             rel.TOCS[rel.WORKSHOP]: WORKSHOP_TOC.replace("1.0.0", version),
+            rel.TOCS[rel.FISHING]: FISHING_TOC.replace("1.0.0", version),
             "!!!TwichUI/Core.lua": "-- core\n",
             "TwichUI_Settings/Kit.lua": "-- kit\n",
             "TwichUI_NavData/Data/Map0.lua": "-- walking map\n",
@@ -432,6 +436,7 @@ class ArchiveTests(unittest.TestCase):
             "TwichUI_Layouts/Canon.lua": "-- layouts\n",
             "TwichUI_LayoutWizard/Art.lua": "-- wizard\n",
             "TwichUI_Workshop/Data.lua": "-- workshop\n",
+            "TwichUI_Fishing/Data.lua": "-- fishing\n",
         }
         entries.update(files or {})
         path = self.root / "pkg.zip"
@@ -465,7 +470,8 @@ class ArchiveTests(unittest.TestCase):
                 rel.TOCS[rel.DIAGNOSTICS]: DIAG_TOC.replace("1.0.0", self.VERSION).replace("\n", "\r\n"),
                 rel.TOCS[rel.LAYOUTS]: LAYOUTS_TOC.replace("1.0.0", self.VERSION).replace("\n", "\r\n"),
                 rel.TOCS[rel.WIZARD]: WIZARD_TOC.replace("1.0.0", self.VERSION).replace("\n", "\r\n"),
-                rel.TOCS[rel.WORKSHOP]: WORKSHOP_TOC.replace("1.0.0", self.VERSION).replace("\n", "\r\n")}
+                rel.TOCS[rel.WORKSHOP]: WORKSHOP_TOC.replace("1.0.0", self.VERSION).replace("\n", "\r\n"),
+                rel.TOCS[rel.FISHING]: FISHING_TOC.replace("1.0.0", self.VERSION).replace("\n", "\r\n")}
         self.assertEqual(self.make(crlf), [])
 
     def test_test_lab_is_excluded_from_every_package(self):

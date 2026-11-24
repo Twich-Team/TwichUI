@@ -38,6 +38,7 @@ Page("magicInventory", "Choose where your items belong, then review the moves.")
 Page("auction", "Keep selling and collecting mail close at hand.")
 Page("junkMarking", "Choose which Vendor recommendations may be marked as junk, using rules you build.")
 Page("workshop", "Experimental crafting, shopping and market research. Enable it when you want to try it.")
+Page("fishing", "One key to fish with, and a calmer screen while you do.")
 Page("chronicle", "Keep a journal of your adventures.")
 Page("chronicleLook", "Make your journal comfortable to read.", { "Border", "Controls and accents" })
 Page("cozyBag", "Follow your progress toward the Cozy Sleeping Bag.", { "Previews" })
@@ -92,6 +93,8 @@ end
 local TASKS = {
     workshop = { { "General", "General" }, { "Auction House", "Auction House" }, { "Tooltip Designer", "Tooltip Designer" },
         { "Market Data", "Market Data" }, { "Crafting & Shopping", "Crafting & Shopping" } },
+    fishing = { { "Fishing", "Fishing" }, { "Assistance", "Fishing assistance" }, { "Fishing Mode", "Fishing Mode" },
+        { "Fading", "Interface fading" }, { "HUD", "Fishing HUD" } },
     notifications = { { "Arrivals", "Zone arrival" }, { "Training", "New training" }, { "Friends", "Friend login" }, { "Party", "Party deaths" },
         { "Comfort", "Accessibility" }, { "Try it", "Notification previews", "Appearance" } },
     notificationsLook = { { "Customize", "Notification appearance", "Text" },

@@ -12,11 +12,18 @@
 -- that happened meanwhile: a card for an event during the quiet is not shown afterwards. It prints nothing in chat.
 -- Settings previews are the player asking to see something, so they ignore it.
 --
---   Q.On()           true while the screen is quiet
---   Q.Set(on)        turns it on or off (true/false); the same state again does nothing
---   Q.Toggle()       the other state; returns the new one
---   Q.OnChange(fn)   fn(on) after it changed (once per function); a function that fails is reported and the rest still run
---   Q.Snapshot()     { on = bool, changes = n } for /tui diagnostics: counts only
+-- A feature may also hold the screen quiet for a while (TwichUI Fishing's Fishing Mode does, while the player fishes with it
+-- on). A hold is not the player's switch: it never turns that on or off, nothing is saved, and the data bar shows and toggles
+-- the player's own switch only. The screen is quiet while the player's switch is on or any hold is.
+--
+--   Q.On()           true while the screen is quiet (the player's switch, or a feature's hold)
+--   Q.Player()       true while the player's own switch is on
+--   Q.Set(on)        turns the player's switch on or off (true/false); the same state again does nothing
+--   Q.Toggle()       the player's switch the other way; returns its new state
+--   Q.Hold(owner, on) a feature (owner: a short string) holds the screen quiet, or lets go; the same state again does nothing
+--   Q.Holding(owner) true while that owner holds it
+--   Q.OnChange(fn)   fn(on) after the quiet changed (once per function); a function that fails is reported and the rest run
+--   Q.Snapshot()     { on = bool, player = bool, holds = n, changes = n } for /tui diagnostics: counts only
 
 local R = TwichUI
 local Q = {}
@@ -25,8 +32,14 @@ R.QuietScreen = Q
 local on = false
 local changes = 0
 local listeners = {}
+local holds = {}         -- [owner] = true
 
-function Q.On() return on end
+local function Held() return next(holds) ~= nil end
+local function Quiet() return on or Held() end
+
+function Q.On() return Quiet() end
+function Q.Player() return on end
+function Q.Holding(owner) return holds[owner] == true end
 
 function Q.OnChange(fn)
     if type(fn) ~= "function" then return end
@@ -34,17 +47,26 @@ function Q.OnChange(fn)
     listeners[#listeners + 1] = fn
 end
 
-function Q.Set(value)
-    value = value and true or false
-    if value == on then return end
-    on = value
+-- Listeners hear a change of the quiet; a change of the player's own switch is told too (the data bar menu shows it), with
+-- the quiet as it is.
+local function Changed(before, player)
+    local now = Quiet()
+    if now == before and not player then return end
     changes = changes + 1
     for _, fn in ipairs(listeners) do
-        local ok, err = pcall(fn, on)
+        local ok, err = pcall(fn, now)
         if not ok then
             if R.Fault then R.Fault("quiet screen", err) else geterrorhandler()(err) end
         end
     end
+end
+
+function Q.Set(value)
+    value = value and true or false
+    if value == on then return end
+    local before = Quiet()
+    on = value
+    Changed(before, true)
 end
 
 function Q.Toggle()
@@ -52,4 +74,17 @@ function Q.Toggle()
     return on
 end
 
-function Q.Snapshot() return { on = on, changes = changes } end
+function Q.Hold(owner, value)
+    if type(owner) ~= "string" or owner == "" then return end
+    value = value and true or nil
+    if holds[owner] == value then return end
+    local before = Quiet()
+    holds[owner] = value
+    Changed(before)
+end
+
+function Q.Snapshot()
+    local n = 0
+    for _ in pairs(holds) do n = n + 1 end
+    return { on = Quiet(), player = on, holds = n, changes = changes }
+end

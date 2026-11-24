@@ -682,6 +682,9 @@ local function WorthWorld()
     local tt = GameTooltip
     local oldLine, oldDouble, oldShift = tt.AddLine, tt.AddDoubleLine, IsShiftKeyDown
     local oldInfo, oldItem = C_Item.GetItemInfo, {}
+    -- Keep this fixture explicitly independent of the simulated profession default.
+    local oldDisenchant = C_SpellBook.ContainsAnyDisenchantSpell
+    C_SpellBook.ContainsAnyDisenchantSpell = function() return false end
     for _, k in ipairs({ "GetItemLocation", "DoesItemExist", "GetItemLink", "GetItemID", "IsBound", "GetStackCount", "GetDetailedItemLevelInfo" }) do oldItem[k] = C_Item[k] end
     local W = {   -- id = { sell, quality, class, bind, bound, count, link }
         [118] = { 60, 1, 7, 0 }, [2841] = { 500, 1, 7, 0 }, [9999] = { 10, 2, 4, 2 }, [2320] = { 20, 1, 7, 0 }, [2447] = { 4, 1, 7, 1, true },
@@ -719,6 +722,7 @@ local function WorthWorld()
         Hover = Hover, HoverMarket = HoverMarket,
         SetShift = function(on) shift = on end,
         Restore = function()
+            C_SpellBook.ContainsAnyDisenchantSpell = oldDisenchant
             tt.AddLine, tt.AddDoubleLine, IsShiftKeyDown, C_Item.GetItemInfo = oldLine, oldDouble, oldShift, oldInfo
             for k, v in pairs(oldItem) do C_Item[k] = v end
         end,
@@ -824,7 +828,7 @@ Lab.Step("what's it worth: tooltip designer", function()
         Apply()
     end
     local function SavedIds()
-        local ids = {}; for _, entry in ipairs(WL.Get().lines) do ids[#ids + 1] = entry.id end
+        local ids = {}; for _, entry in ipairs(WL.Get().lines) do ids[#ids + 1] = entry.id .. ":" .. entry.when end
         return table.concat(ids, ",")
     end
     local prior = SavedIds()

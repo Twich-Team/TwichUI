@@ -284,6 +284,7 @@ function EX.Summary(rec, opts)
         if mem.layouts then A("- TwichUI_Layouts (layout packages, loaded for /tui layout or to check an install after a reload): %s -> %s", KB(mem.layouts.first), KB(mem.layouts.last)) end
         if mem.layoutwizard then A("- TwichUI_LayoutWizard (the layout setup window, loaded when /tui layout opens it): %s -> %s", KB(mem.layoutwizard.first), KB(mem.layoutwizard.last)) end
         if mem.workshop then A("- TwichUI_Workshop (recipes, the craft queue and the materials still needed, loaded when /tui workshop first opens it): %s -> %s", KB(mem.workshop.first), KB(mem.workshop.last)) end
+        if mem.fishing then A("- TwichUI_Fishing (the fishing key and fishing records, loaded by /tui fish or a bound fishing key): %s -> %s", KB(mem.fishing.first), KB(mem.fishing.last)) end
         if mem.summaryparts then A("- Market summary partition addons (aggregate): %s -> %s", KB(mem.summaryparts.first), KB(mem.summaryparts.last)) end
         if mem.marketdata then A("- TwichUI_MarketData (external observations, loaded only on request): %s -> %s", KB(mem.marketdata.first), KB(mem.marketdata.last)) end
         if mem.diag then A("- TwichUI Diagnostics itself: %s -> %s (its own captures are in this figure, not TwichUI's)", KB(mem.diag.first), KB(mem.diag.last)) end

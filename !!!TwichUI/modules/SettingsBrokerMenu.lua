@@ -112,7 +112,7 @@ local SPEC = {
     { kind = "divider" },
     {
         key = "quiet", label = "Quiet the screen",
-        state = function() return R.QuietScreen ~= nil and R.QuietScreen.On() end,
+        state = function() local Q = R.QuietScreen return Q ~= nil and (Q.Player and Q.Player() or Q.On()) end,
         words = { [true] = "On", [false] = "Off" },
         enabled = function() return R.QuietScreen ~= nil end,
         why = "Unavailable",

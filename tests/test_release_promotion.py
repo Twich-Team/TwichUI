@@ -63,7 +63,7 @@ class PromotionTests(unittest.TestCase):
                          commit='abcdef0' + 'a' * 33, tag='v1.0.1-alpha.2.gabcdef0', prerelease=True, make_latest=False)
         self.notes = 'Reviewed notes\n'
         texts = [fixtures.CORE_TOC, fixtures.SETTINGS_TOC, fixtures.NAVDATA_TOC, fixtures.DIAG_TOC,
-                 fixtures.LAYOUTS_TOC, fixtures.WIZARD_TOC, fixtures.WORKSHOP_TOC]
+                 fixtures.LAYOUTS_TOC, fixtures.WIZARD_TOC, fixtures.WORKSHOP_TOC, fixtures.FISHING_TOC]
         with zipfile.ZipFile(self.zip, 'w') as archive:
             for addon, text in zip(rel.ADDONS, texts):
                 archive.writestr(rel.TOCS[addon], text.replace('1.0.0', self.meta['version']))
