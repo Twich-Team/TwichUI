@@ -314,7 +314,7 @@ function S.SetMatch(group, match)
 end
 
 local KIND = {}
-for _, k in ipairs({ "gear", "materials", "recipes", "consumables", "other" }) do KIND[k] = true end
+for _, k in ipairs({ "gear", "materials", "recipes", "consumables", "other", "fish", "meat" }) do KIND[k] = true end
 -- field: "value" (an item type, or yes/no as true/false), "min" or "max" for a quality range.
 function S.Set(node, field, value)
     if not st then return false, REFUSE.closed end

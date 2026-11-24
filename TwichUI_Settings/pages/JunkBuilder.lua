@@ -31,8 +31,8 @@ local pools = { cards = {}, groups = {}, seps = {}, rows = {}, palette = {}, hea
 local function Npc(name) return R.PATH .. [[media\npcs\]] .. name end
 local CONDITIONS = {
     { key = "kind", name = "Item type", category = "Item", art = "leather-backpack",
-        blurb = "Gear, materials, recipes, supplies or other.",
-        tip = "Choose gear, materials, recipes, supplies or other. Quest items and keys are never candidates, whatever the rule says." },
+        blurb = "Gear, materials, recipes, supplies, fish, meat or other.",
+        tip = "Choose gear, materials, recipes, supplies, fish, meat or other. Fish and meat are the raw cooking ingredients (fish is told from meat by its name). Quest items and keys are never candidates, whatever the rule says." },
     { key = "armor", name = "Armor type", category = "Item", art = "tabard",
         blurb = "Cloth, leather, mail, plate, shields.",
         tip = "The armor class of the item: cloth, leather, mail, plate or shields. Anything that is not armor is none of these." },
