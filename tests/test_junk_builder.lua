@@ -13,6 +13,14 @@ c.CreateFrame=function(kind,_,parent)
     frame.UnregisterAllEvents=function(self) self.events={} end
     if kind=='Frame' then frame.IsEnabled=function() error('a plain Frame has no IsEnabled in the game') end end
     frame.Click=function(self) if self:IsEnabled() and self:GetScript("OnClick") then self:GetScript("OnClick")(self) end end
+    if kind=='Button' then
+        -- the game refuses edit-box scripts on a Button (the rule icon button once broke the window this way)
+        local hook=frame.HookScript
+        frame.HookScript=function(self,script,...)
+            if tostring(script):lower():find('editfocus') then error("Button:HookScript(): Cannot assign script handler for '"..script.."'") end
+            return hook(self,script,...)
+        end
+    end
     return frame
 end
 local R=c.TwichUI
