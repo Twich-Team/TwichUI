@@ -377,6 +377,13 @@ rawset(WMF, "SetMapID", function(s, id)
   Providers("OnMapChanged")
 end)
 c.WorldMapFrame = WMF
+-- Model WORLD_MAP_OPEN and reject direct addon calls to the native setter.
+-- This checks the API boundary, not the client engine's taint behavior.
+local nativeSetMapID = WMF.SetMapID
+rawset(WMF, "SetMapID", function()
+  error("addon must request WORLD_MAP_OPEN instead of tainting the native map ID")
+end)
+c.C_Map.OpenWorldMap = function(id) nativeSetMapID(WMF, id) end
 c.GetCursorPosition = function() return SC.cursor.x, SC.cursor.y end
 local function openMap(id)
   WMF.mapID = id or WMF.mapID
@@ -1156,6 +1163,27 @@ do
     assert(not text:find(word, 1, true), "no names in the report: " .. word)
   end
   print("15 report ok")
+end
+
+-- Engine requests can be refused without throwing. Preserve the view and report failure;
+-- an absent API must also fail without falling back to the tainting frame setter.
+do
+  tidy(); closeMap(); openMap(1415); MXP.Set("smooth", false)
+  local original = c.C_Map.OpenWorldMap
+  c.C_Map.OpenWorldMap = function() end
+  assert(not MV.ShowMap(2521), "silent engine refusal is not a successful map change")
+  local u, v = MW.ToWorld(1455, .5, .5)
+  MV.GlideTo(u, v, 48); Tick()
+  local before = MV.Snapshot().switches
+  settle()
+  local x, y, z = MV.View()
+  assert(MV.MapID() == 1415 and MV.Snapshot().switches == before, "refused host is not published")
+  assert(near(x, u) and near(y, v) and near(z, 48), "refusal preserves world camera")
+  c.C_Map.OpenWorldMap = nil
+  assert(not MV.ShowMap(2521), "missing engine API never falls back to SetMapID")
+  c.C_Map.OpenWorldMap = original
+  MV.Follow(); settle()
+  assert(MV.MapID() == 1455, "later successful request restores normal host following")
 end
 
 local cases = assert(loadfile(TESTS .. "map_seamless_cases.lua"))()

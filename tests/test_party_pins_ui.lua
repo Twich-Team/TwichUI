@@ -166,6 +166,13 @@ rawset(WMF, "RemoveCanvasClickHandler", function(s, fn) s.clicks[fn] = nil end)
 rawset(WMF, "AddCursorHandler", function(s, fn, pr) s.cursors[fn] = pr end)
 rawset(WMF, "RemoveCursorHandler", function(s, fn) s.cursors[fn] = nil end)
 c.WorldMapFrame = WMF
+-- Model WORLD_MAP_OPEN and reject direct addon calls to the native setter.
+-- This checks the API boundary, not the client engine's taint behavior.
+local nativeSetMapID = WMF.SetMapID
+rawset(WMF, "SetMapID", function()
+  error("addon must request WORLD_MAP_OPEN instead of tainting the native map ID")
+end)
+c.C_Map.OpenWorldMap = function(id) nativeSetMapID(WMF, id) end
 local function click(button, x, y)
   local handled = false
   for fn in pairs(WMF.clicks) do if fn(WMF, button, x, y) then handled = true end end
@@ -393,17 +400,17 @@ assert(pal)
 ---------------------------------------------------------------------------
 WMF.mapID = 1429; refreshMap()
 assert(PM.Snapshot().drawn == 2, "Elwynn: the ore and the rendezvous")
-WMF:SetMapID(1415)
+nativeSetMapID(WMF, 1415)
 assert(PM.Snapshot().drawn == 3, "Eastern Kingdoms: Elwynn's two and Westfall's one, through world positions")
-WMF:SetMapID(1453)
+nativeSetMapID(WMF, 1453)
 assert(PM.Snapshot().drawn == 0, "never on a child map")
-WMF:SetMapID(1436)
+nativeSetMapID(WMF, 1436)
 assert(PM.Snapshot().drawn == 1, "Westfall: only its own")
 assert(PN.Dismiss(pal.key))
 assert(PM.Snapshot().drawn == 0, "removed from my map: not drawn")
 assert(PN.Restore(pal.key))
 assert(PM.Snapshot().drawn == 1)
-WMF:SetMapID(1429)
+nativeSetMapID(WMF, 1429)
 
 ---------------------------------------------------------------------------
 -- 5. The window: actions by owner, checked again when they run

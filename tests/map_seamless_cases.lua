@@ -19,9 +19,9 @@ return function(t)
     local city = MA.City(1455)
     local before = R.MapPictures.Snapshot(city.pictures)
     assert(before.active > 0, "interior visible before host handoff")
-    local original, observed = t.WMF.SetMapID, 0
-    t.WMF.SetMapID = function(self, id)
-      original(self, id)
+    local original, observed = t.c.C_Map.OpenWorldMap, 0
+    t.c.C_Map.OpenWorldMap = function(id)
+      original(id)
       observed = observed + 1
       local x, y, z = MV.View()
       near(x, u, "native callback sees stable world x")
@@ -29,7 +29,7 @@ return function(t)
       near(z, 48, "native callback sees stable zoom")
       assert(R.MapPictures.Snapshot(city.pictures).active == before.active, "no transient interior clear")
     end
-    t.settle(); t.WMF.SetMapID = original
+    t.settle(); t.c.C_Map.OpenWorldMap = original
     local after = R.MapPictures.Snapshot(city.pictures)
     assert(observed == 1 and MV.MapID() == 1455 and after.binds == before.binds, "host handoff reuses interior bindings")
   end
@@ -145,7 +145,7 @@ return function(t)
   -- Opening at zero size then receiving a different native map must not frame the stale pending map.
   t.closeMap(); VIEW.w, VIEW.h = 0, 0; t.openMap(1429)
   assert(not MV.Ready(), "zero-size open waits for layout")
-  VIEW.w, VIEW.h = 1000, 666; t.WMF:SetMapID(1436); t.Tick()
+  VIEW.w, VIEW.h = 1000, 666; t.c.C_Map.OpenWorldMap(1436); t.Tick()
   local wl, wr, wt, wb = MW.Rect(1436)
   local pu, pv, pz = MV.View()
   near(pu, (wl + wr) / 2, "new native map owns pending layout x")
