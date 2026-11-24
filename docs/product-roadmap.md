@@ -234,6 +234,39 @@ Each note is preserved in wording below. The proposed status and effort are plan
 | F28 | Clicked/Macro Kit | 6 | Research concept | M/L | Clarify feature boundaries and protected macro creation/action restrictions |
 | F29 | Magic inventory: Waylaid crates | 3 | Cross-reference F12 | S/M | Picker defect in F12; any future junk behavior requires separate scope |
 
+## F30 — Magic Inventory: Bank and Guild Bank Quick Actions
+
+**Owner idea (November 24, 2026):** Add a second page/tab to the existing bank
+and guild bank Magic Inventory frame, with illustrated shortcuts for common
+bulk transfers, such as withdrawing auction-recommended items, cloth, meat or
+fish. **Proposed priority:** 4; **effort:** L, staged; **status:** discovery
+ready, implementation gated. See [staged autonomous task specifications](autonomous-ready-tasks.md#f30--magic-inventory-quick-actions).
+
+- Keep the existing Inventory/rule review intact. Add a Quick Actions tab with
+  premium TwichUI artwork, readable labels, matching counts and disabled/empty
+  states; group actions by Workshop recommendations and item categories.
+- Initial withdrawal categories: cloth, meat, fish, herbs, ore/bars, leather,
+  gems and enchanting materials, using verified item metadata rather than name
+  heuristics. Consider all materials, consumables and equipment after core
+  categories are proven. Preview matching stacks, quantities and destination.
+- Workshop actions: Auction, Vendor and Disenchant recommendations must reuse
+  the authoritative Advisor decision including local and Market inputs,
+  readiness and freshness policy; unknown/pending recommendations are not
+  actionable. Never auction, vendor or disenchant as part of a transfer.
+- Proposed extensions (not initial requirements): Deposit direction, guild
+  scope (current/selected/accessible tabs), Crafting Plan and Restock actions,
+  and named/reorderable custom shortcuts using the existing rule builder and
+  artwork picker. Preserve existing keep quantities and item protections.
+- Every transfer requires explicit player review/authorization and obeys actual
+  Forever API restrictions, bag capacity, permissions, withdrawal limits,
+  locked items, combat and session changes. Reuse the existing transfer engine;
+  do not bypass protected actions or claim unsupported automation. Report
+  confirmed moves, skips and partial results; Stop prevents further requests.
+- Design a small mockup before implementation; validate native API assumptions
+  separately from simulator behavior. Split work by dependency, avoid concurrent
+  edits to shared inventory/Advisor paths, and keep mailbox behavior unchanged.
+
+
 ## Status cross-checks and references
 
 - [PR #95](https://github.com/Twich-Team/TwichUI/pull/95): shared agent efficiency/testing policy **merged**; runner improvements remain distinct possible work.
