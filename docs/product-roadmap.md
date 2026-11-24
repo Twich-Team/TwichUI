@@ -2,6 +2,37 @@
 
 **Planning snapshot:** November 21, 2026. **Status:** Living planning register, not a commitment to implement everything. 57 original notes preserved below (5 polish, 23 Workshop, 29 feature ideas), plus audit-derived recommendations. Statuses are based on a source/PR review and can change as branches merge; they are not a full in-game verification.
 
+## Owner-authorized Batch 12 — November 23, 2026
+
+**In review:** [Batch 12 draft PR #146](https://github.com/Twich-Team/TwichUI/pull/146). No merge/release authorization. [Combined verification](workshop/batch12-verification.md). Original notes below
+are retained; these outcomes supersede earlier candidate labels for this batch.
+
+| ID | Status for review | Outcome and remaining limit |
+|---|---|---|
+| W27 | Implemented, including W27 follow-up | [Item-quality audit](workshop/batch12-quality.md): actual material/item names use verified game quality across Crafting materials, Shopping, Compact Travel, Advisor, Strategy, Ledger and AH lists; recipe/actions/categories and quantity/price/status colors remain separate. Follow-up covers Opportunities through separate presentation hunks; #117 history/pricing changes still apply cleanly. |
+| W10 | Implemented quote fallback; purchases Blocked | [Live merchant quote](workshop/batch12-vendor-assistance.md), current ShoppingPlan + live listings, bundle/partial stock/money disclosures, no spending. Native limited-stock and transaction sequencing evidence remains missing. Explicit confirmation policy is resolved by Batch 12; no auto-buy authorized. |
+| F13 | Investigated; runtime Deferred | [Implementation-ready specification](design/batch12-leave-me-alone.md); Fishing #143 remains open and changes QuietScreen ownership/state. No competing runtime edits. |
+| F18 | Investigated; markers Blocked | [Position evidence finding and owner test](design/batch12-party-death-markers.md): party APIs exist but death-time freshness/corpse semantics are unverified. No misleading pins or Party Wipe work. |
+| W13 | Implemented diagnostic improvements; automatic credit Blocked | [Five-scenario probe workflow](workshop/batch12-craft-evidence.md); registration, redacted argument shapes, bounded timelines and explicit truncation. Manual Done/Undo unchanged, `Progress.auto=false`. |
+
+### W27 — Workshop item-quality coloring
+
+Purpose: actual item names consistently communicate the game's established
+quality on dark Workshop surfaces. Audit Overview, Opportunities, Advisor,
+Craft Queue/materials, Shopping, Compact, Gold Ledger and AH Browse/Owned/Sell/
+Shopping/Market; distinguish recipe names, action words and category labels.
+Acceptance: poor/common/uncommon/rare/epic and other supported qualities come
+from verified metadata; missing/pending quality stays readable neutral; delayed
+metadata refreshes; pooled rows and selection changes reset; quantities, prices,
+sources and status labels keep their semantic colors in normal/narrow layouts.
+No changes to pricing, rarity, recommendations, ordering, ownership or tooltips.
+Follow-up presentation edits cover Opportunities; the actual #117 history/chart hunks remain unchanged and apply cleanly.
+
+F09 Loot Received Cards is **Verified Existing (owner-confirmed)**; no new receipt
+implementation is selected. F22 remains a **separate major initiative**, Dispel
+Indicator Studio [PR #139](https://github.com/Twich-Team/TwichUI/pull/139), outside
+Batch 12. #143, #117, #98, #91 and #139 remain untouched.
+
 ## Product North Star
 
 **Premium, cohesive, responsive, dependable WoW: Forever experience.** TwichUI should feel like a crafted game interface, not a pile of utilities. For developers and AI agents, favor clear subsystem ownership, safe data contracts, small reversible changes, proportional offline tests and concise reviewable PRs. Keep real-game verification **owner-directed** and **nonblocking** for release decisions.
@@ -154,10 +185,10 @@ Each note is preserved in wording below. The proposed status and effort are plan
 | W07 | Needs tracking and charts to determine if I’m actually making any progress | 4 | Refine existing Gold Ledger | M | Existing charts measure gold flow; define progress metrics without confusing cash flow and realized profit |
 | W08 | PFB: Near vendor price, adjustable offset via gold or percentage. | 4 | Candidate | S/M | Post From Bags vendor threshold with absolute or percent setting; preserve explicit posting and warning |
 | W09 | Crafting queue needs to calculate cost of self crafting sub materials and offer a way for me to choose one or another, as well as track those materials if that is what I choose | 4 | Verify/refine existing planner | M | Multilevel craft/buy planner and source choice already exist; test full end-to-end UX and material tracking |
-| W10 | Crafting queue should offer to purchase the required items from a vendor when opened | 4 | **Vendor-visit refinement / needs purchase policy** | M | Expanded Nov 22: contextual offer to purchase remaining planned vendor materials with itemized quantities and total price; keep explicit spending safeguards. See new Workshop crafting experience section. |
+| W10 | Crafting queue should offer to purchase the required items from a vendor when opened | 4 | **Implemented quote / purchases Blocked — Batch 12** | M | Expanded Nov 22: contextual offer to purchase remaining planned vendor materials with itemized quantities and total price; keep explicit spending safeguards. See new Workshop crafting experience section. |
 | W11 | Crafting queue should allow me to shut click at AH to link | 4 | **Autonomous-Ready after A01/A02** | S/M | Shift-click queued craft output searches TwichUI AH; must verify view availability and reuse existing Browse adapter |
 | W12 | Crafting queue probably should have a custom search function | — | **Withdrawn: clarified into W20** | — | No queue search requested. Owner meant typing a quantity directly; don't implement W12. |
-| W13 | Queue should remove X number of items as they are crafted | 2–4 | **High-priority correctness / event evidence blocked** | M | User observes queue remaining unchanged after crafting, causing incorrect reagent needs; Progress.Credit supports manual decrement, but automatic event credit remains off pending proof. See new Workshop crafting experience section. |
+| W13 | Queue should remove X number of items as they are crafted | 2–4 | **Probe improved / automatic credit Blocked — Batch 12** | M | User observes queue remaining unchanged after crafting, causing incorrect reagent needs; Progress.Credit supports manual decrement, but automatic event credit remains off pending proof. See new Workshop crafting experience section. |
 | W14 | Auto track gathering | 5 | Candidate | M | Clarify what is tracked, when the quest/objective updates and opt-in policy |
 | W15 | Recipe Finder | 6 | Discovery | M/L | Define search by product, material, profession, alt and unknown recipe data |
 | W16 | Item advisor shows items equipped | 4 | **Autonomous-Ready: fix existing In bags filter** | S/M | Existing In bags filter includes equipped-only gear; exclude worn gear while retaining any actual bag copies. No new Equipped filter. |
@@ -181,20 +212,20 @@ Each note is preserved in wording below. The proposed status and effort are plan
 | F06 | Dungeon tools | 6 | Broad concept | L | Decompose into discrete user journeys rather than generic large module |
 | F07 | Quest log cleanup | 5 | Candidate | M | Specify reversible display/organization scope before touching quest records |
 | F08 | Quest item cleanup | 5 | Candidate with safeguards | M | Avoid deleting or vendoring anything automatically without explicit review |
-| F09 | Loot received cards | 5 | Candidate | M | Distinct from existing Loot Rolls cards; support receipts not just roll choice |
+| F09 | Loot received cards | 5 | **Verified Existing — owner-confirmed** | M | Original distinction: receipts, not just roll choice. Owner confirms Loot Received Cards already exists; do not reimplement. |
 | F10 | Arrival time of board and zeps | 6 | Feasibility first | M/L | Verify accessible timetable/observation data; no invented ETA |
 | F11 | Automatically sort bank and bags after running a magic inventory rule | 5 | Candidate with safety gate | M | Respect automation protections, inventory state and click authorization |
 | F12 | Do not see waylay crates in the magic inventory. There should also be a way to mark them as junk | 3 | **Autonomous-Ready: picker only** | S/M | Make carried crates selectable in item/rule picker; junk support requires separate decision; retain item safety guards |
-| F13 | Leave me alone mode should also silence whispers and group invite sounds, suppress whisper messages | 5 | Candidate with privacy UX | M | Expand existing QuietScreen only as explicit opt-in; avoid irrecoverable communication hiding |
+| F13 | Leave me alone mode should also silence whispers and group invite sounds, suppress whisper messages | 5 | **Investigated / runtime Deferred — Batch 12** | M | Expand existing QuietScreen only as explicit opt-in; avoid irrecoverable communication hiding |
 | F14 | Cooldown timeline bar | 6 | Large concept / discovery | L | Avoid rebuilding EllesmereUI; assess spell/accessibility and layout model |
 | F15 | Navigation automatic flight | — | Verified existing + safety corrections — Batch 10 | S | Existing opt-in journey flight retained; fixed account-consent profile copying and stale delayed attempts. [Verification](navigation.md#batch-10-automatic-flight-verification) |
 | F16 | Healer Watch contextual communication | 5 | Implemented for review — Batch 10 | S/M | Motion-only hover preserves click-through; explicit guarded clicks select self-status messages, never inferred statements about another healer. [Evidence and checks](healer-watch-communication-discovery.md) |
 | F17 | Data broker for Attune | — | Implemented — verify/close | S | PR #73 merged and art PR #74 merged |
-| F18 | Show a marker where party member died while they are dead. | 5 | Candidate | M | Existing PartyDeath notification does not establish location marker; privacy/data and lifetime constraints |
+| F18 | Show a marker where party member died while they are dead. | 5 | **Investigated / position evidence Blocked — Batch 12** | M | Existing PartyDeath notification does not establish location marker; privacy/data and lifetime constraints |
 | F19 | Remove last name from chat | 5 | Research/refinement | S/M | Clarify whether realm suffix vs actual displayed surname; avoid mangling names |
 | F20 | Reminder Behaviors | 6 | Clarify / extend existing reminders | M | Define behavior examples and distinguish from outputs such as action glow |
 | F21 | Talent builder | 6 | Large concept / feasibility | L | Avoid unrestricted talent/spell automation; specify planner UX and game API |
-| F22 | Enhanced dispel indicators | 5 | Candidate / API feasibility | M | Healer usability, overlap with other addon visuals, combat-safe signals |
+| F22 | Enhanced dispel indicators | 5 | **Separate major initiative — PR #139** | M | Healer usability, overlap with other addon visuals, combat-safe signals |
 | F23 | Prayer of Mending tracker | 5 | Candidate / API feasibility | S/M | Spell-specific observation; confirm Forever mechanics and secure UI limits |
 | F24 | TUI Does it Die? | 6 | Concept — clarify | ? | Keep idea name; define intended inputs/outputs before estimate |
 | F25 | Naowh: Smart Reminders | 6 | Research concept | M/L | Capture inspirational behaviors; implement distinct value, not clone |

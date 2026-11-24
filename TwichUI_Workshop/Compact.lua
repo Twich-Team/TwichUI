@@ -23,7 +23,7 @@ local WIDTH, ROW_H, ROWS = 300, 30, 7
 local HEAD_H, SUM_H = 34, 40
 local HEIGHT = HEAD_H + SUM_H + ROWS * ROW_H + 22
 local SETTLE = 0.3
-local EVENTS = { "BAG_UPDATE_DELAYED", "GET_ITEM_INFO_RECEIVED" }   -- (the bank and guild bank arrive through Storage.OnChange: Window.lua)
+local EVENTS = { "BAG_UPDATE_DELAYED", "GET_ITEM_INFO_RECEIVED", "ITEM_DATA_LOAD_RESULT" }   -- (the bank and guild bank arrive through Storage.OnChange: Window.lua)
 
 local K
 local f
@@ -142,7 +142,7 @@ local function RenderTravel()
     local data, n = {}, { vendor = 0, auction = 0, make = 0, collect = 0, none = 0 }
     for _, r in ipairs(rows) do
         n[r.kind] = (n[r.kind] or 0) + 1
-        data[#data + 1] = { item = r.item, title = r.qty .. " \195\151 " .. Name(r.item), word = r.word, tone = r.kind, vendor = r.vendor, recipe = r.recipe,
+        data[#data + 1] = { item = r.item, title = r.qty .. " \195\151 " .. UI.QualityText(Name(r.item), select(3, O.ItemFacts(r.item))), word = r.word, tone = r.kind, vendor = r.vendor, recipe = r.recipe,
             lines = { { r.full } } }
     end
     local sum = ctx.summary
@@ -174,7 +174,7 @@ local function RenderCraft()
     for _, r in ipairs(rows) do
         local e = r.entry
         local word = r.state == "short" and ("Missing " .. r.missing) or WORD[r.state]
-        data[#data + 1] = { item = e.outItem, icon = e.icon, title = e.crafts .. " \195\151 " .. e.name, word = word, done = e.id,
+        data[#data + 1] = { item = e.outItem, icon = e.icon, title = e.crafts .. " \195\151 " .. UI.QualityText(e.name, UI.OutputQuality(e)), word = word, done = e.id,
             tone = r.state == "collect" and "collect2" or r.state, lines = { { ("%d %s left"):format(e.crafts, e.crafts == 1 and "craft" or "crafts") } } }
     end
     local text

@@ -183,9 +183,10 @@ local function MakeShopRow(parent)
     row:Follow(row.iconBtn)
     row.fill = function(self, r)
         self.data, self.item = r, r.item
-        local name, icon = O.ItemFacts(r.item)
+        local name, icon, quality = O.ItemFacts(r.item)
         self.icon:SetTexture(icon or UI.ICON_BLANK)
         self.name:SetText(name or ("Item " .. r.item))
+        UI.ItemQuality(self.name, quality)
         self.detail:SetText(ShortLine(r))
         self.need:SetText(tostring(r.qty))
         local kind = KindOf(r)
@@ -293,17 +294,7 @@ local function MakeConsumerRow(parent)
         local name, icon, quality
         if record.item then name, icon, quality = O.ItemFacts(record.item)
         else icon = record.icon end
-        -- Pooled rows must lose the previous item's quality when metadata is absent.
-        UI.Paint(self.name, K.text)
-        if quality then
-            local r, g, b
-            if C_Item and C_Item.GetItemQualityColor then r, g, b = C_Item.GetItemQualityColor(quality) end
-            if W.Finite(r) and W.Finite(g) and W.Finite(b) then self.name:SetTextColor(r, g, b)
-            else
-                local color = ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
-                if color then self.name:SetTextColor(color.r, color.g, color.b) end
-            end
-        end
+        UI.ItemQuality(self.name, quality)
         self.iconFrame.tex:SetTexture(icon or UI.ICON_BLANK)
         self.iconBtn:SetShown(icon ~= nil)
         self.name:ClearAllPoints()
@@ -332,10 +323,11 @@ local function RenderDetail(plan, ctx)
     end
     d.data = r
     local kind = KindOf(r)
-    local name, icon = O.ItemFacts(r.item)
+    local name, icon, quality = O.ItemFacts(r.item)
     d.item = r.item
     d.icon:SetTexture(icon or UI.ICON_BLANK)
     d.name:SetText(name or ("Item " .. r.item))
+    UI.ItemQuality(d.name, quality)
     UI.Art(d.kindArt, kind.art, 22)
     d.kindWord:SetText(FullWord(r))
     UI.Paint(d.kindWord, K[kind.tone])

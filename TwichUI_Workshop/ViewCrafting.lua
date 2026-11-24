@@ -100,6 +100,7 @@ local function MakeRecipeRow(parent)
         O.Fill(rec)
         self.icon:SetTexture(rec.icon or UI.ICON_BLANK)
         self.name:SetText(rec.name)
+        UI.ItemQuality(self.name, UI.OutputQuality(rec))
         local d = W.DIFFICULTY[rec.diff]
         if d then
             self.diff:SetText(d.word)
@@ -309,6 +310,7 @@ local function MakeQueueRow(parent)
         self.id, self.entry, self.qrow = e.id, e, r
         self.icon:SetTexture(e.icon or UI.ICON_BLANK)
         self.name:SetText(e.name)
+        UI.ItemQuality(self.name, UI.OutputQuality(e))
         self.line:SetText(QueueLine(r))
         self.count:SetText(Num(e.crafts))
         self.stale:SetShown(r.unresolved)
@@ -377,9 +379,10 @@ local function MakeMaterialRow(parent)
     row.TipLeave = function() if GameTooltip then GameTooltip:Hide() end end
     row.fill = function(self, m)
         self.item, self.made, self.madeRange, self.row = m.item, m.made, m.madeRange, m
-        local name, icon = O.ItemFacts(m.item)
+        local name, icon, quality = O.ItemFacts(m.item)
         self.icon:SetTexture(icon or UI.ICON_BLANK)
         self.name:SetText(name or ("Item " .. m.item))
+        UI.ItemQuality(self.name, quality)
         self.name:ClearAllPoints()
         if m.note then
             self.name:SetPoint("TOPLEFT", self.iconFrame, "TOPRIGHT", 9, 1)
@@ -473,6 +476,7 @@ local function RenderDetail(queue, byId, totals)
     d.head:Show()
     d.item=e.outItem
     d.name:SetText(e.name)
+    UI.ItemQuality(d.name, UI.OutputQuality(e))
     d.icon:SetTexture(e.icon or UI.ICON_BLANK)
     d.prof:SetText(e.profName or "")
     d.crafts:SetText(e.crafts == 1 and "1 craft" or (e.crafts .. " crafts"))

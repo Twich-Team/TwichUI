@@ -247,3 +247,33 @@ Baseline `1a3d9eb`, after UX01 #132 merged. This batch selects no further work.
 Native client acceptance is separate from offline coverage. F27, W13, W25,
 Market/Opportunities/Ledger, Reminders glows and unrelated systems remain out
 of scope. No unassigned roadmap item is made Ready or automatically selected.
+
+
+## Owner-authorized Batch 12 outcomes
+
+**In review:** [Consolidated draft PR #146](https://github.com/Twich-Team/TwichUI/pull/146).
+
+Owner selected exactly W27/W10/F13/F18/W13 for one consolidated draft PR, with
+up to two isolated workers. No next batch, merge, deployment or release selected.
+See [the Batch 12 roadmap status](product-roadmap.md#owner-authorized-batch-12--november-23-2026).
+
+- **W27 — Implemented for review**, including the missing-color follow-up for
+  queue/output labels and Opportunities. #117 history/chart hunks are unchanged
+  and its patch still applies cleanly. Small shared presentation helper, verified quality and
+  neutral unknowns, delayed refresh and pooled reset; [audit](workshop/batch12-quality.md).
+- **W10 — Implemented read-only quote fallback; purchasing Blocked.** Explicit
+  spending confirmation is now the chosen policy; no remembered auto-buy. Live
+  listings and existing ShoppingPlan only. Source does not settle limited-stock
+  units/Workshop transaction completion; [finding](workshop/batch12-vendor-assistance.md).
+- **F13 — Investigated, runtime Deferred.** Fishing #143 remains OPEN and modifies
+  QuietScreen; [ready specification](design/batch12-leave-me-alone.md). No Fishing
+  code copied/merged, no communication suppression implemented yet.
+- **F18 — Investigated, markers Blocked.** Party APIs exist, death-time freshness
+  remains unverified; [owner-directed test](design/batch12-party-death-markers.md).
+- **W13 — Diagnostic improvements implemented**, registration/argument/truncation
+  evidence and five-scenario guidance. Automatic credit remains blocked on actual
+  Forever evidence; [workflow](workshop/batch12-craft-evidence.md). No Done/Undo change.
+
+Native checks remain unchecked. F09 Loot Received Cards is owner-confirmed
+existing; F22 is separate Dispel Indicator Studio #139. Active Fishing,
+Opportunities, Ledger and Reminders glow branches are not batch integration bases.

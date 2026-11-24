@@ -48,9 +48,8 @@ local function Purposes(d,v)
         end
         local info=W.AdvisorData.Info(data.item)
         b.item,b.link=data.item,info.link
-        b.pic.tex:SetTexture(info.icon or UI.ICON_BLANK);b.name:SetText(info.link or (info.known and info.name or data.name))
-        local c=ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[info.quality or 1]
-        if c then b.name:SetTextColor(c.r,c.g,c.b) else UI.Paint(b.name,UI.K.text) end
+        b.pic.tex:SetTexture(info.icon or UI.ICON_BLANK);b.name:SetText(info.known and info.name or data.name)
+        UI.ItemQuality(b.name, info.quality)
         if not info.known and not d.purposeRequested[data.item] then d.purposeRequested[data.item]=true;W.AdvisorData.Request(data.item,true) end
         b:Show()
     end
@@ -81,6 +80,7 @@ local function Detail(p)
         local incomplete=P.Incomplete(p.plan,p.ctx)
         d.track.text:SetText("Track")
         d.pic.tex:SetTexture(UI.ICON_BLANK);d.name:SetText(incomplete and "Requirements unavailable" or "No missing materials")
+        UI.ItemQuality(d.name, nil)
         d.kind:SetText(incomplete and "Some recipe or bag data is missing." or "The shared Workshop queue is unchanged.")
         d.quantities:SetText(incomplete and "Unknown quantities are not counted as owned." or "Choose a material to inspect its quantities.")
         d.sourceText:SetText("");d.cost:SetText("Unknown");d.costNote:SetText("")
@@ -89,6 +89,7 @@ local function Detail(p)
     end
     local r=selected.row
     d.name:SetText(selected.info.name);d.pic.tex:SetTexture(selected.info.icon or UI.ICON_BLANK)
+    UI.ItemQuality(d.name, selected.info.quality)
     d.kind:SetText(selected.info.category or "Metadata unavailable")
     d.quantities:SetText("Required: "..Num(r.need).."    In bags: "..Num(r.have).."\n"..
         (r.kind=="collect" and "To collect: " or "Still to get: ")..Num(r.qty)..
@@ -140,8 +141,7 @@ local function Row(parent)
         UI.Paint(self.source,v.source=="auction" and UI.K.bronzeText or UI.K.text)
         self.cost:SetText((P.Cost(v.row,UI.Money)) or "Unknown")
         self.buy:SetEnabled(A.Live() and page.current and v.row.kind=="buy" and W.Int(v.missing,1,W.MAX_ID)~=nil)
-        local c=ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[v.info.quality or 1]
-        if c then self.name:SetTextColor(c.r,c.g,c.b) else UI.Paint(self.name,UI.K.text) end
+        UI.ItemQuality(self.name, v.info.quality)
         if not v.info.known and not page.itemRequested[v.row.item] then page.itemRequested[v.row.item]=true;W.AdvisorData.Request(v.row.item,true) end
         self.sub:SetText(v.row.picked and "Your source choice" or v.row.kind=="collect" and
             (v.row.where=="guild" and "Guild bank stock" or "Personal bank stock") or
