@@ -466,10 +466,10 @@ local function Render()
         SetStat(cards.opps, UI.Num(s.profitable), Plural(s.profitable, "profitable craft", "profitable crafts"),
             ("of %s priced"):format(UI.Num(s.priced)))
         if best and best.est.state == "ok" and best.est.profitLow > 0 then
-            of[1] = { "Top profit: " .. UI.Shorten(best.rec.name, 30), "done", "text" }
+            of[1] = { "Top profit: " .. UI.QualityText(UI.Shorten(best.rec.name, 30), UI.OutputQuality(best.rec)), "done", "text" }
             of[2] = { ("%s each, %s"):format(UI.Money(best.est.profitLow), best.est.cutRate and "after the cut" or "before fees"), nil, "sage" }
         elseif lowBest then
-            of[1] = { "Top profit, low confidence: " .. UI.Shorten(lowBest.rec.name, 22), "current", "bronzeText" }
+            of[1] = { "Top profit, low confidence: " .. UI.QualityText(UI.Shorten(lowBest.rec.name, 22), UI.OutputQuality(lowBest.rec)), "current", "bronzeText" }
             of[2] = { ("%s each; check its listings first"):format(UI.Money(lowBest.est.profitLow)), nil, "bronzeText" }
         else
             of[1] = { "Nothing profitable at these prices", nil, "textDim" }

@@ -25,6 +25,7 @@ local function Obj()
     if k == "SetTexture" then return function(s, v) s.texture = v end end
     if k == "SetSize" then return function(s, w) s.size = w end end
     if k == "SetScale" then return function(s, v) s.scale = v end end
+    if k == "SetPoint" then return function(s, ...) s.lastPoint = { ... } end end
     if k == "SetEnabled" then return function(s, v) s.enabled = v and true or false end end
     if k == "IsEnabled" then return function(s) return s.enabled ~= false end end
     if k == "HasFocus" or k == "IsMouseOver" or k == "IsTruncated" then return function() return false end end
@@ -96,7 +97,8 @@ WMF.mapID, WMF.providers, WMF.forwarded = 1429, {}, 0
 rawset(WMF, "GetMapID", function(s) return s.mapID end)
 rawset(WMF, "SetMapID", function(s, id) s.mapID = id; for p in pairs(s.providers) do p:OnMapChanged() end end)
 rawset(WMF, "GetCanvas", function() return canvas end)
-rawset(WMF, "GetCanvasScale", function() return 1 end)
+local nativeScale = 1
+rawset(WMF, "GetCanvasScale", function() return nativeScale end)
 rawset(WMF, "GetGlobalPinScale", function() return 1 end)
 rawset(WMF, "GetPinFrameLevelsManager", function() return { GetValidFrameLevel = function() return 40 end } end)
 rawset(WMF, "AddDataProvider", function(s, p) s.providers[p] = true; p:OnAdded(s) end)
@@ -110,6 +112,33 @@ rawset(sc, "GetCursorPosition", function() return 0, 0 end)
 WMF.ScrollContainer = sc
 WMF.shown = true
 c.WorldMapFrame = WMF
+-- Model WORLD_MAP_OPEN and reject direct addon calls to the native setter.
+-- This checks the API boundary, not the client engine's taint behavior.
+local nativeSetMapID = WMF.SetMapID
+rawset(WMF, "SetMapID", function()
+  error("addon must request WORLD_MAP_OPEN instead of tainting the native map ID")
+end)
+c.C_Map.OpenWorldMap = function(id) nativeSetMapID(WMF, id) end
+
+-- Actual native host and seamless camera can differ until View's deliberate settle delay ends.
+-- Map.lua must react to its existing view notification without switching the host itself.
+local seamless = { ready = false, target = 1415, rect = { 900, 1900, 1500, 2500 }, listeners = {} }
+local MV = {
+  Ready = function() return seamless.ready end,
+  Subscribe = function(fn) seamless.listeners[#seamless.listeners + 1] = fn end,
+  View = function() return 1200, 2200, 24 end,
+  PickMap = function() return seamless.target end,
+  ViewRect = function() return unpack(seamless.rect) end,
+  WireButton = function() end, WasDrag = function() return false end,
+}
+c.TwichUI.MapView = MV
+c.TwichUI.MapWorld = {
+  Stitchable = function(id) return MAPS[id] ~= nil and MAPS[id].size ~= nil end,
+  ToWorld = function(id, x, y) local m = MAPS[id]; return m.ox + x * m.size, m.oy + y * m.size end,
+  FromWorld = function(id, u, v) local m = MAPS[id]; return (u - m.ox) / m.size, (v - m.oy) / m.size end,
+}
+local function ViewChanged(event) for _, fn in ipairs(seamless.listeners) do fn(event or "view") end end
+local function FadeStep(elapsed) for frame, fn in pairs(UPDATERS) do fn(frame, elapsed) end end
 
 for _, f in ipairs({ "chronicle/Style.lua", "FrameLook.lua", "modules/Interact.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua",
   "modules/Media.lua", "pins/Pins.lua", "pins/Sync.lua", "pins/Look.lua", "pins/Sound.lua", "pins/Map.lua", "pins/Minimap.lua",
@@ -126,7 +155,8 @@ local menus = {}
 R.PinsWindow.OpenMenu = function(anchor, title, choices) menus[#menus + 1] = { title = title, choices = choices } end
 
 local function Npc(id, map, x, y, tags, extra)
-  local e = assert(NS.Observe({ id = id, name = "Npc " .. id, map = map, x = x, y = y, tags = tags, cls = extra and extra.cls }))
+  local e = assert(NS.Observe({ id = id, name = "Npc " .. id, map = map, x = x, y = y, tags = tags,
+    cls = extra and extra.cls, faction = extra and extra.faction }))
   return e
 end
 local function drawn()
@@ -173,12 +203,12 @@ for p in pairs(WMF.providers) do p:OnCanvasScaleChanged() end
 d = drawn()
 assert(math.abs(d[1].scale - 1) < 1e-6)
 -- a continent shows none; Stormwind itself shows its own
-WMF:SetMapID(1415)
+nativeSetMapID(WMF, 1415)
 assert(NMAP.Used() == 0, "never on a continent")
-WMF:SetMapID(1453)
+nativeSetMapID(WMF, 1453)
 d = drawn()
 assert(d[2] and not d[1], "on Stormwind: its own NPCs, not Elwynn's")
-WMF:SetMapID(1429)
+nativeSetMapID(WMF, 1429)
 
 -- choices redraw an open map
 NP.Set("trainerClass", "all")
@@ -284,17 +314,127 @@ popups[#popups].dialog.OnAccept()
 assert(#NS.Entries() == before - 1 and not drawn()[1] and drawn()[2], "only that NPC goes")
 
 ---------------------------------------------------------------------------
--- 4. At most 300 at once
+-- 4. Seamless eligibility follows the camera now; entry opacity never moves a plaque.
+---------------------------------------------------------------------------
+nativeSetMapID(WMF, 1415)
+seamless.ready = true
+ViewChanged()
+assert(NMAP.Used() == 0, "a genuine continent overview stays uncluttered")
+seamless.target = 1429
+local function ProviderCount() local n = 0 for _ in pairs(WMF.providers) do n = n + 1 end return n end
+local beforeLayouts, beforeProviders = NMAP.Snapshot().layouts, ProviderCount()
+ViewChanged()
+local entering = drawn()[4]
+assert(entering and WMF:GetMapID() == 1415 and NMAP.Snapshot().layouts == beforeLayouts + 1,
+  "markers become eligible before the native host's delayed change")
+assert(ProviderCount() == beforeProviders, "camera updates do not reconstruct providers")
+assert(entering.alpha == 0 and entering.lastPoint and NMAP.Snapshot().fading > 0,
+  "a plaque is correctly anchored before its first visible opacity")
+local px, py, scale = entering.lastPoint[4], entering.lastPoint[5], entering.scale
+FadeStep(0.09)
+assert(math.abs(entering.alpha - 0.5) < 1e-8, "entry uses a short smooth alpha transition")
+local entriesBefore, projectionsBefore = NMAP.Snapshot().entries, NMAP.Snapshot().projections
+ViewChanged(); NMAP.Layout()
+entering = drawn()[4]
+assert(math.abs(entering.alpha - 0.5) < 1e-8 and NMAP.Snapshot().entries == entriesBefore,
+  "repeated view/layout notifications do not restart the fade")
+assert(NMAP.Snapshot().projections == projectionsBefore, "camera-only updates reuse filtered world-coordinate projections")
+assert(entering.lastPoint[4] == px and entering.lastPoint[5] == py and entering.scale == scale,
+  "entry animation changes neither coordinates nor icon size")
+FadeStep(0.09)
+assert(entering.alpha == 1 and NMAP.Snapshot().fading == 0, "entry reaches full strength and releases the updater")
+local layoutsBefore = NMAP.Snapshot().layouts
+FadeStep(1)
+assert(NMAP.Snapshot().layouts == layoutsBefore, "no idle marker layout polling")
+-- A source-list ordering change can move an entry to another pooled frame, not restart its identity's opacity.
+Npc(9, 1429, 0.55, 0.5, { innkeeper = true })
+assert(drawn()[4].alpha == 1 and drawn()[9].alpha == 0, "only the newly eligible entry fades")
+assert(NMAP.Snapshot().projections > projectionsBefore, "a source-list change invalidates cached candidates")
+FadeStep(0.18)
+nativeSetMapID(WMF, 1429)
+assert(drawn()[4].alpha == 1 and NMAP.Snapshot().fading == 0, "host handoff preserves existing marker opacity")
+assert(math.abs(drawn()[4].mx - 0.2) < 1e-8, "host handoff projects the same world place into its new canvas")
+rawset(WMF, "GetCanvasZoomPercent", function() return 1 end)
+for p in pairs(WMF.providers) do p:OnCanvasScaleChanged() end
+assert(drawn()[4].scale == 1, "a host's changed native zoom percentage cannot resize seamless markers")
+nativeScale = 2
+for p in pairs(WMF.providers) do p:OnCanvasScaleChanged() end
+assert(drawn()[4].scale * nativeScale == 1, "stitched markers keep the same screen-space size at another canvas scale")
+nativeScale = 1
+rawset(WMF, "GetCanvasZoomPercent", function() return 0 end)
+ViewChanged()
+local oldFactionAPI = c.UnitFactionGroup
+c.UnitFactionGroup = function() return "Alliance" end
+Npc(10, 1429, 0.5, 0.5, { reagents = true }, { faction = "H" })
+assert(not drawn()[10], "opposing-side NPCs are filtered in the candidate cache")
+local factionProjection = NMAP.Snapshot().projections
+c.UnitFactionGroup = function() return "Horde" end
+ViewChanged()
+assert(drawn()[10] and NMAP.Snapshot().projections == factionProjection + 1,
+  "a changed faction invalidates candidates even without a list, preference or host change")
+c.UnitFactionGroup = oldFactionAPI
+ViewChanged()
+-- Viewport eligibility is projected through the host even outside its old zone rectangle.
+seamless.target = 1436; seamless.rect = { 500, 2100, 1050, 2700 }
+ViewChanged()
+assert(drawn()[3] and drawn()[3].mx < 0 and WMF:GetMapID() == 1429,
+  "a visible neighbor is eligible before the native host follows across a border")
+-- Failed scale/placement cannot show a stale pooled anchor. A later valid notification recovers.
+nativeScale = 0
+NMAP.Layout()
+assert(NMAP.Used() == 0 and NMAP.Snapshot().placementFailures > 0, "unplaceable markers stay hidden")
+nativeScale = 1
+ViewChanged()
+assert(drawn()[3] and drawn()[3].alpha == 0, "valid placement recovers with an anchored entry")
+local goodGlobal, goodWidth, goodZoom = WMF.GetGlobalPinScale, canvas.GetWidth, WMF.GetCanvasZoomPercent
+local secret = setmetatable({}, { __lt = function() error("secret compared") end,
+  __le = function() error("secret compared") end, __eq = function() error("secret compared") end })
+c.issecretvalue = function(value) return rawequal(value, secret) end
+local function Refuses(label, change, restore)
+  local failures = NMAP.Snapshot().placementFailures
+  change(); NMAP.Layout()
+  assert(NMAP.Used() == 0 and NMAP.Snapshot().placementFailures > failures, label .. " stays hidden")
+  restore(); NMAP.Layout()
+  assert(drawn()[3], label .. " recovers once geometry is readable")
+end
+for _, value in ipairs({ 0 / 0, math.huge, secret }) do
+  Refuses("invalid scale", function() nativeScale = value end, function() nativeScale = 1 end)
+  Refuses("invalid global scale", function() rawset(WMF, "GetGlobalPinScale", function() return value end) end,
+    function() rawset(WMF, "GetGlobalPinScale", goodGlobal) end)
+  Refuses("invalid viewport width", function() rawset(canvas, "GetWidth", function() return value end) end,
+    function() rawset(canvas, "GetWidth", goodWidth) end)
+end
+c.issecretvalue = nil
+WMF.shown = false
+for p in pairs(WMF.providers) do if p.OnHide then p:OnHide() end end
+assert(NMAP.Snapshot().fading == 0 and NMAP.Used() == 0, "map close releases temporary opacity state")
+WMF.shown = true; ViewChanged()
+assert(drawn()[3] and drawn()[3].alpha == 0, "reopening can start a clean entry cycle")
+seamless.target = 1415; ViewChanged()
+assert(NMAP.Used() == 0 and NMAP.Snapshot().fading == 0, "zooming back to overview cancels entry work")
+seamless.ready = false; nativeSetMapID(WMF, 1429)
+ViewChanged("off")
+assert(drawn()[4] and drawn()[4].alpha == 1, "turning seamless off immediately preserves normal native-map NPCs")
+rawset(WMF, "GetCanvasZoomPercent", function() return 0 / 0 end)
+NMAP.Layout()
+assert(NMAP.Used() == 0, "invalid native zoom cannot reach a frame anchor")
+rawset(WMF, "GetCanvasZoomPercent", goodZoom)
+NMAP.Layout()
+assert(drawn()[4], "native mode recovers after a readable zoom returns")
+
+---------------------------------------------------------------------------
+-- 5. At most 300 at once
 ---------------------------------------------------------------------------
 for i = 1, 320 do NS.Observe({ id = 2000 + i, name = "Many", map = 1429, x = (i % 20) / 20, y = math.floor(i / 20) / 20, tags = { trade = true } }) end
 assert(NMAP.Used() == 300 and NMAP.Snapshot().capped > 0)
 
 ---------------------------------------------------------------------------
--- 5. Off again: off the map; the list is kept
+-- 6. Off again: off the map; the list is kept
 ---------------------------------------------------------------------------
 local kept = #NS.Entries()
 c.TwichUIDB.modules.npcMap = false
 NMAP.Refresh()
-assert(not NMAP.Snapshot().installed and NMAP.Used() == 0 and #NS.Entries() == kept)
+assert(not NMAP.Snapshot().installed and NMAP.Used() == 0 and #NS.Entries() == kept
+  and NMAP.Snapshot().candidates == 0 and NMAP.Snapshot().fading == 0, "off releases projection and animation state")
 
 print("PASSED")

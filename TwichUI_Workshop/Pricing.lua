@@ -12,6 +12,7 @@ local chartCache,chartPending
 local pending,pendingCount={},0
 local revision,epoch=0,0
 local notification,notificationDelay
+local notificationFull=false
 local notificationToken=0
 local function observed(id)
     if R.Perf and R.Perf.on then R.Perf.Count('workshop.pricing.'..id) end
@@ -87,8 +88,9 @@ function P.ObserveView(all,list)
     local state=W.Session and W.Session.OpportunityStatus and W.Session.OpportunityStatus()
     if waiting==0 and not(state and state.refreshing)and not d.allDone then d.allDone=true;R.Perf.Observe('workshop.opportunitiesSettled',elapsed)end
 end
-function P.Notify(delay)
+function P.Notify(delay,partial)
     delay=delay or 0.1
+    notificationFull=notificationFull or not partial
     if notification and (delay>0 or notificationDelay==0) then return end
     notificationToken=notificationToken+1
     local mine=notificationToken
@@ -96,7 +98,8 @@ function P.Notify(delay)
     C_Timer.After(delay,function()
         if mine~=notificationToken then return end
         notification=false
-        if W.Active() then observed('notifications');P.Changed() end
+        local full=notificationFull;notificationFull=false
+        if W.Active() then observed('notifications');P.Changed(not full) end
     end)
 end
 function P.CancelPending()
@@ -104,6 +107,7 @@ function P.CancelPending()
     pending,pendingCount={},0
     epoch=epoch+1
     notificationToken=notificationToken+1;notification=false
+    notificationFull=false
     chartPending=nil
 end
 local function dataStamp(status)
@@ -123,7 +127,7 @@ end
 local function eligible(now,status)
     if not (W.Active() and B) then return nil,'unavailable' end
     status=status or B.Status()
-    if not (status.ready and status.summary) then return nil,'unavailable' end
+    if not (status.ready and status.summary) then return nil,status.loading and 'loading' or 'unavailable' end
     local generation=status.generation
     if headerGeneration~=generation then
         header,headerGeneration,headerAt=B.Manifest(),generation,nil
@@ -144,10 +148,11 @@ function P.Generation()
     local s=B.Status()
     return table.concat({s.generation or '',s.failures or 0,tostring(s.ready),epoch,revision},':')
 end
--- Partial completions retain the calculation context; Session invalidates only
--- their item dependencies. Public Generation still includes PR1's revision.
+-- Partial completions leave epoch unchanged and invalidate only dependencies.
+-- Cancellation replaces the context even if the source generation is unchanged;
+-- otherwise an idle engine can retain waiting rows after their requests vanished.
 function P.ContextGeneration()
-    local s=B.Status();return dataStamp(s)..':'..tostring(s.ready)
+    local s=B.Status();return dataStamp(s)..':'..tostring(s.ready)..':'..epoch
 end
 local chartRevision=0
 function P.ChartRevision()return chartRevision end
@@ -155,7 +160,7 @@ function P.BaseKey(item)
     item=W.Int(item,1,W.MAX_ID)
     if item then observed('baseKeys');return J.SHA('{"id":'..string.format('%.0f',item)..'}') end
 end
-local function record(item,opt,completion,defer)
+local function record(item,opt,completion,defer,answer)
     local asked=R.Perf and R.Perf.on and elapsedClock()
     if opt and opt.variant then return nil,'variant' end
     local status=B and B.Status()
@@ -168,14 +173,20 @@ local function record(item,opt,completion,defer)
     if entry then return entry.record or nil,entry.why,h,at end
     local bucket=item%64
     local reserved=pending[bucket] and pending[bucket][item]
-    if reserved and not completion then observed('deduplicated');return nil,'loading',h,at end
+    if reserved and not completion then
+        if not defer and B.PreparedActive and B.PreparedActive()then
+            local waits=pending[bucket];waits.shared=waits.shared or {};waits.shared[item]=true;B.Shared(item,reserved)
+        end
+        observed('deduplicated');return nil,'loading',h,at
+    end
     if not reserved and count+pendingCount>=P.MAX_CACHE then return nil,'lookup_limit',h,at end
     local waits=pending[bucket]
     local timing=reserved and waits.timings and waits.timings[item] or not reserved and started(asked)
     local mine=epoch
     local key=reserved or P.BaseKey(item)
     local r,reason
-    if defer or waits and waits.preparing then reason='loading'
+    if answer then r=answer
+    elseif defer or waits and waits.preparing then reason='loading'
     else observed('readerCalls');r,reason=B.Record(item,key,CURRENT_ONLY)end
     -- Do not keep daily arrays or mutable decoder rows in the price cache.
     if r then r={current=J.Copy(r.current),variant_key=r.variant_key} end
@@ -185,6 +196,7 @@ local function record(item,opt,completion,defer)
         if not waits[item] and pendingCount<P.MAX_CACHE then
             waits[item]=key;waits.ids[#waits.ids+1]=item;pendingCount=pendingCount+1;observed('uniquePending')
             waits.members=waits.members or {};waits.members[item]=true
+            if not defer and B.PreparedActive and B.PreparedActive()then waits.shared=waits.shared or {};waits.shared[item]=true end
             if timing then waits.timings=waits.timings or {};waits.timings[item]=timing end
         end
     elseif reason~='combat' then
@@ -195,9 +207,62 @@ local function record(item,opt,completion,defer)
     end
     return r,reason,h,at
 end
+function P.PendingKey(item)return pending[item%64]and pending[item%64][item]end
+function P.PreparePlan(dependencies,visible,work,owner)
+    if B.PreparePlan then B.PreparePlan(dependencies,visible,work,owner)end
+end
+function P.Prioritize(items)if B.Prioritize then B.Prioritize(items)end end
+local function preparedBucket(ids,work,owner)
+    local mine=epoch
+    for _,item in ipairs(ids)do
+        record(item,nil,false,true)
+        local waits=pending[item%64];local key=waits and waits[item]
+        if key then
+            waits.owners=waits.owners or {};local owners=waits.owners[item]or {};waits.owners[item]=owners
+            if owner then
+                local n=0;for _ in pairs(owners)do n=n+1 end
+                if n<8 then owners[owner]=true else waits.shared=waits.shared or {};waits.shared[item]=true end
+            else waits.shared=waits.shared or {};waits.shared[item]=true end
+            observed('readerCalls')
+            local ready,why=B.Record(item,key,{current=true,owner=owner})
+            if mine~=epoch then return end
+            if why~='loading'then P.ItemReady(item,key,why,ready)end
+        end
+        if work then work()end
+        if mine~=epoch then return end
+    end
+end
+local function forget(wait,item)
+    if wait.members then wait.members[item]=nil end
+    if wait.owners then wait.owners[item]=nil end
+    if wait.shared then wait.shared[item]=nil end
+    if wait.timings then wait.timings[item]=nil end
+end
+-- A prepared tuple releases only its own reservation and dependency notification.
+function P.ItemReady(item,key,failure,answer)
+    local bucket=item%64;local waits=pending[bucket]
+    if not waits or waits[item]~=key then return end
+    if failure then
+        waits[item]=nil;pendingCount=pendingCount-1
+        if failure~='combat'then cache[item]={record=false,why=failure};count=count+1 end
+    else
+        record(item,nil,true,false,answer)
+        -- Source eligibility can expire while a proof is suspended. As in the
+        -- legacy handoff, no terminal service response may strand a reservation.
+        if pending[bucket]==waits and waits[item]then waits[item]=nil;pendingCount=pendingCount-1 end
+    end
+    forget(waits,item)
+    local live=false;for _,id in ipairs(waits.ids)do if waits[id]then live=true;break end end
+    if not live then pending[bucket]=nil end
+    revision=revision+1;observed('settled')
+    if W.Session and W.Session.ItemsChanged then W.Session.ItemsChanged({[item]=true})end
+    if W.Junk and W.Junk.ItemsChanged then W.Junk.ItemsChanged({[item]=true})end
+    P.Notify(nil,true)
+end
 -- Reserve one bucket's complete demand before allowing its decoder handoff.
 -- A cancelled Opportunities job releases the lease; shared price work continues.
 function P.PrepareBucket(ids,work,owner)
+    if B.PreparedActive and B.PreparedActive()then return preparedBucket(ids,work,owner)end
     local first=ids[1];if not first then return end
     -- Establish the generation stamp before attaching a preparation lease.
     record(first,nil,false,true)
@@ -233,6 +298,22 @@ function P.PrepareBucket(ids,work,owner)
     end
 end
 function P.ReleasePreparation(owner)
+    if B.PreparedActive and B.PreparedActive()then
+        B.ReleasePreparation(owner)
+        for bucket,waits in pairs(pending)do
+            local live=false
+            for _,item in ipairs(waits.ids)do
+                local owners=waits.owners and waits.owners[item]
+                if owners then owners[owner]=nil end
+                if waits[item]and not(waits.shared and waits.shared[item])and not(owners and next(owners))then
+                    waits[item]=nil;pendingCount=pendingCount-1;forget(waits,item)
+                end
+                if waits[item]then live=true end
+            end
+            if not live then pending[bucket]=nil end
+        end
+        return
+    end
     local released=false
     for bucket,waits in pairs(pending)do
         if waits.preparing==owner then
@@ -403,7 +484,8 @@ local function finishBucket(bucket,work,failure)
     if changed then
         revision=revision+1
         if W.Session and W.Session.ItemsChanged then W.Session.ItemsChanged(items)end
-        P.Notify()
+        if W.Junk and W.Junk.ItemsChanged then W.Junk.ItemsChanged(items)end
+        P.Notify(nil,true)
     end
     if chartPending==bucket then chartPending=nil;chartRevision=chartRevision+1;P.Notify(0) end
 end
@@ -412,13 +494,13 @@ function P.Decoded(bucket,work) return finishBucket(bucket,work) end
 function P.Rejected(bucket,why,work) return finishBucket(bucket,work,why) end
 function P.PendingCount() return pendingCount end
 function P.CacheSize() return count end
-function P.Changed()
+function P.Changed(partial)
     if W.Facts then W.Facts.CacheClear() end
-    if W.Strategy then W.Strategy.Bump() end
+    if W.Strategy then W.Strategy.Bump(partial) end
     if W.UI and W.UI.Redraw then W.UI.Redraw() end
     if W.AuctionUI and W.AuctionUI.Schedule then W.AuctionUI.Schedule() end
     if W.WorthTip and W.WorthTip.Refresh then W.WorthTip.Refresh() end
-    if W.Junk then W.Junk.Request() end
+    if W.Junk and not partial then W.Junk.Request() end
 end
 if R.Perf and R.Perf.Gauge then
     R.Perf.Gauge('workshop.pricingPending',{label='Pending Market price identities',kind='cache',group='workshop',unit='count',read=P.PendingCount})

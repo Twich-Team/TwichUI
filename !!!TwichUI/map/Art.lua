@@ -22,9 +22,11 @@ R.MapArt = MA
 
 local TEX = R.PATH .. [[media\textures\]]
 local THIN, WIDE, ROUND = TEX .. "map-feather-thin", TEX .. "map-feather-wide", TEX .. "map-feather-round"
+local RIGHT_SOFT = TEX .. "map-feather-right-soft" -- owned mathematical shape; no game artwork
+local REGIONAL_BASE_BUDGET = 6       -- reviewed native mountain crops, plus two owned-mask regions
 local CONT_FADE = { 1.4, 2.4 }     -- zoom (1: the whole world fits) where continents come in over the world
 local ZONE_FADE = { 2.6, 4.5 }     -- ... and the zones' pieces over the continents
-local CITY_FADE = { 0.35, 0.7 }    -- share of a city's own whole-map zoom where it comes in
+local CITY_FADE = { 0.2, 0.4 }     -- city plan takes over before enlarged zone banners cover its streets
 local LOADED = 16                  -- zones that keep their files while out of view
 local MARGIN = 0.15                -- of the view, beyond each edge, where zones are made ready
 local DIM = 0.55                   -- an unexplored piece's brightness with "dimmed"
@@ -34,11 +36,42 @@ MA.LEVEL = LEVEL
 local root, frames
 local W, H
 local host                         -- { id, k }: the map the root is laid out for
+local viewU0, viewV0, viewU1, viewV1 -- last production view; source-ROI culling only
 local zones, cities = {}, {}       -- [id] = { id, l, r, t, b, area, built, loaded, tex, used }
 local zoneList, cityList = {}, {}
 local built = false
 local clock = 0
-local stats = { zonesBuilt = 0, textures = 0, loads = 0, unloads = 0, layouts = 0 }
+local stats = { zonesBuilt = 0, textures = 0, loads = 0, unloads = 0, layouts = 0, cityLoads = 0, cityUnloads = 0, regionalBaseMade = 0 }
+local nativeHidden = {}
+
+-- Only the painting we replace: never hide player/quest/third-party pins or the quest log.
+-- Native exploration pins otherwise sit thousands of levels above our close detail.
+function MA.SyncNative(replace)
+    if InCombatLockdown and InCombatLockdown() then return end
+    local map = WorldMapFrame
+    if not map then return end
+    local live = {}
+    if map.detailLayerPool then
+        for frame in map.detailLayerPool:EnumerateActive() do live[frame] = true end
+    end
+    if map.EnumeratePinsByTemplate then
+        for pin in map:EnumeratePinsByTemplate("MapExplorationPinTemplate") do live[pin] = true end
+    end
+    if not replace then
+        for frame, wasShown in pairs(nativeHidden) do
+            if live[frame] then frame:SetShown(wasShown) end
+            nativeHidden[frame] = nil
+        end
+        return
+    end
+    for frame in pairs(nativeHidden) do
+        if not live[frame] then nativeHidden[frame] = nil end
+    end
+    for frame in pairs(live) do
+        if nativeHidden[frame] == nil then nativeHidden[frame] = frame:IsShown() and true or false end
+        frame:Hide()
+    end
+end
 
 local function Pow2(n)
     local p = 16
@@ -146,7 +179,7 @@ local function Pieces(id)
             out[#out + 1] = { w = p.w, h = p.h, x = p.x, y = p.y, files = p.files, explored = false, key = key }
         end
     end
-    return out
+    return out, okArt and art or nil
 end
 
 local function Mode()
@@ -154,9 +187,117 @@ local function Mode()
     return MXP and MXP.Get("unexplored") or "dim"
 end
 
+-- Reviewed native mountain bands below the Elwynn/Burning Steppes overlays.
+-- Their alpha gaps expose a magnified parent-letter fragment. These are the
+-- installed bases at their original coordinates, BELOW every explored piece;
+-- no pixels are edited, stretched into a gap, or taken from another location.
+local REGIONAL_BASE = {
+    [1428] = { art = 2149, roi = { 390, 450, 665, 645 },
+        files = { 8060555, 8060556, 8060548, 8060549 },
+        carrier = { 8060647, 377, 285, 320, 288, 8060648 } },
+    [1429] = { art = 2153, roi = { 800, 150, 990, 430 },
+        files = { 8061964, 8061968 },
+        carrier = { 8061978, 587, 190, 320, 256, 8061979 } },
+}
+
+local function BuildRegionalBase(z, p, pieces, artID)
+    local spec = REGIONAL_BASE[z.id]
+    if not spec then return end
+    local ok, version, build = pcall(GetBuildInfo)
+    if not ok or version ~= "1.60.1" or tostring(build) ~= "71037" then z.baseReason = "unreviewed-client"; return end
+    if artID ~= spec.art or p.art.w ~= 1002 or p.art.h ~= 668 or p.art.tw ~= 256 or p.art.th ~= 256 then
+        z.baseReason = "unreviewed-art"; return
+    end
+    local carrier
+    local c = spec.carrier
+    for _, piece in ipairs(pieces) do
+        if piece.files and piece.files[1] == c[1] and piece.files[2] == c[6]
+            and piece.x == c[2] and piece.y == c[3] and piece.w == c[4] and piece.h == c[5] then carrier = piece; break end
+    end
+    local filesOK, files = pcall(C_Map.GetMapArtLayerTextures, z.id, 1)
+    if not carrier or not filesOK or type(files) ~= "table" or #files ~= 12 then z.baseReason = "source-unavailable"; return end
+    local x0, y0, x1, y1 = unpack(spec.roi)
+    local boxes = {}
+    for row = math.floor(y0 / 256), math.floor((y1 - 1) / 256) do
+        for col = math.floor(x0 / 256), math.floor((x1 - 1) / 256) do
+            local file = files[row * 4 + col + 1]
+            if file ~= spec.files[#boxes + 1] then z.baseReason = "source-unavailable"; return end
+            boxes[#boxes + 1] = { math.max(x0, col * 256), math.max(y0, row * 256),
+                math.min(x1, (col + 1) * 256), math.min(y1, (row + 1) * 256), col * 256, row * 256, file }
+        end
+    end
+    if stats.regionalBaseMade + #boxes > REGIONAL_BASE_BUDGET then z.baseReason = "texture-budget"; return end
+    local mask = frames.zone:CreateMaskTexture()
+    if mask:SetTexture(WIDE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE") == false then
+        z.baseReason = "owned-mask-unavailable"; return
+    end
+    Put(mask, p.left + x0 * p.sx, p.top + y0 * p.sy, (x1 - x0) * p.sx, (y1 - y0) * p.sy)
+    z.nativeBase = { tex = {}, carrier = carrier, roi = spec.roi, loaded = false,
+        l = (p.left + x0 * p.sx) / W, r = (p.left + x1 * p.sx) / W,
+        t = (p.top + y0 * p.sy) / H, b = (p.top + y1 * p.sy) / H }
+    for _, box in ipairs(boxes) do
+        local tex = frames.zone:CreateTexture(nil, "ARTWORK", nil, -1)
+        tex.twFile = box[7]
+        tex:SetTexCoord((box[1] - box[5]) / 256, (box[3] - box[5]) / 256,
+            (box[2] - box[6]) / 256, (box[4] - box[6]) / 256)
+        Put(tex, p.left + box[1] * p.sx, p.top + box[2] * p.sy, (box[3] - box[1]) * p.sx, (box[4] - box[2]) * p.sy)
+        tex:AddMaskTexture(mask)
+        tex:Hide()
+        z.nativeBase.tex[#z.nativeBase.tex + 1] = tex
+        stats.regionalBaseMade = stats.regionalBaseMade + 1
+        stats.textures = stats.textures + 1
+    end
+    z.baseReason = "reviewed-native-mountains"
+end
+
+local function UpdateRegionalBase(z)
+    local base = z.nativeBase
+    if not base then return end
+    local mode = Mode()
+    -- These bands cross explored-piece boundaries. Hide mode never reveals
+    -- extra context; dim follows the adjacent reviewed piece's discovery.
+    local on = z.shown and z.loaded and root:IsShown() and mode ~= "hide" and not base.failed
+        and viewU0 ~= nil and base.r >= viewU0 and base.l <= viewU1 and base.b >= viewV0 and base.t <= viewV1
+    if base.loaded ~= on then
+        base.loaded = on
+        for _, tex in ipairs(base.tex) do
+            if tex:SetTexture(on and tex.twFile or nil) == false and on then
+                base.failed, z.baseReason = true, "texture-rejected"
+                if R.MapTrace then R.MapTrace("texture-failure", tex.twFile, "regional-base-rejected") end
+            end
+        end
+        if base.failed and on then
+            base.loaded, on = false, false
+            for _, tex in ipairs(base.tex) do tex:SetTexture(nil) end
+        end
+        for _, tex in ipairs(base.tex) do tex:SetShown(on) end
+    end
+    local k = mode == "dim" and not base.carrier.explored and DIM or 1
+    if base.tint ~= k then
+        base.tint = k
+        for _, tex in ipairs(base.tex) do tex:SetVertexColor(k, k, k) end
+    end
+end
+
 -- How a zone's textures look for the unexplored-areas choice and what has been explored.
 local function Dress(z)
     local mode = Mode()
+    -- Only soften a reviewed edge with regional painting beneath it. Hidden
+    -- unexplored neighbors can remove that backing, so retain the native thin
+    -- feather in hide mode. Reuse the same mask object and texture geometry.
+    local file = z.edgePreferred or THIN
+    local reason = z.edgeSourceReason or "native-edge"
+    if mode == "hide" and file ~= THIN then file, reason = THIN, "unexplored-hidden" end
+    if z.edgeUnavailable then file, reason = THIN, "owned-mask-unavailable" end
+    if z.edgeFile ~= file then
+        if z.edgeMask:SetTexture(file, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE") == false and file ~= THIN then
+            z.edgeUnavailable = true
+            file, reason = THIN, "owned-mask-unavailable"
+            z.edgeMask:SetTexture(THIN, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+        end
+        z.edgeFile = file
+    end
+    z.edgeFeather, z.edgeFeatherReason = file == RIGHT_SOFT and "right-soft" or "thin", reason
     for _, e in ipairs(z.tex) do
         local unexplored = not e.piece.explored
         local show = not (unexplored and mode == "hide")
@@ -164,19 +305,37 @@ local function Dress(z)
         e.tex:SetVertexColor(k, k, k)
         e.tex:SetShown(show and z.shown)
     end
+    UpdateRegionalBase(z)
+end
+
+local function ZoneFeather(z, p, pieces, artID)
+    if z.id ~= 1433 then return THIN, "native-edge" end
+    local ok, version, build = pcall(GetBuildInfo)
+    if not ok or version ~= "1.60.1" or tostring(build) ~= "71037" then return THIN, "unreviewed-client" end
+    if artID ~= 2121 or p.art.w ~= 1002 or p.art.h ~= 668 or p.art.tw ~= 256 or p.art.th ~= 256 then
+        return THIN, "unreviewed-art"
+    end
+    for _, piece in ipairs(pieces) do
+        if piece.files and piece.files[1] == 7939758 then return RIGHT_SOFT, "reviewed-source" end
+    end
+    return THIN, "unreviewed-carrier"
 end
 
 local function BuildZone(z)
     local p = Place(z.id)
     if not p then return end
     local mask = Mask(frames.zone, p, THIN)
+    local pieces, artID = Pieces(z.id)
+    z.edgeMask, z.edgeFile = mask, THIN
+    z.edgePreferred, z.edgeSourceReason = ZoneFeather(z, p, pieces, artID)
     z.tex = {}
-    for _, piece in ipairs(Pieces(z.id)) do
+    for _, piece in ipairs(pieces) do
         local sub = piece.explored and 1 or 0
         for _, tex in ipairs(Tiles(frames.zone, p, piece.files, piece.x, piece.y, piece.w, piece.h, sub, true, mask, true)) do
             z.tex[#z.tex + 1] = { tex = tex, piece = piece }
         end
     end
+    BuildRegionalBase(z, p, pieces, artID)
     z.built = true
     stats.zonesBuilt = stats.zonesBuilt + 1
 end
@@ -185,7 +344,103 @@ local function Load(z, on)
     if z.loaded == on then return end
     z.loaded = on
     for _, e in ipairs(z.tex) do e.tex:SetTexture(on and e.tex.twFile or nil) end
+    UpdateRegionalBase(z)
     if on then stats.loads = stats.loads + 1 else stats.unloads = stats.unloads + 1 end
+end
+
+-- City plans used to bind every city's files at the first map opening, even
+-- with all their frames hidden. Keep geometry/owned masks, bind only a visible
+-- plan, and release files when it leaves the view or the map closes.
+local function LoadCity(c, on)
+    if c.loaded == on then return end
+    c.loaded = on
+    for _, tex in ipairs(c.tex) do tex:SetTexture(on and tex.twFile or nil) end
+    if on then stats.cityLoads = stats.cityLoads + 1 else stats.cityUnloads = stats.cityUnloads + 1 end
+end
+
+-- Reviewed on Forever 1.60.1.71037: Tirisfal's explored overlay carries an
+-- Undercity scroll outside the city's plan. Its native base has intact terrain
+-- beneath it. Reveal only that base ROI, through our existing owned wide mask,
+-- as the city takes over. No edited game pixels, invented geography or mask UVs.
+-- The exact build/art/carrier checks fail back to the original artwork.
+local function CityCover(c)
+    if c.id ~= 1458 or c.coverAttempted then return end
+    c.coverAttempted = true
+    local ok, version, build = pcall(GetBuildInfo)
+    if not ok or version ~= "1.60.1" or tostring(build) ~= "71037" then c.coverReason = "unreviewed-client"; return end
+    local z, p = zones[1420], Place(1420)
+    local artOK, artID = pcall(C_Map.GetMapArtID, 1420)
+    if not (z and z.built and p and artOK and artID == 2126 and p.art.w == 1002 and p.art.h == 668
+        and p.art.tw == 256 and p.art.th == 256) then c.coverReason = "unreviewed-art"; return end
+    local piece
+    for _, e in ipairs(z.tex) do
+        if e.tex.twFile == 7958244 then piece = e.piece; break end
+    end
+    local filesOK, files = pcall(C_Map.GetMapArtLayerTextures, 1420, 1)
+    if not (piece and piece.x == 463 and piece.y == 361 and piece.w == 320 and piece.h == 256
+        and piece.files[2] == 7958245 and filesOK and type(files) == "table" and #files == 12) then
+        c.coverReason = "source-unavailable"; return
+    end
+    local x0, y0, x1, y1 = 480, 470, 758, 558
+    local expected = { 7958258, 7958259, 7958251, 7958252 }
+    local regions = {}
+    for row = 1, 2 do
+        for col = 1, 2 do
+            local x, y = math.max(x0, col * 256), math.max(y0, row * 256)
+            local right, bottom = math.min(x1, (col + 1) * 256), math.min(y1, (row + 1) * 256)
+            local file = files[row * 4 + col + 1]
+            if file ~= expected[#regions + 1] then c.coverReason = "source-unavailable"; return end
+            regions[#regions + 1] = { x, y, right, bottom, col * 256, row * 256, file }
+        end
+    end
+    local mask = frames.zone:CreateMaskTexture()
+    mask:SetTexture(WIDE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+    Put(mask, p.left + x0 * p.sx, p.top + y0 * p.sy, (x1 - x0) * p.sx, (y1 - y0) * p.sy)
+    c.cover = { tex = {}, piece = piece, loaded = false, alpha = 0 }
+    for _, box in ipairs(regions) do
+        local tex = frames.zone:CreateTexture(nil, "ARTWORK", nil, 2)
+        tex.twFile = box[7]
+        tex:SetTexCoord((box[1] - box[5]) / 256, (box[3] - box[5]) / 256,
+            (box[2] - box[6]) / 256, (box[4] - box[6]) / 256)
+        Put(tex, p.left + box[1] * p.sx, p.top + box[2] * p.sy, (box[3] - box[1]) * p.sx, (box[4] - box[2]) * p.sy)
+        tex:AddMaskTexture(mask)
+        tex:Hide()
+        c.cover.tex[#c.cover.tex + 1] = tex
+        stats.textures = stats.textures + 1
+    end
+    c.coverReason = "native-base-roi"
+end
+
+local function UpdateCityCover(c, alpha)
+    if alpha > 0 then CityCover(c) end
+    local cover = c.cover
+    if not cover then return end
+    local mode = Mode()
+    if cover.failed or (not cover.piece.explored and mode == "hide") then alpha = 0 end
+    local on = alpha > 0.01
+    if cover.loaded ~= on then
+        cover.loaded = on
+        for _, tex in ipairs(cover.tex) do
+            if tex:SetTexture(on and tex.twFile or nil) == false and on then
+                cover.failed = true
+                c.coverReason = "texture-rejected"
+                if R.MapTrace then R.MapTrace("texture-failure", tex.twFile, "city-cover-rejected") end
+            end
+        end
+        if cover.failed and on then
+            cover.loaded, alpha, on = false, 0, false
+            for _, tex in ipairs(cover.tex) do tex:SetTexture(nil) end
+        end
+    end
+    local k = not cover.piece.explored and mode == "dim" and DIM or 1
+    alpha = on and alpha or 0
+    if cover.alpha == alpha and cover.tint == k then return end
+    cover.alpha, cover.tint = alpha, k
+    for _, tex in ipairs(cover.tex) do
+        tex:SetAlpha(cover.alpha)
+        tex:SetVertexColor(k, k, k)
+        tex:SetShown(on)
+    end
 end
 
 ---------------------------------------------------------------------------
@@ -221,7 +476,7 @@ function MA.Build()
             local okArt, art = pcall(C_Map.GetMapArtID, m.id)
             local okExp, explored = pcall(C_MapExplorationInfo.GetExploredMapTextures, m.id)
             local hasPieces = (okArt and #Reveal(art) > 0) or (okExp and type(explored) == "table" and #explored > 0)
-            if hasPieces then
+            if hasPieces and not MW.IsCity(m.id) then
                 zones[m.id] = z
                 zoneList[#zoneList + 1] = z
             else
@@ -229,7 +484,16 @@ function MA.Build()
                 z.frame = CreateFrame("Frame", nil, root)
                 z.frame:SetAllPoints(root)
                 z.frame:EnableMouse(false)
-                z.tex = BaseArt(z.frame, m.id, ROUND, false) or {}
+                z.tex = BaseArt(z.frame, m.id, ROUND, true) or {}
+                local localData = R.MapExploreLocalData
+                local interior = localData and localData.cities[m.id]
+                if interior and R.MapPictures then
+                    z.interior = CreateFrame("Frame", nil, z.frame)
+                    z.interior:SetAllPoints(z.frame)
+                    z.interior:EnableMouse(false)
+                    z.pictures = R.MapPictures.Create(z.interior)
+                    R.MapPictures.Set(z.pictures, interior)
+                end
                 z.frame:Hide()
                 cities[m.id] = z
                 cityList[#cityList + 1] = z
@@ -250,7 +514,11 @@ function MA.SetLevels()
     frames.world:SetFrameLevel(base + LEVEL.world)
     frames.cont:SetFrameLevel(base + LEVEL.cont)
     frames.zone:SetFrameLevel(base + LEVEL.zone)
-    for _, c in ipairs(cityList) do c.frame:SetFrameLevel(base + LEVEL.city) end
+    for _, c in ipairs(cityList) do
+        -- The underground city plan must cover the surface terrain, including at its feathered edges.
+        c.frame:SetFrameLevel(base + (c.interior and 7 or LEVEL.city))
+        if c.interior then c.interior:SetFrameLevel(c.frame:GetFrameLevel() + 1) end
+    end
 end
 
 -- Lays the root out for the map underneath: world pixels to its canvas units. Returns whether it could.
@@ -273,12 +541,28 @@ function MA.Host() return host and host.id or nil end
 
 function MA.SetShown(on)
     if root then root:SetShown(on and true or false) end
-    if not on then host = nil end
+    if not on then
+        host = nil
+        for _, z in ipairs(zoneList) do
+            if z.built then Load(z, false) end
+        end
+        for _, c in ipairs(cityList) do
+            LoadCity(c, false)
+            UpdateCityCover(c, 0)
+            if c.pictures then R.MapPictures.Clear(c.pictures) end
+        end
+    end
 end
 
 -- The view: u0..u1, v0..v1 (world, normalized) and the zoom (1: the whole world fits). fitZoom(id): a map's whole-map zoom.
+local function CityAlpha(c, zoom, fitZoom)
+    local fit = fitZoom(c.id)
+    return fit and VM.Fade(zoom, fit * CITY_FADE[1], fit * CITY_FADE[2]) or 0
+end
+
 function MA.SetView(u0, v0, u1, v1, zoom, fitZoom)
     if not built then return end
+    viewU0, viewV0, viewU1, viewV1 = u0, v0, u1, v1
     frames.cont:SetAlpha(VM.Fade(zoom, CONT_FADE[1], CONT_FADE[2]))
     local zoneAlpha = VM.Fade(zoom, ZONE_FADE[1], ZONE_FADE[2])
     frames.zone:SetAlpha(zoneAlpha)
@@ -296,6 +580,7 @@ function MA.SetView(u0, v0, u1, v1, zoom, fitZoom)
             z.shown = near
             Dress(z)
         end
+        UpdateRegionalBase(z)
         if z.loaded then loaded = loaded + 1 end
     end
     -- the zones that have been out of view longest let their files go, keeping LOADED
@@ -306,11 +591,18 @@ function MA.SetView(u0, v0, u1, v1, zoom, fitZoom)
         for i = 1, math.min(#idle, loaded - LOADED) do Load(idle[i], false) end
     end
     for _, c in ipairs(cityList) do
-        local fit = fitZoom(c.id)
-        local a = fit and VM.Fade(zoom, fit * CITY_FADE[1], fit * CITY_FADE[2]) or 0
+        local a = CityAlpha(c, zoom, fitZoom)
         local inView = c.r >= u0 and c.l <= u1 and c.b >= v0 and c.t <= v1
-        c.frame:SetShown(a > 0.01 and inView)
+        local visible = a > 0.01 and inView
+        LoadCity(c, visible)
+        UpdateCityCover(c, visible and a or 0)
+        c.frame:SetShown(visible)
         c.frame:SetAlpha(a)
+        if c.pictures then
+            local prefs = R.MapExplorePrefs
+            local mix = prefs.Get("detail") and VM.Fade(zoom, 20, 36) * math.min(0.5, prefs.Get("detailStrength") / 100) or 0
+            R.MapPictures.Update(c.pictures, u0, v0, u1, v1, inView and a > 0.01 and mix or 0)
+        end
     end
 end
 
@@ -329,22 +621,50 @@ function MA.RefreshExplored()
             Dress(z)
         end
     end
+    for _, c in ipairs(cityList) do
+        if c.cover then
+            UpdateCityCover(c, root:IsShown() and c.frame:IsShown() and c.frame:GetAlpha() or 0)
+        end
+    end
 end
 
 -- Whether a world point is over a city drawn here (the deepest zoom goes a little further there).
-function MA.CityAt(u, v)
+function MA.CityAt(u, v, navigation)
+    local best
     for _, c in ipairs(cityList) do
-        if u >= c.l and u <= c.r and v >= c.t and v <= c.b then return c.id end
+        local inset = navigation and MW.IsCity(c.id) and 0.2 or 0
+        local du, dv = (c.r - c.l) * inset, (c.b - c.t) * inset
+        if u >= c.l + du and u <= c.r - du and v >= c.t + dv and v <= c.b - dv and (not best or c.area < best.area
+            or c.area == best.area and c.id < best.id) then best = c end
     end
-    return nil
+    return best and best.id or nil
+end
+
+-- Surface-city plans stay legible while outdoor terrain takes over at deep
+-- zoom. A spatial fade avoids an opacity jump when the view center leaves a
+-- city's rectangle. Derive intro from this view, independent of listener order.
+function MA.SurfaceCityCover(u, v, zoom)
+    local id = MA.CityAt(u, v)
+    local c = id and cities[id]
+    if not c or c.interior or not MW.IsCity(c.id) then return 0 end
+    local edge = math.min((u - c.l) / (c.r - c.l), (c.r - u) / (c.r - c.l),
+        (v - c.t) / (c.b - c.t), (c.b - v) / (c.b - c.t))
+    return VM.Fade(edge, 0, 0.15) * CityAlpha(c, zoom, R.MapView.FitZoom)
 end
 
 -- Read only, for /tui diagnostics and the tests.
 function MA.Snapshot()
-    local out = { built = built, zones = #zoneList, cities = #cityList, shown = 0, loaded = 0, host = host and host.id }
+    local out = { built = built, zones = #zoneList, cities = #cityList, shown = 0, loaded = 0, host = host and host.id,
+        citiesLoaded = 0, cityTexturesBound = 0, cityCoverTexturesBound = 0,
+        regionalBaseTexturesBound = 0, regionalBaseBudget = REGIONAL_BASE_BUDGET }
     for _, z in ipairs(zoneList) do
         if z.shown then out.shown = out.shown + 1 end
         if z.loaded then out.loaded = out.loaded + 1 end
+        if z.nativeBase and z.nativeBase.loaded then out.regionalBaseTexturesBound = out.regionalBaseTexturesBound + #z.nativeBase.tex end
+    end
+    for _, c in ipairs(cityList) do
+        if c.loaded then out.citiesLoaded = out.citiesLoaded + 1; out.cityTexturesBound = out.cityTexturesBound + #c.tex end
+        if c.cover and c.cover.loaded then out.cityCoverTexturesBound = out.cityCoverTexturesBound + #c.cover.tex end
     end
     for k, v in pairs(stats) do out[k] = v end
     return out
@@ -352,12 +672,54 @@ end
 function MA.Zone(id) return zones[id] end
 function MA.City(id) return cities[id] end
 
+function MA.Diagnostic()
+    local out = MA.Snapshot()
+    out.unexploredMode, out.unexploredDimMultiplier = Mode(), DIM
+    out.layers, out.cityLayers, out.zoneLayers = {}, {}, {}
+    for _, key in ipairs({ "world", "cont", "zone" }) do
+        local f = frames and frames[key]
+        out.layers[#out.layers + 1] = { kind = key, shown = f and f:IsShown() or false,
+            alpha = f and f:GetAlpha() or 0, level = f and f:GetFrameLevel() or false }
+    end
+    for _, c in ipairs(cityList) do
+        if c.frame:IsShown() then out.cityLayers[#out.cityLayers + 1] = { mapId = c.id, alpha = c.frame:GetAlpha(),
+            level = c.frame:GetFrameLevel(), interior = c.pictures ~= nil, loaded = c.loaded, textures = #c.tex,
+            nativeBaseCover = { status = c.coverReason or "not-needed", textures = c.cover and #c.cover.tex or 0,
+                alpha = c.cover and c.cover.alpha or 0, failed = c.cover and c.cover.failed or false } } end
+    end
+    table.sort(out.cityLayers, function(a, b) return a.mapId < b.mapId end)
+    for _, z in ipairs(zoneList) do
+        if z.shown then
+            local explored, unexplored = 0, 0
+            for _, e in ipairs(z.tex or {}) do
+                if e.piece.explored then explored = explored + 1 else unexplored = unexplored + 1 end
+            end
+            out.zoneLayers[#out.zoneLayers + 1] = { mapId = z.id, loaded = z.loaded, built = z.built,
+                alpha = frames.zone:GetAlpha(), level = frames.zone:GetFrameLevel(),
+                edgeFeather = z.edgeFeather or "thin", edgeFeatherReason = z.edgeFeatherReason or "native-edge",
+                nativeBaseUnderpaint = { status = z.baseReason or "not-needed", loaded = z.nativeBase and z.nativeBase.loaded or false,
+                    textures = z.nativeBase and #z.nativeBase.tex or 0, failed = z.nativeBase and z.nativeBase.failed or false,
+                    tint = z.nativeBase and z.nativeBase.tint or false, sourcePixels = z.nativeBase and z.nativeBase.roi or false,
+                    sourceIds = z.nativeBase and REGIONAL_BASE[z.id].files or false },
+                exploredTextures = explored, unexploredTextures = unexplored,
+                dimmedTextures = Mode() == "dim" and unexplored or 0,
+                hiddenTextures = Mode() == "hide" and unexplored or 0 }
+        end
+    end
+    table.sort(out.zoneLayers, function(a, b) return a.mapId < b.mapId end)
+    out.zoneLayersOmitted = math.max(0, #out.zoneLayers - 32)
+    while #out.zoneLayers > 32 do table.remove(out.zoneLayers) end
+    out.masks = { zone = "thin feather", continent = "wide feather", city = "round feather", territory = false }
+    return out
+end
+
 -- the unexplored-areas choice changed (or its scope was reset): every built zone dressed again
 R.MapExplorePrefs.Subscribe(function(key)
     if key == "unexplored" or key == "behavior" or key == "all" then MA.RefreshExplored() end
 end)
 
 -- follows the view: which zones are in it and how far in (once a frame at most, after it moved)
+MA.SetView = R.Perf and R.Perf.Wrap("map.art.update", MA.SetView) or MA.SetView
 R.MapView.Subscribe(function(event)
     local MV = R.MapView
     if (event == "view" or event == "attach") and MV.Ready() then

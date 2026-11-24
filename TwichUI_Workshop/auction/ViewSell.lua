@@ -25,6 +25,7 @@ Detail=function(p)
     p.chosen=row
     p.detail.market:SetEnabled(row~=nil)
     p.detail.name:SetText(row and row.info.name or "Choose a bag item")
+    UI.ItemQuality(p.detail.name, row and row.info.quality)
     p.detail.pic.tex:SetTexture(row and row.info.icon or UI.ICON_BLANK)
     p.detail.kind:SetText(row and (row.qty.." in your bags"..(row.variant and " · exact variant" or "")) or "Choose an item from your bags")
     local quantity=tonumber(p.quantity:GetText())
@@ -180,8 +181,7 @@ local function Build(p)
         r.sub=A.Text(r,"",11,48,-31,-8,UI.K.textDim)
         r.fill=function(self,x)
             self.data=x;self.name:SetText(x.info.name);self.pic.tex:SetTexture(x.info.icon or UI.ICON_BLANK)
-            local color=ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[x.info.quality or 1]
-            if color then self.name:SetTextColor(color.r,color.g,color.b) else UI.Paint(self.name,UI.K.text) end
+            UI.ItemQuality(self.name, x.info.quality)
             self.sub:SetText(x.qty.." in bags"..(x.locked and " · locked" or (x.reserved or 0)>0 and " · crafting reserved" or x.bound~=false and " · binding unknown / bound" or ""))
             self:SetSelected(p.selected==x.key)
         end

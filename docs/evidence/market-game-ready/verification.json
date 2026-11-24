@@ -1,0 +1,57 @@
+{
+  "scope": "Investigation tools and documentation; no runtime diff against addon main cf188ddfa2425da4f549379aa6437ea87e2da7ee",
+  "addon_main": "cf188ddfa2425da4f549379aa6437ea87e2da7ee",
+  "market_source": "e2882dd822b356ffa081efebbff167827f9bf364",
+  "consumer_campaign_source": "79b62a970e2ec5d3b740383b0a180e67265c0ea6",
+  "verified_test_checkpoint": "776db4ede6ac2a8f6fc3aff6ce676e41f77a9f9d",
+  "host": {
+    "architecture": "x86_64",
+    "cpu": "AMD EPYC 9V74",
+    "visible_cpus": 5,
+    "cgroup_cpu_max": "400000 100000",
+    "cgroup_memory_max": 17179869184,
+    "lua": "5.1.5",
+    "python": "3.12.14",
+    "cpu_pinned": false
+  },
+  "checks": [
+    {
+      "command": "./tests/run.sh development market-performance --jobs 2",
+      "passed": true,
+      "modules": 13,
+      "seconds": 9.828898656996898,
+      "report_sha256": "0f45903fe6816b99db19db63c723ba112bdcbc92b63e9b002f44db416cc439ba"
+    },
+    {
+      "command": "cargo build --locked --offline --manifest-path MARKET_ROOT/desktop/core/Cargo.toml --example workshop_fixture -j 2",
+      "passed": true
+    },
+    {
+      "command": "cargo test --locked --offline --manifest-path MARKET_ROOT/desktop/core/Cargo.toml --lib workshop_summary -j 2",
+      "passed": true,
+      "tests": 20,
+      "failed": 0,
+      "filtered": 51
+    },
+    {
+      "command": "python3 -m py_compile tools/experiments/*.py tests/test_market_game_ready.py",
+      "passed": true
+    },
+    {
+      "command": "git diff --exit-code origin/main -- TwichUI_Workshop '!!!TwichUI' TwichUI_Settings TwichUI_Diagnostics",
+      "passed": true
+    },
+    {
+      "command": "luac5.1 -p tests/market_fixed_records.lua tests/bench_market_game_ready.lua tests/bench_market_opportunities.lua tests/bench_workshop_summary.lua",
+      "passed": true
+    }
+  ],
+  "native_forever_tested": false,
+  "new_format_native_publisher_implemented": false,
+  "simulator_run": false,
+  "release_gate_claimed": false,
+  "production_modified": false,
+  "measured_cases": 69,
+  "measured_samples": 206,
+  "benchmarked_campaigns": 11
+}

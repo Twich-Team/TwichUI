@@ -1,8 +1,8 @@
 # World map exploration
 
 **TwichUI settings > Map > World map** (`map/`; the switch is `modules.mapExplore`, off by default). Written against
-the WoW: Forever UI source (`../wow-ui-source`, branch `forever`) and the Forever client's own map tables. **Nothing here
-has been run in the game yet.** The view, the stitching geometry, the map underneath following, input routing and every
+the WoW: Forever UI source (`../wow-ui-source`, branch `forever`) and the Forever client's own map tables. **This overhaul
+has not been verified in the game.** See the [audit and verification matrix](seamless-map-audit.md). The view, stitching geometry, map underneath following, input routing and every
 part on the map are tested offline on a synthetic world with a scroll container that follows the game's rules
 (`tests/test_map_explore.lua`), and the data's shape in `tests/test_map_data.lua`. Drawing, seams between paintings, feel
 and taint are for the game.
@@ -28,9 +28,13 @@ never moves your character, starts a flight or a ride, casts, or talks to anyone
   coordinates. Once the view has been still for 0.6 s it becomes the map you are looking at: the deepest of world,
   continent, zone or city under the view's middle that you are zoomed in far enough for (90% of its whole-map zoom to enter,
   70% to stay). The view doesn't move when it does. In combat it waits until combat ends.
+  Native detail layers and the exploration painting are hidden while replaced, restored on hide/disable; quest and
+  player pins and the native quest log retain their own providers. Native painting refreshes cannot obscure close detail.
 - **Zoom** is 1 where the whole world fits. The wheel zooms about the point under the pointer (that point stays put on
   every frame), eased over 0.18 s (or at once, "Smooth zoom and moves" off), out to the whole world and in to "Deepest
-  zoom" (default 48 times; 1.5 times that over a city; over a cave as far as its map needs).
+  zoom" (default 48 times; 1.5 times that over a city; caves can extend to the lesser of their fit, 6 times the preference,
+  and 288 times). Unsupported painted-only locations stop at four times their map's fit zoom. Leaving a deeper context
+  never reverses an inward wheel target or snaps an outward step. Native canvas motion and enabling/disabling wait in combat.
 - **Panning** is the game's own drag, anywhere on the world whatever map is underneath.
 - **Clicks:** a plain click goes into the next map down under the pointer (framed); a right-click goes out to the map
   above, then the world. The map's other click handlers (TwichUI's pins, pings, map tools, the game's waypoint) come first.
@@ -39,7 +43,9 @@ never moves your character, starts a flight or a ride, casts, or talks to anyone
 **How it touches the game's map** (as OpenMap does; approved): a data provider; hooks on the scroll container's wheel and
 press and on its zoom-level set-up (`baseScale` lowered so it pans at every zoom); its `CalculateScrollExtentsAtScale`
 replaced while installed (the original put back when off); its wheel zoom mode set to none while the stitched map shows;
-its own `InstantPanAndZoom` to place the view; `SetMapID` to follow the view, never in combat. Writing those values from an
+its own `InstantPanAndZoom` to place the view; `C_Map.OpenWorldMap` to follow the view, never in combat. The API delivers the synchronous
+`WORLD_MAP_OPEN` event so Blizzard owns the map ID assignment; directly calling `SetMapID` taints the ID returned to
+native quest-pin refreshes and can block `SetPassThroughButtons`. Writing those values from an
 addon taints them, as any zoom addon's do; whether that matters anywhere in combat is for the game to show. Maps that
 aren't part of the world (battlegrounds, Zephras Isle, which the world map doesn't place) are the game's own, with its own
 zoom. Off, everything is put back and the map is shown whole.
@@ -57,11 +63,21 @@ zoom. Off, everything is put back and the map is shown whole.
 ## Terrain detail, caves, dungeons, places
 
 - **Terrain detail** (`map/Detail.lua`): the client's minimap pictures of each terrain tile (Forever's own WDTs), in their
-  real places, faded in from zoom 24 to 36 up to "Detail strength" (70%). At most 80 tiles have textures; not over
-  Ironforge or the Undercity (their minimap is the ground above them), nor under a surfaced cave.
+  real places, faded in from zoom 20 to 36 with at most a 70% painted blend, then gradually taking over from zoom 36 to
+  48 up to "Detail strength" (100% by default). Explicit saved strengths remain honored. Surface-city plans retain
+  their illustrated blend; underground city plans draw above terrain. At most 80 tiles have textures. Dense views fade
+  back toward the painting before that budget. Underground city plans/interior pictures draw over the surface; terrain
+  fades proportionally as a cave surfaces. Asynchronous detail textures retain the painting until ready, then fade in;
+  a missing resource stops polling after 10 seconds and may be checked again on a later view change.
 - **Caves** (`map/Caves.lua`): zoom onto a cave and its own map surfaces where it is, the land round it dimming; zoom out
   and it sinks. One at a time (the one under the view's middle). A bar names it, with its floors (remembered this session)
   and Leave. Your arrow is the game's own on the zone underneath; which floor you are on isn't known.
+  `LocalData.lua` adds 248 numeric WMO interiors and the inside minimaps of Ironforge/Undercity, rendered by
+  `Pictures.lua` with rotation, crop coordinates, culling and reusable pools. Generic WMO areas are labelled
+  "Underground area"; overlapping rooms are composited, with no automatic floor detection. Fargodeep has no verified
+  interior data in this branch; its legacy micro maps were omitted by the existing generator. Do not infer support
+  from their presence in another addon's tables. Existing Wailing Caverns entrance art is retained; the instance's
+  altered Forever geometry still needs owner-directed verification.
 - **Dungeon maps** (`map/DungeonView.lua`): a dungeon is a world of its own, so its map opens on a panel over the map (its
   own wheel zoom, dragging, floors), from its entrance's marker or the "Inside" button while you are in it. No position;
   pins and pings refused there with a notice.
@@ -77,6 +93,8 @@ zoom. Off, everything is put back and the map is shown whole.
 Made offline from the game clients installed on this computer, with `tools/navbake`'s CASC and DB2 readers. Numbers and
 names only: texture file IDs, world rectangles, places. The game draws its own textures; TwichUI ships no map art. Derived
 from Blizzard Entertainment's game data and not covered by TwichUI's MIT licence (as `TwichUI_NavData`).
+The separate numeric WMO table `LocalData.lua` is adapted from the pinned OpenMap MIT table, with its notice in
+`!!!TwichUI/LICENSES/OpenMap.txt` and a strict offline importer; [provenance and limitations](seamless-map-audit.md#verification-and-delivery).
 
 ```
 python3 -I tools/mapdata/build.py --wow "/path/to/World of Warcraft" [--report report.json]
@@ -95,7 +113,7 @@ python3 -I tools/mapdata/build.py --wow "/path/to/World of Warcraft" [--report r
 
 - `modules.mapExplore` (off). Takes effect at once.
 - `ui.mapExplore` (profile; shared as the "World map" group): `maxZoom` 16-192 (48), `wheelStep` 10-50% (25), `smooth` (on),
-  `controls` (on), `unexplored` show/dim/hide (dim), `detail` (on), `detailStrength` 20-100% (70), `caves`, `dungeons`,
+  `controls` (on), `unexplored` show/dim/hide (dim), `detail` (on), `detailStrength` 20-100% (100), `caves`, `dungeons`,
   `travel`, `labels` (on), `iconSize` 70-150% (100), `iconOpacity` 40-100% (100).
 - Never saved: the view, the way back, a cave's floor, an open dungeon map.
 

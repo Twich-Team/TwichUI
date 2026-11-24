@@ -76,6 +76,24 @@ function L.Open(tab)
     return true
 end
 
+local function MapAfterCombat()
+    R:Off("PLAYER_REGEN_ENABLED", MapAfterCombat)
+    L.OpenMap()
+end
+function L.OpenMap()
+    local ok, why = L.Load()
+    if not ok then
+        if why == "COMBAT" then
+            R:On("PLAYER_REGEN_ENABLED", MapAfterCombat)
+            Say("Map Diagnostics will open after combat. Once loaded, its captures can be used during combat.")
+        else Say("%s", L.Explain(why)) end
+        return false
+    end
+    if not R.Diagnostics.OpenMap then Say("Map Diagnostics is unavailable; reinstall the matching diagnostics addon.") return false end
+    R.Diagnostics.OpenMap()
+    return true
+end
+
 ---------------------------------------------------------------------------
 -- Arm next reload: a one-shot hand-off between loads, in TwichUIDB (not part of a profile or a backup)
 ---------------------------------------------------------------------------

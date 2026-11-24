@@ -273,8 +273,10 @@ nav\MinimapTrail.lua
 # frames; View.lua owns the view and is the only part moving it; Art.lua draws the stitched painting.
 map\Prefs.lua
 map\Data.lua
+map\LocalData.lua
 map\ViewMath.lua
 map\World.lua
+map\Pictures.lua
 map\View.lua
 map\Art.lua
 map\Detail.lua

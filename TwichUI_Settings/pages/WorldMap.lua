@@ -95,7 +95,7 @@ K.Page({
         Under(Check("mapExploreDetail", "detail", "Terrain detail up close",
             "Lays the game's own minimap pictures of the ground over the map as you zoom past the paintings' resolution: trees, rocks, roads and buildings. They are the game's textures, drawn by the game; nothing is painted or guessed. On Eastern Kingdoms and Kalimdor, not over Ironforge or the Undercity (their minimap is the ground above them)."), toggle, On)
         Under(Number("mapExploreDetailStrength", "detailStrength", "Detail strength",
-            "How strongly the terrain detail shows over the painted map, in percent, once fully zoomed in."), toggle, On)
+            "How strongly terrain detail shows at the deepest zoom, in percent. It blends with the painting while zooming in; surface-city plans keep their illustrated appearance."), toggle, On)
 
         K.ResetButton("Reset map exploration settings", all, function() R.MapExplorePrefs.Reset("behavior") R.MapExplorePrefs.Reset("detail") end,
             "Puts the zoom, the buttons and the detail back to their defaults. Places (their own tab), your pins, pings and routes are kept, and the switch stays as it is.")

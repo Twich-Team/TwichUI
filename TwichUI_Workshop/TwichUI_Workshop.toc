@@ -17,6 +17,8 @@ BridgeCodec.lua
 BridgeSchema.lua
 BridgeValidate.lua
 SummarySchema.lua
+Containers.lua
+Prepared.lua
 Summary.lua
 Bridge.lua
 ServerMarket.lua
@@ -132,5 +134,7 @@ auction/Debug.lua
 auction/ViewSell.lua
 auction/ViewOwned.lua
 auction/ViewMarket.lua
+# Read-only merchant quote, independent of Vendor Restock preferences
+MerchantReview.lua
 # The window: the shell, the page list and the events (last: it tells TwichUI the addon is ready)
 Window.lua

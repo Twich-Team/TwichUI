@@ -140,6 +140,7 @@ local function ServerDetail(p,r)
     p.track:SetEnabled(false);p.browse:SetEnabled(false);p.advisor:SetEnabled(false)
     p.variantDrop:Show();p.qualityDrop:Hide();p.metricDrop:Show()
     p.name:SetText(r and r.info.name or "Choose a server item")
+    UI.ItemQuality(p.name, r and r.info.quality)
     p.pic.tex:SetTexture(r and r.info.icon or UI.ICON_BLANK)
     if W.Bridge.Status().summary then SummaryDetail(p,r);return end
     p.variantDrop:Refresh()
@@ -201,6 +202,7 @@ Detail=function(p)
     p.advisor:SetEnabled(r~=nil and not ctx.variant and UI.Advisor~=nil)
     p.track.text:SetText(r and AD.Tracked()[r.item] and "Untrack" or "Track Item")
     p.name:SetText(r and r.info.name or "Choose a market item")
+    UI.ItemQuality(p.name, r and r.info.quality)
     p.pic.tex:SetTexture(r and r.info.icon or UI.ICON_BLANK)
     p.kind:SetText(r and ((r.info.category or "Metadata unavailable")..(r.info.sub and " · "..r.info.sub or "")..
         (ctx.variant and " · variant identity preserved; base price excluded" or "")) or "Search known items or select a tracked item.")
@@ -436,8 +438,7 @@ local function Build(p)
         r.sub=A.Text(r,"",11,48,-32,-6,UI.K.textDim)
         r.fill=function(self,x)
             self.data=x;self.name:SetText(x.info.name);self.pic.tex:SetTexture(x.info.icon or UI.ICON_BLANK)
-            local color=ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[x.info.quality or 1]
-            if color then self.name:SetTextColor(color.r,color.g,color.b) else UI.Paint(self.name,UI.K.text) end
+            UI.ItemQuality(self.name, x.info.quality)
             self.sub:SetText((AD.Tracked()[x.item] and "★ " or "")..(Context(p,x.item).variant and "Variant not priced" or x.unit and ("Lowest seen "..UI.Money(x.unit)) or "No latest listing price"))
             self:SetSelected(p.selected==x.item)
         end

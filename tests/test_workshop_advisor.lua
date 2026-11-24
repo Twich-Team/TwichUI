@@ -225,6 +225,69 @@ bagrow.unbound=nil; bagrow.bound=9
 Same(D.Decide(100,false,bagrow).action,"vendor")
 bagrow.variant=true; bagrow.unbound=3
 Same(D.Decide(100,false,bagrow).action,"vendor")
+-- The Advisor's combined filters and recommendations use the same observed
+-- bag identities, even when native aggregate counts describe different copies.
+do
+  local savedSlots,savedInfo=bagSlots,c.C_Item.GetItemInfo
+  local savedRecipes,savedStrategy=session.AllRecipes,session.QueueStrategy
+  local materialLink="|cffffffff|Hitem:100::::::::80:70:::::::::|h[Material 100]|h|r"
+  local vialLink="|cffffffff|Hitem:3371::::::::80:70:::::::::|h[Empty Vial]|h|r"
+  bagSlots={
+    {itemID=100,stackCount=20,isBound=false,hyperlink=materialLink},
+    {itemID=102,stackCount=4,isBound=false},
+    {itemID=3371,stackCount=10,isBound=false,hyperlink=vialLink},
+  }
+  c.C_Item.GetItemInfo=function(input)
+    local id=type(input)=="number" and input or type(input)=="string" and
+      tonumber(input:match("|Hitem:(%d+):") or input:match("^item:(%d+):"))
+    if not id then return nil end
+    local link=type(input)=="string" and input or id==100 and materialLink or id==3371 and vialLink or nil
+    if id==3371 then return "Empty Vial",link,1,1,1,"Reagent","",20,"",134400,1,7,0,0 end
+    local n,_,q,level,required,kind,sub,stack,equip,icon,sell,class,subclass,bind=savedInfo(id)
+    return n,link,q,level,required,kind,sub,stack,equip,icon,sell,class,subclass,bind
+  end
+  session.AllRecipes=function() return {} end
+  session.QueueStrategy=function() return "ready",{items={}} end
+  Same(D.Info(100,materialLink).name,"Material 100","held plain link supplies item metadata")
+  local heldVial=D.Info(3371,vialLink)
+  Same(heldVial.name,"Empty Vial"); Same(heldVial.category,"Reagent","held link preserves category")
+  Same(heldVial.link,vialLink,"held link identity is preserved")
+  Same(W.Worth.LinkVariant(materialLink),nil,"carried material fixture is a plain variant")
+  local suffixLink="item:100:0:0:0:0:0:-12:0:80:70:0:0:0"
+  local suffixInfo=D.Info(100,suffixLink)
+  Same(suffixInfo.name,"Material 100"); Same(suffixInfo.link,suffixLink,"metadata keeps the held suffix identity")
+  Same(W.Worth.LinkVariant(suffixInfo.link),"suffix","normalizing metadata lookup cannot erase a suffix")
+  Healthy()
+  local carried=D.Catalog()
+  repeat local _,err=carried:Step(); Check(not err,err) until carried.done
+  local bags,filtered={},{}
+  for _,row in ipairs(carried.rows) do
+    if D.Matches(row,"","bags",false) then bags[#bags+1]=row.item end
+    if D.Matches(row,"vial","bags",true,"Reagent") then filtered[#filtered+1]=row.item end
+  end
+  Same(table.concat(bags,","),"100,102,3371","exact carried identities, including pending metadata")
+  Same(#filtered,1,"search, source, auctionability and category combine")
+  Same(filtered[1],3371,"combined filters retain the carried reagent")
+  Same(D.Context(100,true,carried.byID[100]).qty,20,"advice retains the observed stack count")
+  Same(D.Decide(100,true,carried.byID[100]).action,"auction","carried identities support auction advice")
+  Healthy({complete=false})
+  local tentative=D.Decide(100,true,carried.byID[100])
+  Same(tentative.action,"auction"); Same(tentative.level,"tentative")
+  Same(tentative.suggestion.price,nil); Same(tentative.proceeds,nil)
+  bagSlots[1].hyperlink=suffixLink
+  local variants=D.Catalog()
+  repeat local _,err=variants:Step(); Check(not err,err) until variants.done
+  Same(variants.byID[100].variant,true,"carried suffix is retained through discovery")
+  Check(not D.Matches(variants.byID[100],"","bags",true),"generic-price auction filter excludes held variants")
+  Same(D.Decide(100,true,variants.byID[100]).action,"vendor","suffix cannot inherit the generic auction recommendation")
+  -- The empty-market pose still has a known vendor offer for its carried item.
+  local noMarket=A.Decide(100,{qty=20,sell=1,bindType=0,facts={nomarket=true}})
+  Same(noMarket.action,"vendor","absence of a market retains the known vendor option")
+  Same(noMarket.qty,20); Same(noMarket.vendor.value,1); Same(noMarket.level,"tentative")
+  Same(noMarket.suggestion.price,nil); Same(noMarket.proceeds,nil)
+  bagSlots,c.C_Item.GetItemInfo=savedSlots,savedInfo
+  session.AllRecipes,session.QueueStrategy=savedRecipes,savedStrategy
+end
 local m = Healthy(); for id = 1000, 20999 do m.items[id] = m.items[100] end
 local big = D.Catalog(); local count, maxms, t = 0,0,os.clock()
 repeat local t0=os.clock(); local _,err=big:Step(); Check(not err,err); maxms=math.max(maxms,(os.clock()-t0)*1000); count=count+1 until big.done

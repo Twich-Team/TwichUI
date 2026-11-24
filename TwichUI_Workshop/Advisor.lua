@@ -2,7 +2,7 @@
 -- Decide has no planning, history decoding, inventory reads, saved writes or frames.
 -- Gain/SetGain are the small existing-account preference adapter; callers snapshot it.
 local W = TwichUI.Workshop
-local A = { POLICY = 5, API = 1 }
+local A = { POLICY = 6, API = 1 }
 W.Advisor = A
 A.LABEL = { auction = "Recommended: Auction", vendor = "Recommended: Vendor", craft = "Keep for crafting plan",
     disenchant = "Consider disenchanting", watch = "Watch this item", unknown = "Not enough data to compare" }
@@ -155,7 +155,22 @@ function A.Decide(item, ctx)
     if de.state=="ok" and de.outcomeReference and r.action~="unknown" and r.action~="craft" then
         r.level,r.evidence="tentative","limited"
     end
-    if r.action=="unknown" and eligible==false and r.disenchantUnpriced then r.unknownText="Check disenchant value" end
+    -- A local fallback is useful evidence, but cannot finalize a sale while an
+    -- applicable server quote (including a disenchant material) is in flight.
+    -- Keep dependencies even after completion so consumers can invalidate only
+    -- the held items affected by a later price change. No history is required.
+    r.dependencies = {}
+    local auctionPending = eligible ~= false and not ctx.variant and r.facts.referenceWhy == "loading"
+    if eligible ~= false and not ctx.variant and W.Int(item, 1, W.MAX_ID) then r.dependencies[item] = true end
+    for dependency in pairs(de.dependencies or {}) do r.dependencies[dependency] = true end
+    r.pending = canChoose and (auctionPending or de.pending == true) or false
+    r.pricingState = r.pending and "pending" or "ready"
+    if r.pending then
+        r.action, r.level, r.evidence, r.proceeds = "unknown", "insufficient", "insufficient", nil
+        r.unknownText = auctionPending and "Loading Market price" or "Loading disenchant material prices"
+        Reason(auctionPending and "The item's Market price is still loading." or "Disenchant material prices are still loading.")
+    end
+    if r.action=="unknown" and eligible==false and r.disenchantUnpriced and not r.pending then r.unknownText="Check disenchant value" end
     if sell == nil then r.missing[#r.missing + 1] = "Vendor sell value is unknown." end
     if ctx.crafting and #(ctx.crafting.uses or {}) > 0 and r.action ~= "craft" then
         Reason("Known recipes use this item; compare their crafting strategy before selling.")

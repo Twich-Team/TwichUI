@@ -27,6 +27,7 @@ local function expected(row)
  return math.floor(numerator/200)
 end
 local result=estimate()
+assert(result.dependencies[10938] and result.dependencies[10940],'material dependencies survive completed valuation')
 assert(result.state=='ok' and result.expectedGross==expected(D.Find(4,2,5)))
 assert(result.value==195,'armor: floor(0.8*1.5*133 + 0.2*1.5*119)')
 assert(estimate({classID=2}).value==182,'weapon: floor(0.8*1.5*119 + 0.2*1.5*133)')
@@ -74,9 +75,16 @@ for _,mode in ipairs({'missing','loading','old','future'})do
  priceMode=mode;local r=estimate()
  assert(r.state=='unknown' and not r.value and not r.expectedGross,'missing/stale material cannot be zero or a partial total')
  assert(r.outcomes and r.outcomeReference,'material breakdown can exist without a price')
- if mode=='loading' then assert(r.pending)end
+ if mode=='loading' then assert(r.pending and r.dependencies[10938])end
 end
 priceMode='local';assert(estimate().priceSource=='local','local fallback is usable')
+local pendingKey=W.Pricing.PendingKey
+W.Pricing.PendingKey=function(id)return id==10938 and 'prepared-material' or nil end
+local localPending=estimate()
+assert(localPending.state=='unknown' and localPending.pending and not localPending.value,'usable local material fallback must wait for prepared Market pricing')
+assert(localPending.dependencies[10938] and localPending.dependencies[10940])
+W.Pricing.PendingKey=pendingKey
+assert(estimate().state=='ok','settled local fallback remains usable')
 priceMode='normal'
 -- No unsigned caller can label its own table as the bundled reference.
 local spoof={reference={},verified=false,client='forever',item=100,eligible=true,source='unverified',outcomes={{p=1,materials={{item=10940,qty=100}}}},values={[10940]={value=100,quality='good'}}}

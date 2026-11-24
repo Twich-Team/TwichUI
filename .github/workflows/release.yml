@@ -39,14 +39,15 @@ jobs:
           else
             echo "No comparable base; tracked-output addition check unavailable."
           fi
-      - name: Install Lua
+      - name: Install offline test dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq lua5.1 lua-bitop
+          sudo apt-get install -y -qq lua5.1 lua-bitop python3-pil python3-numpy python3-scipy
+          /usr/bin/python3 -I -c 'from PIL import Image; import numpy; from scipy import ndimage; print("Map lab image dependencies available")'
       - name: Verification independent of publication policy
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: python3 -I tools/ci_verify.py --base "$BASE"
+        run: PATH="/usr/bin:$PATH" python3 -I tools/ci_verify.py --base "$BASE"
       - name: Collect verification diagnostics
         if: ${{ always() }}
         run: python3 -I tools/collect_verification_evidence.py --out "$RUNNER_TEMP/verification-evidence"

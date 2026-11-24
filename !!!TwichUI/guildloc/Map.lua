@@ -625,7 +625,7 @@ function GM.Locate(key)
         ringUntil = GetTime() + RING_WAIT
     end
     if WorldMapFrame:GetMapID() ~= rec.map then
-        local ok = pcall(WorldMapFrame.SetMapID, WorldMapFrame, rec.map)
+        local ok = pcall(C_Map.OpenWorldMap, rec.map)
         if not ok then
             GM.ClearPick(true)
             Notice("That map couldn't be opened.")

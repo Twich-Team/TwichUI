@@ -39,7 +39,7 @@ local c = MIClient("Rich", {
       fr.SetFrameStrata = function() end
       fr.SetMotionScriptsWhileDisabled = function() end
       fr.CreateTexture = function(s) local t = MIFake("Texture", s); t.SetColorTexture = function() end t.SetVertexColor = function() end t.SetTexCoord = function() end t.SetTexture = function(x, v) x.texture = v end return t end
-      fr.CreateFontString = function(s) local t = MIFake("FontString", s); t.SetFont = function() return true end t.SetJustifyV = function() end t.SetWordWrap = function() end t.SetTextColor = function() end return t end
+      fr.CreateFontString = function(s) local t = MIFake("FontString", s); t.SetFont = function() return true end t.SetJustifyV = function() end t.SetWordWrap = function() end t.SetTextColor = function(self, r, g, b) self.qualityColor = { r, g, b } end return t end
       Press.Instrument(fr, name)   -- last, so it replaces the no-op EnableMouse above with one that records
       if name then cl[name] = fr end
       return fr
@@ -72,7 +72,7 @@ c.Enum = { CraftingReagentType = { Modifying = 0, Basic = 1, Finishing = 2, Auto
 c.C_Item = {
   GetItemCount = function(id) return g.bags[id] end,
   GetItemInfoInstant = function(id) return id, "a", "b", "", 5000 + id end,
-  GetItemInfo = function(id) return g.names[id] end,
+  GetItemInfo = function(id) return g.names[id], nil, g.quality and g.quality[id] end,
   RequestLoadItemDataByID = function() end,
 }
 c.InCombatLockdown = function() return false end
@@ -140,6 +140,36 @@ end
 local qrow = Win.Lists().queue.rows[1]
 Check(qrow:IsShown() and qrow.name:GetText() == "Healing Potion")
 local detail = Win.Craft().detail
+-- Source-grounded quality enum values from Forever ItemQualitiesDocumentation.
+-- Actual row fill, delayed metadata event, narrow width and recycled item reset.
+do
+  local oldAfter = c.C_Timer.After
+  c.C_Timer.After = function(_, fn) fn() end
+  c.C_Item.GetItemQualityColor = function(q) return q / 16, .5, .75 end
+  local mat = Win.Lists().mats.rows[1]
+  local need = mat.need:GetText()
+  for _, width in ipairs({ 480, 180 }) do
+    mat:SetWidth(width)
+    for q = 0, 8 do
+      g.quality = { [10] = q }
+      Fire("GET_ITEM_INFO_RECEIVED", 10, true)
+      Same(mat.name.qualityColor[1], q/16, "delayed quality updates material name")
+      Same(mat.need:GetText(), need, "quality cannot change quantity")
+      Same(qrow.name:GetText(), "Healing Potion", "recipe label stays unchanged")
+    end
+    local fill = mat.fill
+    g.quality = {}
+    fill(mat, { item = 11, need = 1 })
+    Same(mat.name.qualityColor[1], W.UI.K.text[1], "recycled unknown item resets color")
+    g.quality = { [10] = 4 }
+    Fire("ITEM_DATA_LOAD_RESULT", 10, true)
+    Same(mat.name.qualityColor[1], .25, "alternate metadata event refreshes names")
+  end
+  g.quality = nil
+  c.C_Item.GetItemQualityColor = nil
+  Fire("GET_ITEM_INFO_RECEIVED", 10, true)
+  c.C_Timer.After = oldAfter
+end
 Same(detail.name:GetText(), "Healing Potion", "the first queued craft's details are shown")
 Same(detail.prof:GetText(), "Alchemy", "with its profession")
 Check(qrow.line:GetText() == "1 craft - makes 1-2", qrow.line:GetText())
@@ -961,6 +991,25 @@ do
   tip = {}
   Check(mat.scripts.OnEnter ~= nil and mat.scripts.OnClick ~= nil, "it has an item tooltip and a chat link on Shift-click")
 
+  -- Follow-up: real Opportunities output/material fonts, then queue and Shopping.
+  -- Metadata source uses source-grounded quality enums with synthetic RGB values.
+  do
+    local oldNames, oldQuality, oldGetter = g.names, g.quality, c.C_Item.GetItemQualityColor
+    g.names = { [10]="Peacebloom",[11]="Silverleaf",[501]="Healing Potion",[502]="Mana Potion" }
+    g.quality = { [10]=2,[11]=1,[501]=3,[502]=4 }
+    c.C_Item.GetItemQualityColor = function(q) return q/16,.5,.75 end
+    Fire("GET_ITEM_INFO_RECEIVED",501,true); Flush(); Win.Render()
+    local row = Win.Lists().opps.rows[1]
+    Same(row.name.qualityColor[1], g.quality[row.rec.outItem]/16, "Opportunities output name is colored")
+    Same(opps.detail.name.qualityColor[1], 3/16, "selected output name is rare")
+    Same(opps.detail.mats[1].name.qualityColor[1], 2/16, "Opportunities material name is uncommon")
+    Same(opps.detail.mats[1].qty:GetText(), "\195\1512", "material quantity stays separate")
+    g.names,g.quality,c.C_Item.GetItemQualityColor=oldNames,oldQuality,oldGetter
+    Fire("GET_ITEM_INFO_RECEIVED",501,true); Flush()
+    Win.SetMode("opps"); Win.Render()
+    Same(opps.detail.name.qualityColor[1],W.UI.K.text[1],"unknown selected output resets its previous color")
+  end
+
   -- Crafting: the left card's two lists, the plan's estimates and totals
   Win.SetMode("craft"); Win.Render()
   local cr = Win.Craft()
@@ -973,6 +1022,36 @@ do
   S.Add(rec[1]); S.Add(rec[2])
   S.SetCrafts(1, 2)
   Win.Render()
+  do
+    local oldNames, oldQuality, oldGetter = g.names, g.quality, c.C_Item.GetItemQualityColor
+    local wasRecipes = cr.segRecipes.on
+    g.names = { [10]="Peacebloom",[11]="Silverleaf",[501]="Healing Potion",[502]="Mana Potion" }
+    g.quality = { [10]=2,[11]=1,[501]=3,[502]=4 }
+    c.C_Item.GetItemQualityColor = function(q) return q/16,.5,.75 end
+    cr.segQueue:GetScript("OnClick")(cr.segQueue)
+    Win.Render()
+    local queueNames = 0
+    for _, qr in ipairs(Win.Lists().queue.rows) do
+      if qr:IsShown() and qr.entry and g.quality[qr.entry.outItem] then
+        Same(qr.name.qualityColor[1],g.quality[qr.entry.outItem]/16,"queue output name is colored")
+        queueNames = queueNames + 1
+      end
+    end
+    Same(queueNames,2,"both queued output names were checked")
+    Win.SetMode("shop"); Win.Render()
+    local shopNames = 0
+    for _, sr in ipairs(Win.Lists().shop.rows) do
+      if sr:IsShown() and sr.data and g.quality[sr.data.item] then
+        Same(sr.name.qualityColor[1],g.quality[sr.data.item]/16,"Shopping material name is colored")
+        shopNames = shopNames + 1
+      end
+    end
+    Check(shopNames>=1,"at least one actual Shopping row was checked")
+    g.names,g.quality,c.C_Item.GetItemQualityColor=oldNames,oldQuality,oldGetter
+    Fire("GET_ITEM_INFO_RECEIVED",501,true); Flush()
+    Win.SetMode("craft"); Win.Render()
+    if wasRecipes then cr.segRecipes:GetScript("OnClick")(cr.segRecipes) end
+  end
   -- Healing Potion x2: cost 2 x 200, sells 2 x 1000, profit 2 x 800. Mana Potion x1: cost 100 + 50, sells 300, profit 150.
   local byId, tot = S.PlanEstimates()
   Same(byId[1].cost, 400); Same(byId[1].sellLow, 2000); Same(byId[1].profitLow, 1600)

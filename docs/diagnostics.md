@@ -7,6 +7,8 @@ checked in Forever's API documentation (`../wow-ui-source`, branch `forever`, 1.
 and the behaviour was tested offline (Lua 5.1, stand-in frames). See "In-game checks still to do".
 
 The older `/tui diagnostics` (troubleshooting report, temporary tracing, `diag/`) is unchanged and separate.
+For map-specific snapshots, bounded event recording and one-click report preparation,
+use **`/tui mapdiag`**: [player workflow and AI schema](map-diagnostics.md).
 
 ## Packaging and loading
 
@@ -124,6 +126,7 @@ uses an item, sends anything or makes up events. Each states its cost before you
 | `npcs.search` | `npcs/Search.lua` `SR.Run` (not for an empty query) | search |
 | `npcs.knowledge.rebuild` | `npcs/Knowledge.lua` `Build` | rebuild |
 | `npcs.map.layout` | `npcs/Map.lua` `NMAP.Layout` | layout |
+| `npcs.map.fade` | `npcs/Map.lua` `FadeTick`; only during a 0.18-second marker entry | update |
 | `guildloc.tick` (`Perf.Call`, after the throttle and the early exits) | `guildloc/Comm.lua` `TickWork` | update |
 | `guildloc.receive` (`Perf.Call`, after the off test) | `guildloc/Comm.lua` `Receive` | bulk |
 | `guildloc.roster` (`Perf.Call`) | `guildloc/Roster.lua` `Rebuild` | rebuild |
@@ -183,6 +186,10 @@ uses an item, sends anything or makes up events. Each states its cost before you
 | `layouts.plan`, `layouts.apply`, `layouts.verify`, `layouts.restore` (`Perf.Call`) | `TwichUI_Layouts/Engine.lua` `LY.Plan` (with an update's comparison), `LY.Apply`, `LY.Verify`, `LY.VerifyRestore` and `LY.VerifyUndo` (with the baseline commit), `LY.Restore` and `LY.Undo` (on request; `layouts.verify` also once after the reload that finishes an install, restore or undo) | rebuild, bulk, evaluate, bulk |
 | `classbars.anim`, `pins.ping.tick`, `npcs.map.pulse` (`Perf.Call`) | `classbars/Anim.lua`, `pins/PingMap.lua`, `npcs/Map.lua` | update |
 | `map.view.step`, `map.view.follow`, `map.view.notify` (`Perf.Wrap`) | `map/View.lua` OnUpdate scripts | update |
+| `map.art.update`, `map.detail.update`, `map.cave.update` (`Perf.Wrap`) | Production painting/city, terrain and cave view updates; distinguish these children from inclusive notification cost | layout |
+| `map.cave.fade` (`Perf.Wrap`) | `map/Caves.lua` `FadeStep`; 0.15-second entry only, no idle updater | update |
+| `map.interior.update`, `map.texture.load` (`Perf.Wrap`) | `map/Pictures.lua` visible WMO pictures and bounded texture-readiness fade | layout / update |
+| `map.support.snapshot`, `map.support.export` (`Perf.Wrap`) | `TwichUI_Diagnostics/MapCapture.lua`; support-tool overhead, excluded from map renderer cost findings | support |
 | `partyDeath.event`, `reminders.event`, `healer.event`, `healer.unitEvent`, `targetart.event`, `refreshments.cast` (`Perf.Wrap`) | the private event frames' OnEvent in `reminders/State.lua`, `healer/Watch.lua`, `modules/PartyDeath.lua`, `targetart/Display.lua`, `modules/Refreshments.lua` | event |
 | `rxp.skin.*`, `rxp.timers.*`, `rxp.waypoint.sync` (`Perf.Wrap`; `rxp.skin.currentTick` after its throttle) | the `hooksecurefunc` callbacks on RestedXP's functions and the hover button's OnUpdate in `modules/RestedXPSkin.lua`, `modules/RestedXPTimers.lua`, `qol/GuideWaypoint.lua` | hook, update |
 
@@ -567,10 +574,10 @@ Default-off instrumentation adds no background timers or forced collection.
 | `workshop.opportunityQuestion` | `Estimate.lua`, `Est.Ask` | Indivisible service-question CPU on memo misses; never includes a coroutine suspension. |
 | `workshop.opportunities.*` | `OpportunityEngine.lua`; presentation counters in `ViewOpportunities.lua` | Actual `crafts`, preparation passes (`calculated`), dependency `invalidations`, `catalogBuilds`, `batches`, `sorts`, `fullInvalidations`, `fullPublications`/`partialPublications`, `partialReuses` (stable provisional membership), `cancelled`/`errors`; actual `rowPaints`, `cellUpdates`, `detailUpdates`. `cacheHits` counts compatible catalog reads; `reused` counts estimates preserved during catalog reconciliation. |
 
-The opt-in Workshop preset now selects **15** gauges: its original ten plus
+The opt-in Workshop preset now selects **24** gauges: its original ten plus
 `workshop.opportunities.known`, `.pending`, `.waiting`, `.settled`, `.retained`.
 They read bounded transient counts and never start work. General remains the
-default preset and the 40-gauge capacity is unchanged. No item IDs or imported
+default preset and the 40-gauge capacity is unchanged. Nine prepared-current passive proxies are included before Workshop loads. No item IDs or imported
 payloads are exported. Catalog state exists for the feature; R.Perf timing/counter
 collection remains capture-only; the engine keeps fixed-size aggregate/status fields.
 
@@ -583,3 +590,11 @@ and JSON in Diagnostics. Use separate captures for scrolling/filtering, source
 changes and warm reopening. [Exact native procedure and interpretation](performance/v2-opportunities-incremental-pr3.md#native-forever-check).
 
 Fishing estimates: `fishing.economy` measures deferred batches in `TwichUI_Fishing/Economy.lua:Work` (at most eight pending items); `fishing.prices` reports the bounded item valuation cache. The scope excludes catch and animation work.
+
+Prepared-current capability adds `workshop.preparedLoad` (synchronous physical addon load) and
+`workshop.preparedVerify` (cooperative requested proofs/dense verification). The latter shares
+Summary's existing slice budget with history. Read-only `workshop.prepared.*` gauges expose
+loads, retained bytes, hashes, authenticated leaves, full partitions, flag words, hits,
+pending tasks and cancellations. Partition memory includes both banks of legacy current,
+prepared current (up to 32 per bank), and the unchanged 64 historical partitions.
+No item identities or payloads enter the report.

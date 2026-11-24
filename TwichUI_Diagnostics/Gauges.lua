@@ -46,6 +46,11 @@ DX.OPS = {
     ["workshop.pricing.initialVisibleRows"]={module="workshop",label="Initially visible opportunity cohort size",kind="count",file="TwichUI_Workshop/Pricing.lua",where="opt-in diagnostics",every="bounded capture aggregate"},
     ["workshop.pricing.visibleTruncated"]={module="workshop",label="Visible cohort capped at 128 rows",kind="count",file="TwichUI_Workshop/Pricing.lua",where="opt-in diagnostics",every="bounded capture aggregate"},
     ["workshop.summary.historyPreemptions"]={module="workshop",label="History validation paused for current prices",kind="count",file="TwichUI_Workshop/Summary.lua",where="opt-in diagnostics",every="bounded capture aggregate"},
+    ["workshop.containerLoad"]={module="workshop",label="Compressed Market container load",kind="init",file="TwichUI_Workshop/Containers.lua",where="Read",every="once per requested physical container"},
+    ["workshop.containerBase64"]={module="workshop",label="Market block Base64 decoding",kind="work",file="TwichUI_Workshop/Containers.lua",where="stream",every="requested block only"},
+    ["workshop.containerInflate"]={module="workshop",label="Market raw Deflate decompression",kind="work",file="TwichUI_Workshop/Containers.lua",where="stream",every="one block per scheduled callback"},
+    ["workshop.preparedLoad"]={module="workshop",label="Prepared current addon load",kind="init",file="TwichUI_Workshop/Prepared.lua",where="load",every="once per requested physical partition"},
+    ["workshop.preparedVerify"]={module="workshop",label="Prepared record/proof work slice",kind="work",file="TwichUI_Workshop/Summary.lua",where="Q.Step",every="requested work; shares history budget"},
     ["workshop.historyValidate"]={module="workshop",label="Historical partition validation slice",kind="work",file="TwichUI_Workshop/Summary.lua",where="Q.Step",every="explicit historical reads only"},
     ["workshop.historyLoad"]={module="workshop",label="Historical partition addon load",kind="work",file="TwichUI_Workshop/Summary.lua",where="loadPart",every="explicit historical reads only"},
     ["workshop.summary.currentDecodes"]={module="workshop",label="Current partition decode starts",kind="count",file="TwichUI_Workshop/Summary.lua",where="loadPart",every="opt-in aggregate"},
@@ -107,6 +112,7 @@ DX.OPS = {
     ["npcs.search"] = { module = "npcs", label = "NPC search (map toolbar)", kind = "search", file = "npcs/Search.lua", where = "SR.Run", every = "per search typed" },
     ["npcs.knowledge.rebuild"] = { module = "npcs", label = "NPC knowledge rows rebuilt", kind = "rebuild", file = "npcs/Knowledge.lua", where = "Build", every = "when the NPC list changes" },
     ["npcs.map.layout"] = { module = "npcs", label = "NPC markers placed on the world map", kind = "layout", visible = "map.open", file = "npcs/Map.lua", where = "NMAP.Layout", every = "per map change, zoom or pan" },
+    ["npcs.map.fade"] = { module = "npcs", label = "NPC marker entry opacity, one frame", kind = "update", visible = "map.open", file = "npcs/Map.lua", where = "FadeTick", every = "while new seamless-map markers fade in (0.18 seconds)" },
     ["guildloc.tick"] = { module = "guildloc", label = "Guild Locations: one send tick (position read, movement test, preflight, hand-over)", kind = "update", file = "guildloc/Comm.lua", where = "TickWork", every = "every 10 to 60 s (jittered) while sharing in a guild" },
     ["guildloc.receive"] = { module = "guildloc", label = "Guild Locations: one message taken in (checks, roster lookup, epoch rules)", kind = "bulk", file = "guildloc/Comm.lua", where = "Receive", every = "per guildmate message, about 1 in 4 s per sharing guildmate, none while off" },
     ["guildloc.roster"] = { module = "guildloc", label = "Guild Locations: guild roster index rebuilt", kind = "rebuild", file = "guildloc/Roster.lua", where = "Rebuild", every = "when the roster changes (coalesced, at most every 5 s), only while not off" },
@@ -182,6 +188,14 @@ DX.OPS = {
     ["map.view.step"] = { module = "map", label = "Map glide or zoom animation, one frame", kind = "update", file = "map/View.lua", where = "Step", every = "every frame during a glide" },
     ["map.view.follow"] = { module = "map", label = "Map following the view, one frame", kind = "update", file = "map/View.lua", where = "FollowStep", every = "every frame after the view moved, until still" },
     ["map.view.notify"] = { module = "map", label = "Map view change announced", kind = "update", file = "map/View.lua", where = "Notified", every = "once after a view change" },
+    ["map.interior.update"] = { module = "map", label = "Visible underground pictures", kind = "layout", visible = "map.open", file = "map/Pictures.lua", where = "Update", every = "per changed view, at most one cave and two underground cities" },
+    ["map.art.update"] = { module = "map", label = "Stitched painting selection and city layers", kind = "layout", visible = "map.open", file = "map/Art.lua", where = "MA.SetView", every = "per coalesced view or restored host change" },
+    ["map.detail.update"] = { module = "map", label = "Outdoor detail selection and bindings", kind = "layout", visible = "map.open", file = "map/Detail.lua", where = "Update", every = "per coalesced view or detail preference change" },
+    ["map.cave.update"] = { module = "map", label = "Local cave chart selection and presentation", kind = "layout", visible = "map.open", file = "map/Caves.lua", where = "MCV.Update", every = "per coalesced view or cave preference change" },
+    ["map.cave.fade"] = { module = "map", label = "Local cave chart entry opacity, one frame", kind = "update", visible = "map.open", file = "map/Caves.lua", where = "FadeStep", every = "only during a 0.15-second cave entry" },
+    ["map.texture.load"] = { module = "map", label = "Map detail texture loading and fade", kind = "update", visible = "map.open", file = "map/Pictures.lua", where = "LoadStep", every = "while a visible detail texture loads; bounded at 10 seconds" },
+    ["map.support.snapshot"] = { module = "diagnostics", label = "Map support snapshot (diagnostics overhead)", kind = "support", file = "../TwichUI_Diagnostics/MapCapture.lua", where = "Snapshot", every = "explicit capture or bounded recording; at most two view samples/second" },
+    ["map.support.export"] = { module = "diagnostics", label = "Map report serialization (diagnostics overhead)", kind = "support", file = "../TwichUI_Diagnostics/MapCapture.lua", where = "Report", every = "explicit report request only" },
     ["classbars.anim"] = { module = "classbars", label = "Class bar animation, one step", kind = "update", file = "classbars/Anim.lua", where = "OnUpdate > obj.Step", every = "every frame while a bar animates" },
     ["reminders.refresh"] = { module = "reminders", label = "Reminders: everything decided again", kind = "rebuild", file = "reminders/Controller.lua", where = "Refresh", every = "when a setting or the situation changes" },
     ["reminders.decide"] = { module = "reminders", label = "Reminders: one reminder decided", kind = "evaluate", file = "reminders/Controller.lua", where = "Decide (local)", every = "when an observation it uses changes" },
@@ -338,6 +352,8 @@ local G = {
     { "map.open", "World map shown", "state", "map", function() return Flag(WorldMapFrame ~= nil and WorldMapFrame:IsShown() or false) end },
     { "npcs.map.pool", "NPC map markers made (pool)", "pool", "map", Field("NpcMap", "pool") },
     { "npcs.map.drawn", "NPC map markers in use", "pool", "map", Field("NpcMap", "drawn") },
+    { "npcs.map.fading", "NPC map markers entering", "work", "map", Field("NpcMap", "fading") },
+    { "npcs.map.candidates", "NPC map cached candidates", "pool", "map", Field("NpcMap", "candidates") },
     { "npcs.map.layouts", "NPC map layouts so far (module count)", "work", "map", Field("NpcMap", "layouts") },
     { "guildloc.records", "Guild Locations: live positions held", "state", "map", Field("GuildLoc", "records") },
     { "guildloc.tombstones", "Guild Locations: withdrawals held", "state", "map", Field("GuildLoc", "tombstones") },
@@ -352,6 +368,9 @@ local G = {
     { "pins.map.drawn", "Pin markers in use", "pool", "map", Field("PinsMap", "drawn") },
     { "map.detail.tiles", "Map detail tiles in use", "pool", "map", Field("MapDetail", "tiles") },
     { "map.detail.pooled", "Map detail tiles kept for reuse", "pool", "map", Field("MapDetail", "pooled") },
+    { "map.interior.active", "Interior pictures in use", "pool", "map", Field("MapPictures", "active") },
+    { "map.interior.pooled", "Interior pictures kept for reuse", "pool", "map", Field("MapPictures", "pooled") },
+    { "map.texture.pending", "Map detail textures awaiting readiness", "state", "map", Field("MapPictures", "pending") },
     { "nav.decodedTiles", "Navigation tiles decoded (cache)", "cache", "map", Field("NavData", "decodedTiles") },
     { "reminders.active", "Reminders running", "state", "group", Field("ReminderController", "active") },
     { "reminders.keys", "Reminders: observations listened for", "listeners", "group", Field("ReminderController", "keys") },
@@ -496,5 +515,14 @@ for _,spec in ipairs({{"known","Known recipes"},{"pending","Queued recipes"},{"w
     Perf.Gauge('workshop.opportunities.'..key,{label=label,kind='cache',group='workshop',builtin=true,unit='count',read=function()
         local w=R.Workshop;local session=w and w.Session
         return session and session.OpportunityStatus and session.OpportunityStatus()[key]or 0
+    end})
+end
+
+-- Prepared counters must exist before the lazy Workshop addon loads so a cold
+-- capture selects them. Reading only inspects existing state, never starts work.
+for _,key in ipairs({'loads','bytes','hashes','verified','full','flag_words','cache_hits','pending','cancelled'})do
+    Perf.Gauge('workshop.prepared.'..key,{label='Prepared current '..key,kind='cache',group='workshop',builtin=true,unit=key=='bytes'and 'bytes'or 'count',read=function()
+        local q=R.Workshop and R.Workshop.Summary;local status=q and q.Status()
+        return status and status.prepared and status.prepared[key]or 0
     end})
 end

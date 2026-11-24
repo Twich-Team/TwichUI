@@ -546,13 +546,21 @@ Lab.Step("pose", function()
                 first:GetScript("OnEnter")(first); Lab.Settle(0.05)
             elseif view == "pickerRender" then
                 -- every catalogued picture, chosen through the picker's own path and drawn by the real renderer in the live preview
+                -- Logical art IDs need not be filenames: approved standalone art has explicit mappings
+                -- (for example art-tabard -> media\npcs\tabard). Offline gallery tests pin those mappings/files.
                 local bad, n = {}, 0
                 for _, e in ipairs(G.Entries()) do
                     local ok = G.Choose(id, e)
                     Lab.Settle(0.05)
+                    local art = PV.Parts().surface.art
+                    local size = math.max(art:GetWidth(), art:GetHeight())
+                    local expected = e.kind == "art" and RM.ArtTexture(e.target, size) or R.Icons.Path(e.target, size)
+                    local registered = e.kind == "art" and RM.Art(e.target) or (e.kind == "icon" and RM.ValidIcon(e.target))
+                    local current = G.Current(D())
                     local tex = PreviewArt()
                     n = n + 1
-                    if not ok or tex == "" or (e.kind == "art" and not tex:find(e.target, 1, true)) then bad[#bad + 1] = e.id end
+                    if not ok or not registered or not current or current.id ~= e.id or not art:IsShown()
+                        or not expected or tex ~= expected then bad[#bad + 1] = e.id end
                 end
                 Lab.Check("construct", "every catalogued picture is selectable and drawn by the preview renderer (" .. n .. ")", "", table.concat(bad, ","))
                 G.Choose(id, G.ForArt("reminder-low-health")); Lab.Settle(0.2)
