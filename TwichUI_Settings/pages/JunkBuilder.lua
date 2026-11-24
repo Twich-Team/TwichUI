@@ -802,7 +802,7 @@ function B.Build()
     palette.none:SetText("No matching conditions.")
 
     ---------------------------------------------------------------- the rule pane: header strip
-    rule.art = CreateFrame("Button", nil, rule)
+    rule.art = CreateFrame("Button", nil, rule, "BackdropTemplate")
     rule.art:SetSize(32, 32)
     rule.art:SetPoint("TOPLEFT", 14, -12)
     m.ReminderControl(rule.art, "action")
