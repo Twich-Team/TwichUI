@@ -107,6 +107,8 @@ local function Gather(bag, slot, wear, upgrade, recipe)
     facts.armor = class == 4 and (ARMOR[subclass] or "other") or class ~= nil and "none" or nil
     facts.tool = (class == 2 and (subclass == 14 or subclass == 20)) or TOOL_IDS[id] == true
     facts.camping = Camping(id)
+    -- Raw fish and meat are both trade goods of the cooking subclass; the name tells them apart (unverified on a Forever client).
+    facts.food = class ~= nil and (class == 7 and subclass == 8 and (name:lower():find("fish",1,true) and "fish" or "meat") or "none") or nil
     -- Mage scrolls that drop everywhere before a Mage deciphers them are consumables named "Scroll: WORD WORD"
     -- (deciphered ones are "Scroll of ..."). One sample item is the evidence; see docs/workshop/item-advisor.md.
     facts.mageScroll = class == 0 and name:sub(1, 8) == "Scroll: "

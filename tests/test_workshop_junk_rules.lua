@@ -41,6 +41,12 @@ assert(T.Match(tree,{kind='gear'})==nil,'unknown upgrade is not no')
 assert(T.Match(tree,{kind='materials',profession=false})==true,'irrelevant gear branch cannot block proven material branch')
 assert(T.Match(tree,{kind='materials'})==nil)
 assert(T.Match({type='group',match='any',children={}}, {})==false,'empty groups never match')
+-- Fish and meat are item types of their own, judged from the food fact (cooking trade goods), not the class.
+local fish,meat={type='kind',value='fish'},{type='kind',value='meat'}
+assert(T.Match(fish,{kind='materials',food='fish'})==true and T.Match(fish,{kind='materials',food='meat'})==false)
+assert(T.Match(meat,{kind='materials',food='meat'})==true and T.Match(meat,{kind='gear',food='none'})==false)
+assert(T.Match(fish,{kind='materials'})==nil,'unknown food is not no')
+assert(T.Copy(fish) and T.Copy(meat) and T.Phrase(fish)=='it is Fish' and T.Phrase(meat)=='it is Meat')
 local copy=assert(T.Copy(tree));assert(T.Equal(copy,tree) and copy~=tree)
 assert(not T.Move(tree,tree,tree,1,true))
 local gear,materials=tree.children[1],tree.children[2]
