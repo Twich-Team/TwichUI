@@ -312,6 +312,8 @@ guildloc\State.lua
 guildloc\Roster.lua
 guildloc\Comm.lua
 guildloc\Map.lua
+guildloc\Diagnostics.lua
+guildloc\Window.lua
 
 # Cozy Sleeping Bag guide: a small window that follows the hidden quest chain behind the bag, from the character's own quest
 # history (nothing saved but where the window sits), with optional map pins made through pins\Pins.lua. Never opens by itself;

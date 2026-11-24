@@ -1,4 +1,4 @@
--- TwichUI settings: Guild Locations (guildloc/). Two controls and two status lines. The choice (Sharing, Invisible, Off) is
+-- TwichUI settings: Guild Locations (guildloc/). Privacy controls, current status and the focused diagnostic view. The choice is
 -- guildloc/State.lua's alone: this page reads GL.State and changes it only through GL.SetState, which saves it and ends or
 -- withdraws a session as needed. The choice has no default on this page, so "Reset this page" never touches it (only the
 -- interval goes back to 15 s). Opening the page starts nothing; choosing Sharing is the only thing here that does.
@@ -28,11 +28,13 @@ local function Now()
     if why == "held" or why == "not-ready" then return "Inactive", "quiet", Problem(why) end
     if state == "off" then return "Nothing sent or shown", "quiet", "Off: nothing is sent, received or kept." end
     if state == "invisible" then
-        return "Not sending", "quiet", "You are hidden from guildmates in this feature, and you still see those who share." .. (why and ("\n" .. Problem(why)) or "")
+        return "Not sharing your position", "quiet", "You are hidden from guildmates in this feature, and you still see those who share. Your addon may answer a guildmate's diagnostic check with a small status reply containing no coordinates." .. (why and ("\n" .. Problem(why)) or "")
     end
     if not IsInGuild() then return "Not in a guild", "quiet", "Sharing is chosen, but there is no guild to send to. Your choice is kept and applies in any guild you join." end
-    if GL.CanSend() then return "Sending", "ok", "Your position is sent when it can be read (not while loading or in places that hide it), more often while you move." end
-    return "Waiting", "warn", "Sharing is chosen, but nothing can be sent right now. It resumes by itself."
+    local ready, reason = (GL.SendStatus or GL.CanSend)()
+    if ready then return "Ready to send", "ok", "Your client can send a position now. This does not confirm a guildmate received it; use Diagnostics to test both directions." end
+    local D = GL.Diagnostics
+    return "Waiting", "warn", D and D.Describe(reason) or "Sharing is chosen, but nothing can be sent right now. Open Diagnostics for the reason."
 end
 
 -- A change made elsewhere (the launcher's menu) shows in an open window.
@@ -41,7 +43,7 @@ local function Redraw() K.RefreshOverview() end
 K.Page({
     key = "guildLocations", icon = "guildLocations", name = "Guild Locations", order = 77, group = "map",
     description = "Share your own map position with guildmates who use TwichUI, and see theirs.",
-    keywords = "guild locations location position share sharing invisible hidden privacy guildmates members map addon channel heartbeat",
+    keywords = "guild locations location position share sharing invisible hidden privacy guildmates members map addon channel heartbeat diagnostics test missing",
     when = function() return R.GuildLoc ~= nil end,
     overview = { label = "Guild Locations", tip = "Your position for guildmates running TwichUI.", status = function()
         local state, why = R.GuildLoc.State()
@@ -52,9 +54,9 @@ K.Page({
         local Header, Choice = K.Header, K.Choice
         GL.OnChange(Redraw)
 
-        Header("Your location", "On by default. Your own current map position is sent over your guild's hidden addon channel (never chat) to guildmates running TwichUI, about once a minute while you stand still and more often while you move. It is not sent to anyone outside your guild, is not relayed, and is not kept as a history. Nothing is shown on the map yet.")
+        Header("Your location", "On by default. Your own current map position is sent over your guild's hidden addon channel (never chat) to guildmates running TwichUI, about once a minute while you stand still and more often while you move. It is not sent to anyone outside your guild, is not relayed, and is not kept as a history. Guildmates who share appear on relevant maps; your group uses the game's own markers.")
         local choice = Choice("guildLocationsState", "Guild Locations",
-            "Sharing: your position is sent and guildmates' positions are shown.\nInvisible: nothing is sent, and you still see guildmates who share.\nOff: nothing is sent, received or kept.\n\nInvisible and Off apply to this feature only. They do not change party pins, map pings or the game's own group markers. You can choose Invisible or Off while not in a guild; the choice is kept for when you join one. It belongs to this account, not to a profile, and is not part of backups or shared settings.",
+            "Sharing: your position is sent and guildmates' positions are shown.\nInvisible: your position is not sent, and you still see guildmates who share. Your addon may answer a guildmate's diagnostic check with a small status reply containing no coordinates.\nOff: nothing is sent, received or kept; diagnostic requests are not answered.\n\nInvisible and Off apply to this feature only. They do not change party pins, map pings or the game's own group markers. You can choose Invisible or Off while not in a guild; the choice is kept for when you join one. It belongs to this account, not to a profile, and is not part of backups or shared settings.",
             K.STRING, nil, function() return (GL.State()) end, function(value) GL.SetState(value) end,
             { { "sharing", "Sharing" }, { "invisible", "Invisible (still see others)" }, { "off", "Off" } })
         if choice then
@@ -78,5 +80,8 @@ K.Page({
             function() return GL.State() == "sharing" and "ok" or "quiet" end)
         K.Status("Status", function() return (Now()) end, function() local _, _, detail = Now(); return detail end,
             "Whether anything can be sent at this moment.", function() local _, tone = Now(); return tone end)
+        K.Button("Diagnostics", "Open", function()
+            if GL.Window then GL.Window.Show() end
+        end, "Inspect a guildmate's receive and map status, run an isolated local self-test, or ask their addon to reply automatically. Opening the window sends nothing and changes no sharing choice.")
     end,
 })

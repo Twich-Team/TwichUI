@@ -132,6 +132,7 @@ uses an item, sends anything or makes up events. Each states its cost before you
 | `guildloc.roster` (`Perf.Call`) | `guildloc/Roster.lua` `Rebuild` | rebuild |
 | `guildloc.map.layout` (`Perf.Start`, only with the map open) | `guildloc/Map.lua` `GM.Layout` | layout |
 | `guildloc.search` (`Perf.Start`) | `guildloc/Map.lua` `GM.Search` | bulk |
+| `guildloc.diagnostic` (`Perf.Call`, diagnostic controls only) | `guildloc/Diagnostics.lua` `Handle`, `Poll`; four polls during an explicit 90-second check, automatic replies at most every 10 seconds | bulk |
 | `npcs.import`, `npcs.cleanup` | `npcs/Store.lua` `NS.MergeReported`, `NS.ForgetMany` | bulk |
 | `pins.map.layout` | `pins/Map.lua` `PM.Layout` | layout |
 | `reminders.refresh` (`Perf.Call`), `reminders.decide` | `reminders/Controller.lua` | rebuild, evaluate |

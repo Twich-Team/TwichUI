@@ -276,39 +276,52 @@ local function TakeToken(key, now)
 end
 
 -- The epoch rules. Returns true or false and a code.
-local function Apply(key, name, kind, e, n, map, x, y)
-    local now = Now()
-    local rec = records[key]
-    if rec and now - rec.at >= L.expiry then Forget(key); rec = nil; stats.expired = stats.expired + 1 end
+function GL.RecordCurrent(rec, now)
+    return rec ~= nil and now - rec.at < L.expiry
+end
+
+-- The same reducer is used by the live inbox and the isolated local diagnostic. It never
+-- changes the previous record or any gameplay state; callers own storage and capacity.
+function GL.ReduceRecord(rec, kind, e, n, map, x, y, name, now)
+    if rec and not GL.RecordCurrent(rec, now) then rec = nil end
     if kind == "p" then
         if rec then
-            if e < rec.e then return Drop("old-epoch") end
+            if e < rec.e then return nil, "old-epoch" end
             if e == rec.e then
-                if rec.closed then return Drop("closed-epoch") end
-                if n <= rec.n then return Drop("old-number") end
+                if rec.closed then return nil, "closed-epoch" end
+                if n <= rec.n then return nil, "old-number" end
             end
         end
     elseif rec and e < rec.e then
-        return Drop("old-epoch")
+        return nil, "old-epoch"
     end
+    local new = { e = e, n = kind == "p" and n or 0, closed = kind == "w", at = now, name = name }
+    if kind == "p" then new.map, new.x, new.y = map, x, y end
+    return new
+end
+
+local function Apply(key, name, kind, e, n, map, x, y)
+    local now = Now()
+    local rec = records[key]
+    if rec and not GL.RecordCurrent(rec, now) then Forget(key); rec = nil; stats.expired = stats.expired + 1 end
+    local new, reason = GL.ReduceRecord(rec, kind, e, n, map, x, y, name, now)
+    if not new then return Drop(reason) end
     if not rec and nLive + nTomb >= L.records then
         SweepRecords(now)
         if nLive + nTomb >= L.records then return Drop("full") end
     end
-    local new = { e = e, n = kind == "p" and n or 0, closed = kind == "w", at = now, name = name }
     if rec then new.born = rec.born else born = born + 1; new.born = born end
-    if kind == "p" then new.map, new.x, new.y = map, x, y end
     Store(key, new)
     ArmSweep()
     if kind == "p" then stats.received = stats.received + 1 else stats.withdrawn = stats.withdrawn + 1 end
-    return true
+    return true, kind == "p" and "accepted" or "withdrawn"
 end
 
 -- A copy of what is held for a name: { epoch, number, closed, age, map, x, y }, or nil. For tests and the map.
 function GL.Peek(name)
     local full = SH.FullName(name)
     local rec = full and records[full:lower()]
-    if not rec or Now() - rec.at >= L.expiry then return nil end
+    if not GL.RecordCurrent(rec, Now()) then return nil end
     return { epoch = rec.e, number = rec.n, closed = rec.closed, age = Now() - rec.at, map = rec.map, x = rec.x, y = rec.y }
 end
 
@@ -318,7 +331,7 @@ end
 function GL.Live()
     local list, now = {}, Now()
     for key, rec in pairs(records) do
-        if not rec.closed and rec.map and now - rec.at < L.expiry then
+        if not rec.closed and rec.map and GL.RecordCurrent(rec, now) then
             list[#list + 1] = { key = key, name = rec.name, born = rec.born, map = rec.map, x = rec.x, y = rec.y, at = rec.at }
         end
     end
@@ -332,7 +345,7 @@ end
 -- The same copy for one key, asked again at the moment of use; nil when it is withdrawn, expired or gone.
 function GL.Fresh(key)
     local rec = type(key) == "string" and records[key]
-    if not rec or rec.closed or not rec.map or Now() - rec.at >= L.expiry then return nil end
+    if not GL.RecordCurrent(rec, Now()) or rec.closed or not rec.map then return nil end
     return { key = key, name = rec.name, born = rec.born, map = rec.map, x = rec.x, y = rec.y, at = rec.at }
 end
 
@@ -349,7 +362,8 @@ local function Receive(text, dist, sender)
         RS.Request()
         return Drop("not-in-roster")
     end
-    if not TakeToken(key, Now()) then return end
+    local token, tokenWhy = TakeToken(key, Now())
+    if not token then return false, tokenWhy end
     local kind, e, n, map, x, y = GL.Parse(text)
     if not kind then return Drop(e) end
     if kind == "p" and not (NS and NS.ValidMap(map)) then return Drop("unknown-map") end
@@ -359,7 +373,10 @@ end
 local function OnMessage(_, text, dist, sender)
     stats.heard = stats.heard + 1   -- anything the game handed to this prefix, before any check (a count only)
     if GL.State() == "off" then return end   -- first thing: off keeps and shows nothing
-    Perf.Call("guildloc.receive", Receive, text, dist, sender)
+    local D = GL.Diagnostics
+    if D and D.Handle(text, dist, sender) then return end
+    local ok, reason = Perf.Call("guildloc.receive", Receive, text, dist, sender)
+    if D then D.Observe(sender, ok, reason) end
 end
 AceComm:RegisterComm(GL.PREFIX, OnMessage)
 GL.OnMessage = OnMessage   -- for tests
@@ -412,6 +429,11 @@ local tickT
 local guildKey
 local noSend            -- why a session could not start, for the report
 local eventsOn = {}
+local lastSent, lastTickAt
+
+local function DiagnosticChanged()
+    if GL.Diagnostics then GL.Diagnostics.Changed() end
+end
 
 local function InWorld() return R.Life ~= nil and R.Life.InWorld() end
 
@@ -462,6 +484,11 @@ end
 local function PositionDone(arg, _, _, accepted)
     arg.fired = true
     arg.sent = accepted == true
+    if arg.sent and session and arg.gen == session.gen then
+        lastSent = { epoch = arg.epoch, number = arg.number, at = Now() }
+        lastSkip = nil
+        DiagnosticChanged()
+    end
     if arg.queued then   -- a send the library had queued has now been released
         outstanding = math.max(0, outstanding - 1)
         if arg.sent then stats.queuedSent = stats.queuedSent + 1 end
@@ -493,7 +520,7 @@ local function SendPosition(sess, pos)
     local fits, reason = Preflight(CTL, text)
     if not fits then return Skip(reason) end
     sess.seq = seq
-    local arg = { gen = sess.gen }
+    local arg = { gen = sess.gen, epoch = sess.epoch, number = seq }
     local ok, err = pcall(AceComm.SendCommMessage, AceComm, GL.PREFIX, text, "GUILD", nil, "NORMAL", PositionDone, arg)
     if not ok then
         stats.errors = stats.errors + 1
@@ -515,6 +542,7 @@ end
 
 local function TickWork(sess, interval)
     stats.ticks = stats.ticks + 1
+    lastTickAt, lastSkip = Now(), nil
     sess.idle = sess.idle + 1
     if sess.idle >= math.max(1, math.floor(L.heartbeat / interval + 0.5)) then sess.due = true end
     if not InWorld() then return Skip("loading") end
@@ -534,12 +562,14 @@ local function Tick()
     local interval = GL.Interval()
     tickT.Set(interval * (1 + (math.random() * 2 - 1) * L.jitter))   -- first, so nothing below can end the chain
     Perf.Call("guildloc.tick", TickWork, sess, interval)
+    DiagnosticChanged()
 end
 tickT = GL.NewTimer(Tick)
 
 local function EndSession()
     if not session then return end
     session = nil
+    lastSent = nil
     sgen = sgen + 1
     tickT.Cancel()
 end
@@ -724,13 +754,50 @@ R:OnInit(function() Evaluate() end)
 ---------------------------------------------------------------------------
 -- What the troubleshooting report and the tests may read: counts and codes only
 ---------------------------------------------------------------------------
-function GL.CanSend()
-    if GL.State() ~= "sharing" then return false, "not-sharing" end
+function GL.SendStatus()
+    local state, reason = GL.State()
+    if reason == "held" or reason == "not-ready" then return false, reason end
+    if state ~= "sharing" then return false, "not-sharing" end
+    if not IsInGuild() then return false, "no-guild" end
+    if not InWorld() then return false, "loading" end
     if not session then return false, noSend or "no-session" end
+    if noSend then return false, noSend end
+    if SH.Blocked() then return false, "blocked" end
     local CTL, why = Transport()
     if not CTL then return false, why end
     if not readable then return false, "ctl-unreadable" end
-    return true
+    if CTL.bQueueing then return false, "queueing" end
+    if outstanding > 0 then return false, "outstanding" end
+    local pos = ReadPosition()
+    if not pos then return false, "no-position" end
+    local fits, code = Preflight(CTL, GL.EncodePosition(session.epoch, math.min(session.seq + 1, L.maxSeq), pos.map, pos.x, pos.y))
+    if not fits then return false, code end
+    return true, "ready"
+end
+GL.CanSend = GL.SendStatus
+
+-- Identifiers and receiver-clock ages only, never coordinates. Used to compare a peer's
+-- normal inbox with the last position the game accepted locally.
+function GL.LastSent()
+    if not lastSent then return nil end
+    return { epoch = lastSent.epoch, number = lastSent.number, age = Now() - lastSent.at }
+end
+
+-- A bounded diagnostic control on the SAME prefix and guild route. It contains no
+-- positions, uses the regular congestion gate, and cannot enable sharing or send while Off.
+function GL.SendDiagnostic(text, callback)
+    if GL.State() == "off" then return false, "off" end
+    if not IsInGuild() then return false, "no-guild" end
+    if not InWorld() then return false, "loading" end
+    if SH.Blocked() then return false, "blocked" end
+    if type(text) ~= "string" or #text > 220 then return false, "malformed" end
+    local ctl, why = Transport()
+    if not ctl then return false, why end
+    local fits, code = Preflight(ctl, text)
+    if not fits then return false, code end
+    local ok = pcall(AceComm.SendCommMessage, AceComm, GL.PREFIX, text, "GUILD", nil, "NORMAL",
+        function(_, _, _, accepted) if callback then callback(accepted == true) end end)
+    return ok, ok and "handed-over" or "send-error"
 end
 
 local function Copy(t)
@@ -745,12 +812,19 @@ function GL.Snapshot()
     local timers = tickT.Engines() + wT.Engines() + sweepT.Engines() + (RS.Snapshot().timers or 0) + (m.timers or 0)
     local armed = (tickT.Armed() and 1 or 0) + (wT.Armed() and 1 or 0) + (sweepT.Armed() and 1 or 0) + (m.armed or 0)
     local events = (eventsOn.world and 1 or 0) + (eventsOn.guild and 1 or 0) + (RS.Started() and 1 or 0) + (m.events or 0)
+    local d = GL.Diagnostics and GL.Diagnostics.Snapshot() or {}
+    timers = timers + (d.timers or 0) + (m.syntheticTimers or 0)
+    armed = armed + (d.armed or 0) + (m.synthetic and 1 or 0)
+    events = events + (d.events or 0)
     return {
         state = state, reason = why, interval = GL.Interval(), session = session ~= nil, noSend = noSend,
-        transport = transportStatus, lastSkip = lastSkip, pending = GL.Pending(), withdrawing = wd ~= nil,
+        transport = transportStatus, lastSkip = lastSkip, tickAge = lastTickAt and Now() - lastTickAt,
+        sentAge = lastSent and Now() - lastSent.at, pending = GL.Pending(), withdrawing = wd ~= nil,
         records = nLive, tombstones = nTomb, buckets = nBuckets, outstanding = outstanding,
         roster = RS.Count(), timers = timers, armed = armed, events = events,
         mapPool = m.pool, mapDrawn = m.drawn, mapLayouts = m.layouts, mapSkipped = m.skipped,
+        mapSynthetic = m.synthetic and 1 or 0,
+        diagnosticHeld = (d.watching and 1 or 0) + (d.running and 1 or 0) + (d.responding and 1 or 0),
         stats = Copy(stats), drops = Copy(drops), skips = Copy(skips),
     }
 end

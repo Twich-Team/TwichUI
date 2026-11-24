@@ -97,6 +97,12 @@
     "dependencies": ["settings"],
     "simulators": [{"script": "reminders"}]
   },
+  "guild-locations": {
+    "tests": ["test_guild_locations*.lua", "test_diagnostics.lua", "test_friend_diagnostics.lua"],
+    "syntax": ["!!!TwichUI/guildloc/**/*.lua", "!!!TwichUI/diag/GuildLoc.lua", "!!!TwichUI/diag/Window.lua", "TwichUI_Settings/pages/GuildLocations.lua"],
+    "dependencies": ["navigation", "settings"],
+    "simulators": [{"script": "smoke"}, {"script": "settings", "args": ["guildLocations"]}]
+  },
   "navigation": {
     "tests": ["test_nav*.lua", "test_map*.lua", "test_maplab*.py", "test_diagnostics.lua", "test_perf_engine.lua", "test_way.lua", "test_arrival.lua", "test_explorer.lua", "test_guide_waypoint.lua", "test_party_pins*.lua", "test_pins*.lua", "test_npcs*.lua", "test_npc*.lua", "test_guild_locations*.lua", "test_markers*.lua", "test_marker_bar.lua"],
     "syntax": ["TwichUI_Diagnostics/**/*.lua", "!!!TwichUI/DiagnosticsLauncher.lua", "!!!TwichUI/nav/**/*.lua", "!!!TwichUI/map/**/*.lua", "!!!TwichUI/pins/**/*.lua", "!!!TwichUI/npcs/**/*.lua", "!!!TwichUI/guildloc/**/*.lua", "TwichUI_NavData/**/*.lua"],

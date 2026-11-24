@@ -59,7 +59,7 @@ function NS.CleanProfession(text) return R.Pins.CleanName(text, NS.PROF_MAX) end
 function NS.CleanTitle(text) return R.Pins.CleanName(text, NS.TITLE_MAX) end
 
 -- A map the client knows that is a zone, a dungeon or smaller: a continent or the world is too coarse to say where an
--- NPC is. Looked up once per map per session.
+-- NPC is. Positive results are cached per session; failed lookups can recover.
 local mapOk = {}
 function NS.ValidMap(map)
     if not Whole(map, 1, MAX_ID) then return false end
@@ -68,7 +68,9 @@ function NS.ValidMap(map)
     local ok, info = false, nil
     if C_Map and C_Map.GetMapInfo then ok, info = pcall(C_Map.GetMapInfo, map) end
     known = ok and type(info) == "table" and type(info.mapType) == "number" and info.mapType >= ZONE or false
-    mapOk[map] = known
+    -- A missing/erroring map lookup can be temporary during loading. Keep positive knowledge,
+    -- but let a later position retry metadata instead of rejecting that map until /reload.
+    if known then mapOk[map] = true end
     return known
 end
 

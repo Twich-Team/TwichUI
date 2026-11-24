@@ -5,7 +5,7 @@
 --
 -- Three states, all through GL.State / GL.SetState / GL.Toggle:
 --   sharing    (the default) sends your position and shows the positions that arrive
---   invisible  sends nothing and still shows others. Hidden from this feature only.
+--   invisible  sends no position and still shows others; may answer a bounded diagnostic status request.
 --   off        nothing sent, nothing received, nothing kept
 -- One account-wide record, TwichUIDB.guildLoc = { state, interval, lastEpoch, wp }. It is outside profiles, configuration
 -- sharing and backups (setup/Restore.lua OWN_LEFT_OUT, setup/TwichConfig.lua TC.LOCAL): switching profile, importing
@@ -18,7 +18,7 @@
 --   * An interval that is not one of the offered ones reads as the default; that is not a privacy choice.
 --   * `lastEpoch` is the highest epoch this account has put on the wire (an epoch only orders one sender's sessions and
 --     withdrawals; freshness is always the receiver's own clock). A present but unusable value stops all sending until the
---     player chooses a state again; it is never reused, wrapped or guessed.
+--     saved ordering can be recovered safely; choosing a state alone does not repair it. Never reuse, wrap or guess it.
 --   * `wp` (true) is a withdrawal still owed to the guild after a reload (see Comm.lua).
 -- Being outside a guild never stops a choice from being made or saved: the guild decides whether anything can be sent.
 

@@ -59,9 +59,14 @@ local layoutT
 local picked                    -- key of the searched record: drawn whatever the cap says
 local ringUntil                 -- GetTime() until which a ring is wanted on the picked marker, or nil
 local pulse                     -- { frame, rings, t, running }: the ring
+local preview, previewProvider, previewT
+local previewOn = false
 local stats = { finds = 0, pulses = 0, layouts = 0, skipped = 0, capped = 0, menus = 0, waypoints = 0, navs = 0, invites = 0, stale = 0 }
 
 local function Enabled() return GL.State() ~= "off" end
+local function DiagnosticChanged()
+    if GL.Diagnostics then GL.Diagnostics.Changed() end
+end
 local function MapOpen() return WorldMapFrame and WorldMapFrame:IsShown() end
 local function Notice(text)
     if UIErrorsFrame and UIErrorsFrame.AddMessage then UIErrorsFrame:AddMessage(text, 1, 0.82, 0) end
@@ -264,6 +269,68 @@ end
 ---------------------------------------------------------------------------
 -- Everything on the map now
 ---------------------------------------------------------------------------
+-- The same selection is used by drawing and the on-demand diagnosis. Nothing about a sender's
+-- last layout is retained as evidence: group membership, map geometry and expiry are read anew.
+local function Selection(viewed, explainKey)
+    local PM, NMAP = R.PinsMap, R.NpcMap
+    if not (viewed and PM and PM.Position) then return {}, false, "map-unavailable" end
+    local relevant, stitched
+    if NMAP and NMAP.Relevant then relevant, stitched = NMAP.Relevant(viewed) end
+    local low, high = stitched and -EDGE or 0, stitched and 1 + EDGE or 1
+    local group, me = GroupSet(), SelfKey()
+    local want, pickW, reason = {}, nil, "no-position"
+    local at = {}
+    for _, rec in ipairs(GL.Live()) do
+        local code, mx, my
+        if rec.key == me then code = "self"
+        elseif group[rec.key] then code = "group"
+        elseif relevant and not relevant(rec.map) then code = "different-map"
+        else
+            at.map, at.x, at.y = rec.map, rec.x, rec.y
+            local ok
+            ok, mx, my = pcall(PM.Position, at, viewed)
+            if not ok or type(mx) ~= "number" or type(my) ~= "number" or mx ~= mx or my ~= my then code = "projection"
+            elseif mx < low or mx > high or my < low or my > high then code = "bounds"
+            else
+                local w = { rec = rec, mx = mx, my = my, i = #want + 1 }
+                want[w.i] = w
+                if rec.key == picked then pickW = w end
+                code = "eligible"
+            end
+        end
+        if rec.key == explainKey then reason = code end
+        -- Ordinary layouts stop once the cap and any searched record are settled.
+        -- An explicit diagnosis continues to find its member even beyond the cap.
+        if not explainKey and #want > MAX_DRAWN and (not picked or pickW) then break end
+    end
+    local capped = #want > MAX_DRAWN
+    if capped then
+        for i = #want, MAX_DRAWN + 1, -1 do want[i] = nil end
+        if pickW and pickW.i > MAX_DRAWN then want[MAX_DRAWN] = pickW end
+    end
+    if reason == "eligible" then
+        reason = "cap"
+        for _, w in ipairs(want) do
+            if w.rec.key == explainKey then
+                local b = byKey[explainKey]
+                reason = b and b:IsShown() and b.mx == w.mx and b.my == w.my and "drawn" or "pending"
+                break
+            end
+        end
+    end
+    return want, capped, reason
+end
+
+-- A code only: no coordinates, names or retained per-member diagnostic log.
+function GM.Explain(key)
+    if not Enabled() then return "off" end
+    if not (installed and WorldMapFrame) then return "map-unavailable" end
+    if not MapOpen() then return "map-closed" end
+    if key == SelfKey() then return "self" end
+    local _, _, code = Selection(WorldMapFrame:GetMapID(), key)
+    return code
+end
+
 -- Runs when the map, the records or the roster change, never per frame and never while the map is hidden.
 function GM.Layout()
     if not installed then return end
@@ -278,40 +345,8 @@ function GM.Layout()
     layoutT.Cancel()
     stats.layouts = stats.layouts + 1
     if picked and not GL.Fresh(picked) then GM.ClearPick(true) end   -- withdrawn, expired or gone: the exemption goes with it
-    local want = {}
-    local viewed = WorldMapFrame:GetMapID()
-    local PM = R.PinsMap
-    local NMAP = R.NpcMap
-    if viewed and PM and PM.Position then
-        local list = GL.Live()
-        if #list > 0 then
-            local relevant, stitched
-            if NMAP and NMAP.Relevant then relevant, stitched = NMAP.Relevant(viewed) end
-            local low, high = stitched and -EDGE or 0, stitched and 1 + EDGE or 1
-            local group, me = GroupSet(), SelfKey()
-            local at = {}   -- one place handed to Position (it reads map, x, y)
-            local pickW
-            for _, rec in ipairs(list) do
-                if rec.key ~= me and not group[rec.key] and (not relevant or relevant(rec.map)) then
-                    at.map, at.x, at.y = rec.map, rec.x, rec.y
-                    local mx, my = PM.Position(at, viewed)
-                    if mx and mx >= low and mx <= high and my >= low and my <= high then
-                        local w = { rec = rec, mx = mx, my = my, i = #want + 1 }
-                        want[w.i] = w
-                        if rec.key == picked then pickW = w end
-                        -- past the cap: only the searched record is still wanted
-                        if #want > MAX_DRAWN and (not picked or pickW) then break end
-                    end
-                end
-            end
-            if #want > MAX_DRAWN then
-                stats.capped = stats.capped + 1
-                -- the searched record takes the place of the last ordinary one, so the total stays at the cap
-                for i = #want, MAX_DRAWN + 1, -1 do want[i] = nil end
-                if pickW and pickW.i > MAX_DRAWN then want[MAX_DRAWN] = pickW end
-            end
-        end
-    end
+    local want, capped = Selection(WorldMapFrame:GetMapID())
+    if capped then stats.capped = stats.capped + 1 end
     -- a record keeps its marker; the rest are let go, then fill from the free ones
     local keep = {}
     for _, w in ipairs(want) do
@@ -353,6 +388,7 @@ function GM.Layout()
         StopPulse()
     end
     if pt then Perf.Stop(pt) end
+    DiagnosticChanged()
 end
 
 local function Rescale()
@@ -653,9 +689,61 @@ local function Build()
     function provider:RefreshAllData() GM.Request(false) end
     function provider:OnMapChanged() ReleaseAll(); GM.Request(false) end   -- the old places mean nothing on the new map
     function provider:OnCanvasSizeChanged() GM.Request(false) end
-    function provider:OnHide() layoutT.Cancel(); GM.ClearPick(true); ReleaseAll(); dirty = true end   -- no work for a closed map
+    function provider:OnHide()
+        layoutT.Cancel(); GM.ClearPick(true); ReleaseAll(); dirty = true
+        DiagnosticChanged()
+    end   -- no work for a closed map
     function provider:OnCanvasScaleChanged() Rescale() end
     return true
+end
+
+local function StopPreview()
+    if not previewOn then return end
+    previewOn = false
+    previewT.Cancel()
+    Release(preview)
+    WorldMapFrame:RemoveDataProvider(previewProvider)
+end
+GM.StopSelfTest = StopPreview
+
+-- A user-invoked, local rendering check, including while Off. Its badge and temporary
+-- provider never participate in records, selection, networking or the real marker cap.
+function GM.SelfTest()
+    if not (WorldMapFrame and Build()) then return false, "map-unavailable" end
+    if not MapOpen() then return false, "map-closed" end
+    if not preview then
+        preview = NewMarker()
+        preview:EnableMouse(false)
+        preview:SetScript("OnClick", nil)
+        preview:SetScript("OnEnter", nil)
+        preview:SetScript("OnLeave", nil)
+        previewProvider = CreateFromMixins(MapCanvasDataProviderMixin)
+        function previewProvider:RemoveAllData() preview:Hide() end
+        function previewProvider:RefreshAllData() if previewOn then preview:Show() end end
+        function previewProvider:OnMapChanged() StopPreview() end
+        function previewProvider:OnHide() StopPreview() end
+        function previewProvider:OnCanvasScaleChanged() if previewOn then Place(preview) end end
+        previewT = GL.NewTimer(StopPreview)
+    end
+    -- Scroll values are the visible view's normalized middle, including when zoomed or
+    -- panned on the seamless map. The canvas's middle may be far outside the viewport.
+    local sc, mx, my = WorldMapFrame.ScrollContainer, 0.5, 0.5
+    if sc and sc.GetCurrentScrollX and sc.GetCurrentScrollY then
+        local ok, x, y = pcall(function() return sc:GetCurrentScrollX(), sc:GetCurrentScrollY() end)
+        if ok and not Secret(x) and not Secret(y) and type(x) == "number" and type(y) == "number"
+            and x == x and y == y and math.abs(x) < math.huge and math.abs(y) < math.huge then mx, my = x, y end
+    end
+    Dress(preview, { rec = { key = "synthetic", name = "SYNTHETIC" }, mx = mx, my = my })
+    preview.label:Show()
+    preview:SetFrameLevel(FrameLevel())
+    if not Place(preview) then StopPreview(); Release(preview) return false, "map-unavailable" end
+    if not previewOn then
+        WorldMapFrame:AddDataProvider(previewProvider)
+        previewOn = true
+    end
+    preview:Show()
+    previewT.Set(10)
+    return true, "shown"
 end
 
 -- Makes the map agree with the choice: off (or held) takes the provider and its event off; otherwise it is on.
@@ -687,10 +775,22 @@ end)
 RS.OnRefresh(function() GM.Request(true) end)   -- class and level come from the roster
 GL.OnChange(function(kind)
     if kind ~= "state" then return end
+    StopPreview()
     GM.Refresh()
     local T = R.MapTools
     if T and T.GuildChanged then T.GuildChanged() end   -- the toolbar's eye follows the choice, whoever made it
 end)
+if R.MapView and R.MapView.Subscribe then
+    R.MapView.Subscribe(function(event)
+        if event == "hide" then
+            StopPreview()
+            if installed then layoutT.Cancel(); GM.ClearPick(true); ReleaseAll(); dirty = true end
+            DiagnosticChanged()
+        elseif event == "view" or event == "attach" or event == "off" then
+            if installed and MapOpen() then GM.Request(true) end
+        end
+    end)
+end
 if R.PinsLook and R.PinsLook.OnPrefChange then
     R.PinsLook.OnPrefChange(function()
         for _, b in ipairs(pool) do
@@ -710,7 +810,8 @@ function GM.Snapshot()
         skipped = stats.skipped, capped = stats.capped, menus = stats.menus, waypoints = stats.waypoints, navs = stats.navs,
         invites = stats.invites, stale = stats.stale, finds = stats.finds, pulses = stats.pulses, picked = picked ~= nil,
         ringing = pulse ~= nil and pulse.running == true, dirty = dirty, timers = layoutT.Engines(), armed = layoutT.Armed() and 1 or 0,
-        events = groupOn and 1 or 0 }
+        events = groupOn and 1 or 0, synthetic = previewOn,
+        syntheticTimers = previewT and previewT.Engines() or 0 }
 end
 function GM.Marker(i) return pool[i] end
 function GM.Used() return used end
