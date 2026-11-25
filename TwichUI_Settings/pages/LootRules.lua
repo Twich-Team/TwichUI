@@ -33,6 +33,18 @@ local function Wg() return R.SettingsWidgets end
 local function LR() return R.LootRolls end
 local function Ru() return R.LootRules end
 
+-- A choice among a few (roll action, card display, all / any): the settings' own segment, selected with :SetOn. Where the settings material
+-- is not there (the page is only ever built by the settings addon, so this is a guard), the older toggle stands in.
+local function Choice(parent, label, width, onClick)
+    local M = R.SettingsMaterial
+    if M and M.Segment then
+        local b = M.Segment(parent, label, width, onClick)
+        b.SetOn = b.SetSelected
+        return b
+    end
+    return R.FrameLook.Toggle(parent, label, width, onClick)
+end
+
 local ACTION_ICON = { need = "lootNeed", greed = "lootGreed", pass = "lootPass" }
 local ACTION_WORD = { none = "No change", need = "Need", greed = "Greed", pass = "Pass" }
 
@@ -365,8 +377,8 @@ local function GroupRow(i)
     g.rail = g.frame:CreateTexture(nil, "ARTWORK"); g.rail:SetWidth(3); g.rail:SetPoint("TOPLEFT", 0, 0); g.rail:SetPoint("BOTTOMLEFT", 0, 0)
     g.label = G.Text(g.frame, "body"); g.label:SetPoint("LEFT", 12, 0)
     g.label:SetText("Block")
-    g.all = R.FrameLook.Toggle(g.frame, "All", 46, function() if g.path and selected then LR().SetMatch(selected, "all", g.path); P.QueueRefresh() end end)
-    g.any = R.FrameLook.Toggle(g.frame, "Any", 46, function() if g.path and selected then LR().SetMatch(selected, "any", g.path); P.QueueRefresh() end end)
+    g.all = Choice(g.frame, "All", 46, function() if g.path and selected then LR().SetMatch(selected, "all", g.path); P.QueueRefresh() end end)
+    g.any = Choice(g.frame, "Any", 46, function() if g.path and selected then LR().SetMatch(selected, "any", g.path); P.QueueRefresh() end end)
     g.all:SetHeight(24); g.any:SetHeight(24)
     g.addCond = G.Button(g.frame, "+ Condition", 90, "secondary", function() if g.path then AddMenu(g.addCond, g.path) end end)
     g.addGroup = G.Button(g.frame, "+ Block", 66, "secondary", function() if g.path then AddGroupHere(g.path) end end)
@@ -682,8 +694,7 @@ end
 function P.Height() return (f and f.height) or 420 end
 
 local function Segment(parent, label, onClick)
-    local FL = R.FrameLook
-    return FL.Toggle(parent, label, 96, onClick)
+    return Choice(parent, label, 96, onClick)
 end
 
 local function Build()
@@ -779,7 +790,7 @@ local function Build()
     f.thenTitle = Part(G.Text(e, "heading"))
     f.actions = {}
     for _, key in ipairs({ "none", "need", "greed", "pass" }) do
-        local b = Part(R.FrameLook.Toggle(e, ACTION_WORD[key], 120, function()
+        local b = Part(Choice(e, ACTION_WORD[key], 120, function()
             if selected then
                 local v = LR().Rule(selected)
                 if v and v.action ~= key then ClosePicker() end
@@ -803,7 +814,7 @@ local function Build()
     R.Interact.Tip(f.actions.pass, "Pass", "Chooses Pass.")
     f.displayTitle = Part(G.Text(e, "heading")); f.displays = {}
     for _, key in ipairs({ "none", "expanded", "collapsed" }) do
-        local b = Part(R.FrameLook.Toggle(e, Ru().DISPLAY_LABEL[key], 120, function()
+        local b = Part(Choice(e, Ru().DISPLAY_LABEL[key], 120, function()
             if selected then LR().SetDisplay(selected, key); P.QueueRefresh() end
         end))
         b:SetHeight(32); f.displays[key] = b

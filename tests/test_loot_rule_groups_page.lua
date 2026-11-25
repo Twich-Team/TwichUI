@@ -196,5 +196,16 @@ P.Select(other); P.Refresh()
 Check(not g.frame:IsShown(), "a rule with no block shows no block frame")
 P.Select(id); P.Refresh()
 
+-- the roll and card display choices (the settings' segments): each click saves exactly its own choice
+for _, key in ipairs({ "need", "greed", "pass", "none" }) do
+  Click(frame.actions[key]); P.Refresh()
+  Check(LR.Rule(id).action == key, "the " .. key .. " roll choice saves " .. key)
+end
+for _, key in ipairs({ "expanded", "collapsed", "none" }) do
+  Click(frame.displays[key]); P.Refresh()
+  Check(LR.Rule(id).display == key, "the " .. key .. " card display choice saves " .. key)
+end
+Check(frame.actions.pass:IsShown() and frame.displays.collapsed:IsShown() and frame.actions.pass.w == frame.actions.need.w, "the choices are laid out at one width")
+
 if failures > 0 then print(failures .. " failure(s)") os.exit(1) end
 print("PASSED")
