@@ -19,6 +19,10 @@ local Perf = R.Perf
 -- "!!!TwichUI/", the settings window "TwichUI_Settings/"), where: the function, so a report can name what to read.
 -- every = how often it is expected to run, so a report can tell "runs often" from "runs on demand".
 DX.OPS = {
+    ["groupFinder.filter"] = { module = "groupFinder", label = "Filter loaded dungeon listings", kind = "work", file = "!!!TwichUI/groupfinder/Controller.lua", where = "Refilter", every = "local filters, party changes, result events" },
+    ["groupFinder.results"] = { module = "groupFinder", label = "Read changed public listings", kind = "work", file = "!!!TwichUI/groupfinder/Controller.lua", where = "ResultsReceived / ResultUpdated", every = "native result events for the active query" },
+    ["groupFinder.render"] = { module = "groupFinder", label = "Draw browser viewport", kind = "layout", file = "!!!TwichUI/groupfinder/Window.lua", where = "Render", every = "visible browser changes" },
+    ["groupFinder.age"] = { module = "groupFinder", label = "Update result age", kind = "work", file = "!!!TwichUI/groupfinder/Controller.lua", where = "Tick", every = "once per second while visible; no search" },
     ["workshop.opportunityCallback"]={module="workshop",label="Whole incremental worker callback",kind="work",file="TwichUI_Workshop/OpportunityEngine.lua",where="Engine.Schedule",every="includes source check, work and rescheduling; no scope spans callbacks"},
     ["workshop.opportunitySource"]={module="workshop",label="Indivisible opportunity source check",kind="work",file="TwichUI_Workshop/OpportunityEngine.lua",where="Engine.Step",every="source validity check within the elapsed batch budget"},
     ["workshop.opportunities.partialReuses"]={module="workshop",label="Provisional membership arrays reused",kind="count",file="TwichUI_Workshop/OpportunityEngine.lua",where="Engine.Present",every="metadata-only filters during pending calculation"},
