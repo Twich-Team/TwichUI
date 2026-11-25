@@ -1,4 +1,10 @@
 {
+  "group-finder": {
+    "tests": ["test_group_finder*.lua", "test_qol_group_finder_zones.lua"],
+    "syntax": ["!!!TwichUI/groupfinder/*.lua", "!!!TwichUI/qol/GroupFinderZones.lua", "tools/simlab/scenarios/groupfinder.lua", "TwichUI_Diagnostics/Gauges.lua"],
+    "dependencies": ["shared-ui"],
+    "simulators": [{"script": "smoke"}, {"script": "groupfinder"}]
+  },
   "healer-watch": {
     "tests": ["test_healer_watch.lua", "test_healer_watch_settings.lua", "test_healer_communication.lua"],
     "syntax": ["!!!TwichUI/healer/**/*.lua", "TwichUI_Settings/pages/HealerWatch.lua"],
