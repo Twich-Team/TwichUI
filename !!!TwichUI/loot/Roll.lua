@@ -270,7 +270,8 @@ function Ro.Observe(roll)
         if I and I.GetItemInfo then
             local ok, name, _, quality, _, _, typeName, subType, _, equipLoc, _, sellPrice, classID, subClassID, bindType = Call(I.GetItemInfo, roll.link)
             if ok and type(Plain(name)) == "string" then
-                obs.quality = Plain(quality) or obs.quality
+                -- Match the quality shown on this loot roll; the item lookup is only a fallback.
+                obs.quality = obs.quality or Plain(quality)
                 obs.equipLoc = Plain(equipLoc) or obs.equipLoc
                 obs.classID, obs.subClassID = Plain(classID) or obs.classID, Plain(subClassID) or obs.subClassID
                 obs.bindType = Plain(bindType)

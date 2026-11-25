@@ -699,6 +699,45 @@ do
   Check(roll.state == "pending" and not roll.auto, "an item no rule matches stays manual")
   EndRoll(id)
 
+  -- The loot roll's quality wins when the item lookup disagrees with the card.
+  Fresh(); LR.Set("auto", true)
+  local weaponRule = Rule("greenGear")
+  LR.SetCondition(weaponRule, 1, { op = "atMost", value = 2 })
+  LR.SetCondition(weaponRule, 2, { value = 2 })
+  LR.SetDelay(weaponRule, 10); LR.SetDisplay(weaponRule, "collapsed")
+  local itemInfo, rollInfo = c.C_Item.GetItemInfo, c.GetLootRollItemInfo
+  local itemQuality, rollQuality = 2, 4
+  c.C_Item.GetItemInfo = function(link)
+    local info = { itemInfo(link) }
+    if link == "item:101" then info[3] = itemQuality end
+    return unpack(info, 1, 14)
+  end
+  c.GetLootRollItemInfo = function(rid)
+    local info = { rollInfo(rid) }
+    if rolls[rid] and rolls[rid].link == "item:101" then info[4] = rollQuality end
+    return unpack(info, 1, 13)
+  end
+  id = StartRoll("item:101"); roll = Ro.Find(id)
+  Check(roll.quality == 4 and roll.obs.quality == 4, "an epic roll stays epic for both the card and conditions despite an uncommon item lookup")
+  Ro.Observe(roll); A.Refresh()
+  Advance(11)
+  Check(roll.state == "pending" and not roll.auto and #rolled == 0, "Weapon and at most Uncommon never submits Greed for the epic roll, even after a refresh")
+  EndRoll(id)
+
+  itemQuality, rollQuality = 4, 2
+  local sentBefore = #rolled
+  id = StartRoll("item:101"); roll = Ro.Find(id)
+  Check(roll.obs.quality == 2 and roll.state == "scheduled", "an uncommon roll still matches when the item lookup says epic")
+  Advance(11)
+  Check(#rolled == sentBefore + 1 and rolled[#rolled].kind == 2, "the uncommon weapon submits Greed through the normal countdown")
+  EndRoll(id)
+
+  itemQuality, rollQuality = 2, nil
+  id = StartRoll("item:101"); roll = Ro.Find(id)
+  Check(roll.obs.quality == 2 and roll.state == "scheduled", "the item lookup remains a fallback when the roll has no quality")
+  EndRoll(id)
+  c.C_Item.GetItemInfo, c.GetLootRollItemInfo = itemInfo, rollInfo
+
   -- unknown: manual, with the reason
   Fresh(); LR.Set("auto", true)
   local rid = Rule("professionRecipes")
