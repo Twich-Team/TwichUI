@@ -40,7 +40,7 @@ Two parts, both off until the player turns them on.
 | `loot/Main.lua` | The switch (`LootRolls.Refresh`), the diagnostics snapshot. |
 | `media/loot/*.tga` | Icons cut from the approved mockup by `tools/make_loot_roll_art.py` (sources: `assets/LOOT_ROLLS_*_MOCKUP.png`). |
 | `tests/test_loot_rolls.lua` | Unit tests (fake world), including the end-to-end rule-safety matrix (section 4b) and and / or blocks (4c). |
-| `tests/test_loot_rule_groups_page.lua` | The Loot rules page with and / or blocks: real page over stand-in frames, clicks through each control's own handler. |
+| `tests/test_loot_rule_builder_page.lua` | The Loot rules builder: real page over stand-in frames, clicks through each control's own handler, palette and More menu, and drag and drop (drop places from the registered targets, and a pointer drag through the virtual drag kit). |
 | `tests/test_loot_rules_engine.lua` | The pure rule engine's safety contract: condition truth tables, all/any against an independent model, and a seeded sweep of the invariants (unknown never matches, forgetting a fact never creates or changes a decision, first non-"no" rule decides). |
 | `tools/simlab/loot.sh`, `scenarios/loot.lua` | Simulator scenarios and screenshots. |
 
@@ -97,7 +97,14 @@ an *all* rule holding an *any* block and an equipment condition. A block answers
 unless another branch settles it), is not negated (negate a condition inside it), and is made in the editor with **+ Add and / or block**
 or the **+ Block** button of another block (`LR.AddGroup`; conditions and blocks are addressed by path, `{ 2, 1 }` = first item of the second
 item). Limits: 8 conditions in all (blocks not counted), 4 blocks, 3 levels counting the rule itself as the first. An empty or over-deep block
-makes the rule unfinished (skipped, flagged in the editor). No migration: old rules read exactly as before, and a build from before blocks sees
+makes the rule unfinished (skipped, flagged in the editor).
+
+**The builder** (`TwichUI_Settings/pages/LootRulesBuilder.lua`) works like the Reminders "When" builder: a palette of condition kinds (click one to add it
+at the end, or drag it where you want it), the rule as cards and boxes, a grip on every card and box to drag it elsewhere or into a box (drag
+geometry is `RemindersRuleDrag`'s over `MagicInventoryDrag`'s virtual drag, with a marker where it would land and nothing landing where it can't),
+a fold on boxes, and a More menu (or right-click) on each to duplicate, move up or down, move into a box or out, or remove. Drops and menu
+choices call `LR.AddCondition` / `LR.AddGroup` (with a place), `LR.MoveNode`, `LR.CopyNode` and `LR.RemoveCondition`, which check the limits again.
+Unlike Reminders, edits are live (the Loot rules page has no draft, Save or Undo) and there is no separate window, diagnostics or "try a situation". No migration: old rules read exactly as before, and a build from before blocks sees
 a block as a condition of an unknown kind, so that rule is unfinished there and never acts.
 
 Recipe facts: the profession comes from `C_Item.GetItemSubClassInfo(9, subclass)` compared with the localized `name` fields returned by `C_SkillInfo.GetSkillLineInfo`;

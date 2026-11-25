@@ -484,8 +484,8 @@ function LR.SetShowResult(id, on)
 end
 
 -- Adds a condition of a kind (see Rules.ORDER) with its starting values at the end of the top level, or of the group at groupPath;
--- returns its place in that list, then its whole path.
-function LR.AddCondition(id, kind, groupPath)
+-- returns its place in that list, then its whole path. `index` (optional) puts it there in the list instead of at the end.
+function LR.AddCondition(id, kind, groupPath, atIndex)
     local fresh = Ru.NewCondition(kind)
     if not fresh then return false, "No such condition." end
     local path = ReadPath(groupPath)
@@ -497,8 +497,9 @@ function LR.AddCondition(id, kind, groupPath)
         local list = ListAt(r, path)
         if not list then why = "That group is gone." return false end
         if Totals(r).conditions >= Ru.MAX_CONDITIONS then why = ("A rule can have up to %d conditions."):format(Ru.MAX_CONDITIONS) return false end
-        list[#list + 1] = fresh
-        index = #list
+        local place = Whole(atIndex) and math.max(1, math.min(atIndex, #list + 1)) or #list + 1
+        table.insert(list, place, fresh)
+        index = place
         at = { unpack(path) }
         at[#at + 1] = index
         return true
@@ -509,7 +510,7 @@ end
 
 -- Adds an empty group at the end of the top level, or of the group at groupPath. It starts with the opposite of what holds it (a group
 -- in an "all" list reads "any"), and the rule is unfinished until something is put in it. Returns the group's path.
-function LR.AddGroup(id, groupPath, match)
+function LR.AddGroup(id, groupPath, match, atIndex)
     if match ~= nil and match ~= "all" and match ~= "any" then return false, "Choose all or any." end
     local path = ReadPath(groupPath)
     if not path then return false, "That group is gone." end
@@ -525,9 +526,10 @@ function LR.AddGroup(id, groupPath, match)
             local parent = ListAt(r, { unpack(path, 1, #path - 1) })
             parentMatch = parent[path[#path]].match
         end
-        list[#list + 1] = { type = "group", match = match or (parentMatch == "any" and "all" or "any"), conditions = {} }
+        local place = Whole(atIndex) and math.max(1, math.min(atIndex, #list + 1)) or #list + 1
+        table.insert(list, place, { type = "group", match = match or (parentMatch == "any" and "all" or "any"), conditions = {} })
         at = { unpack(path) }
-        at[#at + 1] = #list
+        at[#at + 1] = place
         return true
     end)
     if not ok then return false, why or reason or "That rule is gone." end
@@ -558,6 +560,94 @@ function LR.SetCondition(id, where, fields)
         list[index] = copy
         return true
     end)
+end
+
+-- How many levels of lists a node needs below the one it sits in: 0 for a condition, 1 for a group of conditions, one more for each group in it.
+local function Levels(node)
+    if type(node) ~= "table" or node.type ~= "group" then return 0 end
+    local deepest = 0
+    for _, c in ipairs(type(node.conditions) == "table" and node.conditions or {}) do deepest = math.max(deepest, Levels(c)) end
+    return 1 + deepest
+end
+
+local function SamePrefix(path, prefix)
+    if #path < #prefix then return false end
+    for i, k in ipairs(prefix) do if path[i] ~= k then return false end end
+    return true
+end
+
+-- Whether the node at `path` may go into the group at `toGroup` (the top level for {}) at place `toIndex`; the node, the list it leaves,
+-- the list it enters and the place it will take (after it has left its old one). Nothing is changed. Returns false and a sentence if not.
+local function PlanMove(r, path, toGroup, toIndex)
+    if not (path and toGroup and #path > 0) then return false, "That can't be moved there." end
+    local from = ListAt(r, { unpack(path, 1, #path - 1) })
+    local node = from and from[path[#path]]
+    local dest = ListAt(r, toGroup)
+    if type(node) ~= "table" or not dest then return false, "That can't be moved there." end
+    if node.type == "group" and SamePrefix(toGroup, path) then return false, "A block can't be moved into itself." end
+    if #toGroup + 1 + Levels(node) > Ru.MAX_DEPTH then return false, ("Blocks can go %d levels deep."):format(Ru.MAX_DEPTH) end
+    local place = Whole(toIndex) and math.max(1, math.min(toIndex, #dest + 1)) or #dest + 1
+    local index = path[#path]
+    if from == dest then
+        if index < place then place = place - 1 end
+        if index == place then return nil end   -- where it already is
+    end
+    return { from = from, index = index, dest = dest, place = place, node = node }
+end
+
+-- Moves the node at `path` into the group at `toGroup` (the top level when nil or {}) so that it is the toIndex-th there. Moving only changes
+-- what a node is combined with, never what it says. Returns true and the node's new path; true with nothing changed when it is already there.
+function LR.MoveNode(id, path, toGroup, toIndex)
+    path, toGroup = ReadPath(path), ReadPath(toGroup)
+    if not (path and toGroup) then return false, "That can't be moved there." end
+    local newPath, why
+    local ok, reason = Edit(id, function(r)
+        local plan, problem = PlanMove(r, path, toGroup, toIndex)
+        if plan == false then why = problem return false end
+        if plan == nil then newPath = { unpack(path) } return nil end
+        table.remove(plan.from, plan.index)
+        table.insert(plan.dest, plan.place, plan.node)
+        -- where it is now: the destination's path, adjusted for what left a list above it
+        local dest = { unpack(toGroup) }
+        local pivot = #path
+        if SamePrefix(dest, { unpack(path, 1, pivot - 1) }) and #dest >= pivot and dest[pivot] > path[pivot] then dest[pivot] = dest[pivot] - 1 end
+        dest[#dest + 1] = plan.place
+        newPath = dest
+        return true
+    end)
+    if not ok then return false, why or reason or "That rule is gone." end
+    return true, newPath
+end
+
+-- Whether MoveNode would do it (for a drag, which must show where a drop is allowed before it is made).
+function LR.CanMoveNode(id, path, toGroup, toIndex)
+    path, toGroup = ReadPath(path), ReadPath(toGroup)
+    local rule = Find(id)
+    if not (rule and path and toGroup) then return false end
+    local plan = PlanMove(rule, path, toGroup, toIndex)
+    return plan ~= false and plan ~= nil
+end
+
+-- A copy of the node at `path` (a condition, or a block with what is in it) right after it. Returns true and the copy's path.
+function LR.CopyNode(id, path)
+    path = ReadPath(path)
+    if not path or #path == 0 then return false, "That can't be copied." end
+    local at, why
+    local ok, reason = Edit(id, function(r)
+        local list = ListAt(r, { unpack(path, 1, #path - 1) })
+        local node = list and list[path[#path]]
+        if type(node) ~= "table" then return false end
+        local copy = CopyList({ node }, #path)[1]
+        local m, have = Ru.Measure({ copy }), Totals(r)
+        if have.conditions + m.conditions > Ru.MAX_CONDITIONS then why = ("A rule can have up to %d conditions."):format(Ru.MAX_CONDITIONS) return false end
+        if have.groups + m.groups > Ru.MAX_GROUPS then why = ("A rule can have up to %d groups."):format(Ru.MAX_GROUPS) return false end
+        table.insert(list, path[#path] + 1, copy)
+        at = { unpack(path) }
+        at[#at] = at[#at] + 1
+        return true
+    end)
+    if not ok then return false, why or reason or "That rule is gone." end
+    return true, at
 end
 
 -- Removes one condition, or a group with everything in it.

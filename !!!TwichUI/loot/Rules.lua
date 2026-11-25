@@ -475,28 +475,30 @@ function Ru.ActionSummary(rule)
     return action or (display and (rule.display == "collapsed" and "Collapse card" or "Expand card")) or "No action"
 end
 
+-- What one condition (or a block, in parentheses) says in a sentence; nil when it is not finished.
+function Ru.Phrase(c)
+    if not IsGroup(c) then
+        local t = type(c) == "table" and T[c.type]
+        if not (t and t.check(c) == nil) then return nil end
+        local text = t.phrase(c)
+        if c.negate then text = "not (" .. text .. ")" end
+        return text
+    end
+    if Ru.CheckCondition(c) ~= nil then return nil end
+    local inner = {}
+    for _, child in ipairs(c.conditions) do inner[#inner + 1] = Ru.Phrase(child) end
+    if #inner == 0 then return nil end
+    return "(" .. table.concat(inner, c.match == "any" and " or " or " and ") .. ")"
+end
+
 -- A sentence for a rule: "Automatically choose Greed when the item is Uncommon and is equipment, after 3 seconds."
 function Ru.Summary(rule)
     if type(rule) ~= "table" then return "" end
     local action = Ru.ACTION_LABEL[rule.action]
     if not action then return "Choose a roll action or card display to finish this rule." end
-    local function Phrase(c)
-        if not IsGroup(c) then
-            local t = type(c) == "table" and T[c.type]
-            if not (t and t.check(c) == nil) then return nil end
-            local text = t.phrase(c)
-            if c.negate then text = "not (" .. text .. ")" end
-            return text
-        end
-        if Ru.CheckCondition(c) ~= nil then return nil end
-        local inner = {}
-        for _, child in ipairs(c.conditions) do inner[#inner + 1] = Phrase(child) end
-        if #inner == 0 then return nil end
-        return "(" .. table.concat(inner, c.match == "any" and " or " or " and ") .. ")"
-    end
     local parts = {}
     for _, c in ipairs(rule.conditions or {}) do
-        local text = Phrase(c)
+        local text = Ru.Phrase(c)
         if text then parts[#parts + 1] = text end
     end
     if #parts == 0 then return ("Choose %s once you add a condition."):format(action) end
