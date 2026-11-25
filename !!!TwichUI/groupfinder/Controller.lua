@@ -10,6 +10,7 @@ local contactOrder = {}
 local pending, dispatching, hooked, ticker, query, revision = false, false, false, nil, nil, 0
 local MAX_RESULTS, STALE_AFTER, TIMEOUT = 500, 120, 30
 local activityCache
+local lastSuccessfulActivities
 local function Now() return GetTime() end
 local function Shown() return GF.Window and GF.Window.IsShown() end
 local function Render() if Shown() then R.Perf.Call("groupFinder.render", GF.Window.Render) end end
@@ -28,6 +29,7 @@ local function Refilter()
         if row.solo == (GF.mode == "players") and not row.hasSelf then GF.availableCount = GF.availableCount + 1 end
     end
     GF.rows = M.Filter(GF.snapshot, GF.filters, GF.mode, GF.party)
+    GF.UpdateQueryDirty()
     local previous, selected = GF.selected, nil
     for _, row in ipairs(GF.rows) do
         row.contacted = row.identity and GF.contacted[row.identity] or nil
@@ -60,6 +62,63 @@ function GF.GetActivities()
     if not activityCache then activityCache = D.Activities() end
     return activityCache
 end
+local function SelectedActivities()
+    local selected, filters = {}, GF.filters and GF.filters.activities or {}
+    if GF.filters and GF.filters.activitiesNone then return selected end
+    local all = next(filters) == nil
+    for _, activity in ipairs(GF.GetActivities()) do
+        if all or filters[activity.id] then selected[activity.id] = true end
+    end
+    return selected
+end
+function GF.UpdateQueryDirty()
+    local selected = SelectedActivities()
+    GF.queryDirty = lastSuccessfulActivities == nil
+    if not GF.queryDirty then
+        for id in pairs(selected) do if not lastSuccessfulActivities[id] then GF.queryDirty = true; break end end
+        if not GF.queryDirty then
+            for id in pairs(lastSuccessfulActivities) do if not selected[id] then GF.queryDirty = true; break end end
+        end
+    end
+    return GF.queryDirty
+end
+function GF.HiddenFilterCount()
+    local f, count = GF.filters or {}, 0
+    if GF.mode == "players" then for _, on in pairs(f.classes or {}) do if on then count = count + 1 end end end
+    for _, key in ipairs({ "playstyle", "maxAge", "friendsOnly", "guildOnly" }) do if f[key] then count = count + 1 end end
+    if f.sort and f.sort ~= "default" then count = count + 1 end
+    return count
+end
+function GF.ClearFilters()
+    local filters = M.Defaults(GF.mode)
+    filters.activities = Copy(GF.filters and GF.filters.activities)
+    filters.activitiesNone = GF.filters and GF.filters.activitiesNone == true or false
+    GF.filters = M.Set(GF.mode, filters)
+    GF.message = "Local filters cleared. Dungeon selection kept."
+    GF.Refilter()
+end
+local function UpdatedAge()
+    if not GF.lastSuccess then return nil end
+    local seconds = math.max(0, Now() - GF.lastSuccess)
+    if seconds < 60 then return "<1m" end
+    if seconds < 3600 then return math.floor(seconds / 60) .. "m" end
+    return math.floor(seconds / 3600) .. "h"
+end
+function GF.GetStatus()
+    GF.UpdateQueryDirty()
+    local updated = UpdatedAge()
+    local suffix = updated and " · Updated " .. updated .. " ago" or ""
+    if GF.state == "searching" then return "Searching…", "Waiting for the selected dungeon query. Local filter changes do not start another search." end
+    if GF.state == "failed" then return "Search failed" .. suffix, GF.message or "Refresh to retry. Previous results are kept." end
+    local old = GF.lastSuccess and Now() - GF.lastSuccess > STALE_AFTER
+    if GF.state == "stale" or old then
+        return "Stale" .. suffix, old and "These results are over two minutes old. Refresh before contacting a listing."
+            or GF.message or "Refresh before contacting a listing."
+    end
+    if GF.state == "idle" then return "Ready to search", GF.message or "Choose dungeons, then search." end
+    if GF.queryDirty then return "Selection changed · Search", "Showing loaded results only. Search selected dungeons to fetch this selection." end
+    return updated and "Updated " .. updated .. " ago" or "Ready to search", GF.message
+end
 function GF.GetPresets()
     local names = {}
     for name in pairs(M.GetPresets(GF.mode)) do names[#names + 1] = name end
@@ -73,8 +132,15 @@ function GF.SetMode(mode)
     GF.Refilter()
 end
 function GF.ChangeFilter(key, value)
+    if key == "activities" then return GF.SetActivities(value, false) end
     GF.filters = M.Set(GF.mode, key, value)
-    if key == "activities" then GF.message = "Dungeon selection changed. Click Refresh to search these dungeons." end
+    GF.Refilter()
+end
+function GF.SetActivities(selected, none)
+    local filters = Copy(GF.filters)
+    filters.activities, filters.activitiesNone = Copy(selected), none == true
+    GF.filters = M.Set(GF.mode, filters)
+    GF.message = none and "Choose at least one dungeon to search." or "Dungeon selection changed. Search to fetch this selection."
     GF.Refilter()
 end
 function GF.Select(id)
@@ -89,7 +155,7 @@ end
 function GF.LoadPreset(name)
     local filters, reason = M.LoadPreset(GF.mode, name, GF.GetActivities())
     if not filters then GF.message = reason; Render(); return false end
-    GF.filters, GF.message = filters, "Preset loaded. Refresh to search its dungeons."
+    GF.filters, GF.message = filters, "Preset loaded."
     GF.Refilter()
     return true
 end
@@ -102,6 +168,7 @@ end
 
 function GF.Refresh()
     if not Shown() or pending then return false end
+    if GF.filters.activitiesNone then GF.message = "Choose at least one dungeon to search."; Render(); return false end
     if InCombatLockdown and InCombatLockdown() then GF.message = "Refresh after combat."; Render(); return false end
     AttachSearch()
     if not hooked then GF.message = "The Group Finder search API is unavailable."; Render(); return false end
@@ -147,6 +214,8 @@ local function ResultsReceived()
     GF.snapshot = {}
     for i = 1, math.min(#results, MAX_RESULTS) do GF.snapshot[i] = results[i] end
     pending = false
+    lastSuccessfulActivities = {}
+    for _, id in ipairs(query.activities) do lastSuccessfulActivities[id] = true end
     GF.lastSuccess, GF.state, GF.message = Now(), "ready", nil
     GF.Refilter()
 end
@@ -176,27 +245,62 @@ local function ResultUpdated(id)
     GF.Refilter()
 end
 
-function GF.CanContact(kind, row)
+local function ContactCheck(kind, row)
+    if kind ~= "whisper" and kind ~= "invite" then return "That contact action is unavailable." end
     row = row or GF.selected
-    if pending or not query or GF.state ~= "ready" or not row or not row.identity then return false end
-    if GF.lastSuccess and Now() - GF.lastSuccess > STALE_AFTER then return false end
+    if not row then return "Select a listing first." end
+    if pending or GF.state == "searching" then return "Wait for the search to finish." end
+    if GF.lastSuccess and Now() - GF.lastSuccess > STALE_AFTER then return "These results are over two minutes old. Refresh first." end
+    if GF.state == "failed" then return "The search failed. Refresh before contacting a listing." end
+    if not query then return "Another search replaced these results. Refresh first." end
+    if GF.state ~= "ready" then return "Refresh before contacting a listing." end
+    if not row.identity then return "The listing identity is unavailable. Refresh and select it again." end
     local live = D.Read(row.id)
-    if not live or not live.identity or live.identity ~= row.identity or live.leader ~= row.leader or live.hasSelf or live.actionable ~= true then return false end
-    if not live.leader or live.leader:find("[|%c%s]") then return false end
-    if kind == "invite" then
-        local party = D.Party()
-        local allowed = GF.mode == "players" and live.solo and party.canInvite == true
-            and C_PartyInfo and type(C_PartyInfo.InviteUnit) == "function" or false
-        return allowed, allowed and live or nil
+    if not live then return "This listing is no longer available. Refresh first." end
+    if not live.identity then return "The listing identity is unavailable. Refresh and select it again." end
+    if live.identity ~= row.identity or live.leader ~= row.leader then return "This listing changed. Refresh and select it again." end
+    if live.hasSelf then return "This is your own listing." end
+    if live.actionable ~= true then return "The game's listing validity data is unavailable. Refresh first." end
+    -- Forever's native full names can contain spaces. Pass the verified native
+    -- name through unchanged, while rejecting empty, formatting and control text.
+    if type(live.leader) ~= "string" or not live.leader:find("%S") or live.leader:find("[|%c]") then
+        return "The contact target is unavailable."
     end
-    local allowed = type(WhisperAPI()) == "function"
-    return allowed, allowed and live or nil
+    if kind == "invite" then
+        if GF.mode ~= "players" or not live.solo then return "Select a solo player to invite." end
+        if not (C_PartyInfo and type(C_PartyInfo.InviteUnit) == "function") then return "The game's invite action is unavailable." end
+        local combat, raid, grouped = D.Call(InCombatLockdown), D.Call(IsInRaid), D.Call(IsInGroup)
+        if combat == true then return "Invite after combat." end
+        if combat ~= false then return "Combat status is unavailable." end
+        if raid == true then return "Invites here require a five-player party." end
+        if raid ~= false or (grouped ~= true and grouped ~= false) then return "Party status is unavailable." end
+        if grouped then
+            local count = D.Call(GetNumGroupMembers)
+            if type(count) ~= "number" then return "Party size is unavailable." end
+            if count >= 5 then return "Your party is full." end
+            if D.Call(UnitIsGroupLeader, "player") ~= true and D.Call(UnitIsGroupAssistant, "player") ~= true then
+                return "Only the party leader or an assistant can invite."
+            end
+        end
+        local party = D.Party()
+        if party.canInvite ~= true then return "Invite eligibility is unavailable." end
+        return nil, live
+    end
+    if type(WhisperAPI()) ~= "function" then return "The game's whisper action is unavailable." end
+    return nil, live
+end
+function GF.ContactReason(kind, row)
+    return (ContactCheck(kind, row))
+end
+function GF.CanContact(kind, row)
+    local reason, live = ContactCheck(kind, row)
+    return reason == nil, live
 end
 function GF.Contact(kind)
     if kind ~= "invite" and kind ~= "whisper" then return false end
-    local allowed, row = GF.CanContact(kind)
-    if not allowed then
-        GF.message = "This listing is no longer actionable. Refresh and select it again."
+    local reason, row = ContactCheck(kind)
+    if reason then
+        GF.message = reason
         Render(); return false
     end
     local ok

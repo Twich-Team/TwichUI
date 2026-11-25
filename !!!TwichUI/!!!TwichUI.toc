@@ -102,6 +102,7 @@ FrameLook.lua
 CraftLook.lua
 # A companion browser for Forever's native five-player dungeon listings.
 # Native listing creation, editing and Who remain owned by the game.
+groupfinder\Art.lua
 groupfinder\Data.lua
 groupfinder\Model.lua
 groupfinder\Controller.lua

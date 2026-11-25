@@ -46,18 +46,8 @@ local function IDs(values, limit)
     return result
 end
 
--- Scholomance's instance/map id is verified in map/Data.lua (Forever 1.60.1.70450).
--- BRD is absent from that verified map inventory; use its public English activity
--- name rather than guessing an activity or map id. Other/localized dungeons use
--- the existing painted entrance, so new Forever activities never lose their art.
 function D.ActivityIcon(info, small)
-    info = Table(info) or {}
-    local name = Text(info.fullName) or Text(info.shortName)
-    local art
-    if Number(info.mapID) == 289 or name == "Scholomance" then art = "scholomance"
-    elseif name == "Blackrock Depths" then art = "blackrock-depths" end
-    if art then return R.PATH .. [[media\groupfinder\]] .. art .. (small and "-small" or "") end
-    return R.PATH .. [[media\reminders\gallery\reminder-dungeon-entrance]] .. (small and "-small" or "")
+    return R.GroupFinder.Art.ForActivity(info, small)
 end
 
 -- Do not use the native suggested-level filter: activity and character levels are separate controls.
@@ -71,7 +61,7 @@ function D.Activities()
                 if name then
                     result[#result + 1] = { id = id, name = name, categoryID = categoryID,
                         minLevel = Number(info.minLevelSuggestion, 1, 1000), maxLevel = Number(info.maxLevelSuggestion, 1, 1000),
-                        mapID = Number(info.mapID), icon = D.ActivityIcon(info), iconSmall = D.ActivityIcon(info, true) }
+                        mapID = Number(info.mapID), icon = D.ActivityIcon(info), iconSmall = D.ActivityIcon(info, true), iconTiny = D.ActivityIcon(info, 32) }
                     seen[id] = true
                 end
             end

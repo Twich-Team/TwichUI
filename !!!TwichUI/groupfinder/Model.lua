@@ -8,7 +8,7 @@ local CLASSES = { WARRIOR=true, PALADIN=true, HUNTER=true, ROGUE=true, PRIEST=tr
 local function Mode(mode) return (mode == "players" or mode == "recruits") and "players" or "groups" end
 M.Mode = Mode
 function M.Defaults()
-    return { activities = {}, roles = {}, classes = {}, needsRole = false, friendsOnly = false, guildOnly = false,
+    return { activities = {}, activitiesNone = false, roles = {}, classes = {}, needsRole = false, friendsOnly = false, guildOnly = false,
         search = "", sort = "default" }
 end
 local function Copy(value, depth)
@@ -34,7 +34,7 @@ local function Sanitize(input)
             end
         end
     end
-    for _, key in ipairs({ "needsRole", "friendsOnly", "guildOnly" }) do f[key] = input[key] == true end
+    for _, key in ipairs({ "activitiesNone", "needsRole", "friendsOnly", "guildOnly" }) do f[key] = input[key] == true end
     if input.needsMyRole == true or input.fillMissingRoles == true then f.needsRole = true end
     if input.social == "friends" then f.friendsOnly = true elseif input.social == "guild" then f.guildOnly = true end
     if type(input.search) == "string" then f.search = input.search:sub(1, 128) end
@@ -131,6 +131,7 @@ end
 function M.Matches(row, filters, mode, party)
     local f = filters or M.Defaults()
     mode = Mode(mode)
+    if f.activitiesNone then return false end
     if row.isDelisted or row.hasSelf or row.solo ~= (mode == "players") then return false end
     if Any(f.activities) then
         local found = false
