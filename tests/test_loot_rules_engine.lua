@@ -461,15 +461,27 @@ do
     if Rand(3) > 1 then o.context = { instanceType = Pick({ "none", "party", "raid", "pvp" }) } end
     return o
   end
+  local function Leaf()
+    local c = Copy(Pick(CONDS))
+    if Rand(5) == 1 then c.negate = true end
+    return c
+  end
+  -- a list that may hold groups, within the depth limit (depth is this list's level)
+  local function CondList(depth)
+    local conds = {}
+    for j = 1, Rand(4) do
+      if depth < Ru.MAX_DEPTH and Rand(4) == 1 then
+        conds[j] = { type = "group", match = Pick({ "all", "any" }), conditions = CondList(depth + 1) }
+      else
+        conds[j] = Leaf()
+      end
+    end
+    return conds
+  end
   local function Rules()
     local list = {}
     for i = 1, Rand(6) do
-      local conds = {}
-      for j = 1, Rand(4) do
-        local c = Copy(Pick(CONDS))
-        if Rand(5) == 1 then c.negate = true end
-        conds[j] = c
-      end
+      local conds = CondList(1)
       list[i] = { id = "lr" .. i, enabled = Rand(5) > 1, action = Pick({ "need", "greed", "pass", "none" }), display = Pick({ "none", "none", "expanded", "collapsed" }),
         match = Pick({ "all", "all", "any" }), conditions = conds }
     end
@@ -560,6 +572,120 @@ do
   end
   Check(counts.match > 200 and counts.unknown > 200 and counts.none > 200,
     ("the sweep exercised every kind of outcome (%d match, %d unknown, %d none)"):format(counts.match, counts.unknown, counts.none))
+end
+
+---------------------------------------------------------------------------
+-- 9b. Groups: (A or B) and C, and what keeps a group safe
+---------------------------------------------------------------------------
+do
+  -- three conditions with fixed answers: Y true, N false, U unknown (an upgrade hint that is not allowed)
+  local Y, N, U = { type = "quality", op = "is", value = 2 }, { type = "quality", op = "is", value = 3 }, { type = "upgrade", value = true }
+  local obs = { quality = 2 }
+  local function Group(match, ...) return { type = "group", match = match, conditions = { ... } } end
+  local function Rule(match, ...) return { id = "lr1", enabled = true, action = "greed", match = match, conditions = { ... } } end
+  local ANS = { [Y] = true, [N] = false }   -- U is unknown
+  local function Model(match, list)
+    local yes, no, unk = false, false, false
+    for _, c in ipairs(list) do
+      local v
+      if c.type == "group" then
+        local r = Model(c.match, c.conditions)
+        if r == MATCH then v = true elseif r == NO then v = false else v = "u" end
+      elseif c == U then v = "u" else v = ANS[c] end
+      if v == "u" then unk = true elseif v then yes = true else no = true end
+    end
+    if match == "any" then return yes and MATCH or (unk and UNKNOWN or NO) end
+    return no and NO or (unk and UNKNOWN or MATCH)
+  end
+  local pool = { Y, N, U }
+  local n = 0
+  -- every (A <op> B <op> C) and D ... : all assignments of Y/N/U to four slots, under every pair of operators
+  for a = 1, 3 do for b = 1, 3 do for d = 1, 3 do for e = 1, 3 do
+    for _, outer in ipairs({ "all", "any" }) do for _, inner in ipairs({ "all", "any" }) do
+      local list = { Group(inner, pool[a], pool[b]), pool[d], pool[e] }
+      n = n + 1
+      Is(Ru.EvalRule(Rule(outer, unpack(list)), obs), Model(outer, list), "group sweep #" .. n .. " (" .. inner .. " in " .. outer .. ")")
+    end end
+  end end end end
+  Check(n == 3 * 3 * 3 * 3 * 4, "the group sweep covered every assignment under every pair of operators")
+
+  -- the case in the request: (Rare or Epic) and equipment
+  local rare_or_epic = Group("any", { type = "quality", op = "is", value = 3 }, { type = "quality", op = "is", value = 4 })
+  local rule = Rule("all", rare_or_epic, { type = "class", value = "equipment" })
+  Is(Ru.Incomplete(rule), nil, "a rule with a group is complete")
+  Is(Ru.EvalRule(rule, { quality = 3, classID = 4, equipLoc = "INVTYPE_HEAD" }), MATCH, "a Rare piece of gear matches")
+  Is(Ru.EvalRule(rule, { quality = 4, classID = 2, equipLoc = "INVTYPE_2HWEAPON" }), MATCH, "an Epic weapon matches")
+  Is(Ru.EvalRule(rule, { quality = 2, classID = 4, equipLoc = "INVTYPE_HEAD" }), NO, "an Uncommon one does not (neither of the group)")
+  Is(Ru.EvalRule(rule, { quality = 4, classID = 0 }), NO, "an Epic potion does not (the group is satisfied, the other condition is not)")
+  Is(Ru.EvalRule(rule, { classID = 4, equipLoc = "INVTYPE_HEAD" }), UNKNOWN, "an unknown quality leaves the group, and so the rule, unknown")
+  Is(Ru.EvalRule(rule, { quality = 4 }), UNKNOWN, "an Epic of unknown class is unknown, never a match")
+  Is(Ru.EvalRule(rule, { quality = 1 }), NO, "a definite no inside the group plus an unknown outside is a no for the all-rule only if the group says no")
+  -- the other way round: this-or-(that and that)
+  local either = Rule("any", { type = "class", value = 9 }, Group("all", { type = "quality", op = "atLeast", value = 3 }, { type = "class", value = "equipment" }))
+  Is(Ru.EvalRule(either, { classID = 9, quality = 0, equipLoc = "" }), MATCH, "any: the first branch alone")
+  Is(Ru.EvalRule(either, { classID = 4, quality = 3, equipLoc = "INVTYPE_HEAD" }), MATCH, "any: the group alone")
+  Is(Ru.EvalRule(either, { classID = 4, quality = 2, equipLoc = "INVTYPE_HEAD" }), NO, "any: neither branch")
+  -- a group answers as a condition does, so it is also a condition of EvalCondition
+  Is(Ru.EvalCondition(rare_or_epic, { quality = 4 }), true, "a group is true when its list is")
+  Is(Ru.EvalCondition(rare_or_epic, { quality = 2 }), false, "false when it says no")
+  Is(Ru.EvalCondition(rare_or_epic, {}), nil, "and nil when it cannot tell")
+
+  -- groups inside groups, to the limit
+  local deep = Rule("all", Group("any", Y, Group("all", Y, N)))
+  Is(Ru.Incomplete(deep), nil, "three levels are allowed")
+  Is(Ru.EvalRule(deep, obs), MATCH, "and read through (Y or (Y and N)) = true")
+  local tooDeep = Rule("all", Group("any", Y, Group("all", Y, Group("any", Y, N))))
+  Check(Ru.Incomplete(tooDeep) ~= nil and tostring(Ru.Incomplete(tooDeep)):find("levels", 1, true), "four levels are not")
+  Is(Ru.EvalRule(tooDeep, obs), UNKNOWN, "a rule that goes too deep decides nothing")
+  Is(Ru.Decide({ tooDeep }, obs).status, "none", "and is skipped, not allowed to block")
+  -- the limits count conditions in groups too
+  local many = {}
+  for i = 1, Ru.MAX_CONDITIONS do many[i] = Y end
+  local top, grp = {}, {}
+  for i = 1, Ru.MAX_CONDITIONS - 3 do top[#top + 1] = Y end
+  for i = 1, 3 do grp[#grp + 1] = Y end
+  top[#top + 1] = { type = "group", match = "any", conditions = grp }
+  Is(Ru.Incomplete(Rule("all", unpack(top))), nil, "the most conditions allowed, across a group, is complete")
+  grp[#grp + 1] = Y
+  Check(Ru.Incomplete(Rule("all", unpack(top))) ~= nil, "one more, inside the group, is not")
+  local groups = {}
+  for i = 1, Ru.MAX_GROUPS do groups[i] = Group("any", Y) end
+  Is(Ru.Incomplete(Rule("all", unpack(groups))), nil, "the most groups allowed is complete")
+  groups[#groups + 1] = Group("any", Y)
+  Check(Ru.Incomplete(Rule("all", unpack(groups))) ~= nil, "one more group is not")
+
+  -- what makes a group unfinished
+  Check(Ru.Incomplete(Rule("all", Y, Group("any"))) ~= nil, "an empty group is unfinished")
+  Is(Ru.EvalRule(Rule("any", Y, Group("any")), obs), UNKNOWN, "and an empty group never lets its rule match, even when the other branch would")
+  Is(Ru.Decide({ Rule("any", Y, Group("any")) }, obs).status, "none", "an unfinished rule is skipped")
+  Check(Ru.Incomplete(Rule("all", Group("some", Y))) ~= nil and Ru.Incomplete(Rule("all", Group(nil, Y))) ~= nil, "a group needs all or any")
+  Check(Ru.Incomplete(Rule("all", { type = "group", match = "all", negate = true, conditions = { Y } })) ~= nil, "a group is not negated (negate a condition in it instead)")
+  Check(Ru.Incomplete(Rule("all", { type = "group", match = "all", conditions = "x" })) ~= nil, "a group whose conditions are not a list is unfinished")
+  Check(Ru.Incomplete(Rule("all", Group("all", Y, { type = "quality", op = "is", value = 99 }))) ~= nil, "one unfinished condition inside a group makes the rule unfinished")
+  Check(tostring(Ru.Incomplete(Rule("all", Y, Group("all", Y, { type = "item", id = 0 })))):find("Condition 2.2", 1, true), "the editor is told where: condition 2.2")
+  Check(tostring(Ru.Incomplete(Rule("all", Y, Group("any")))):find("Group 2", 1, true), "and which group is empty")
+  -- a table that loops is not followed
+  local loop = { type = "group", match = "all", conditions = {} }
+  loop.conditions[1] = loop
+  local ok, why = pcall(Ru.Incomplete, Rule("all", loop))
+  Check(ok and why ~= nil, "a group that contains itself is unfinished, and reading it ends")
+  ok = pcall(Ru.EvalCondition, loop, obs)
+  Check(ok, "evaluating it ends too")
+  ok = pcall(Ru.Summary, Rule("all", loop))
+  Check(ok, "and so does describing it")
+
+  -- an older build (no groups) reads a group as an unknown kind: the same data on this build with the group removed is what it would see
+  Is(Ru.TYPES.group, nil, "a group is not a kind the picker offers")
+  Is(Ru.NewCondition("group"), nil, "and the picker cannot make one")
+
+  -- words
+  Is(Ru.Summary(rule), "Automatically choose Greed when the item (is Rare or is Epic) and is equipment.", "a group is spoken in parentheses")
+  Is(Ru.Summary(either), "Automatically choose Greed when the item is recipe or (is Rare or better and is equipment).", "and an all-group inside an any-rule too")
+  Check(Ru.Summary(Rule("all", Group("any"))):find("once you add a condition", 1, true), "a rule with only an empty group asks for a condition")
+  -- deciding does not change a group
+  local before = Copy(rule)
+  Ru.Decide({ rule }, { quality = 3, classID = 4, equipLoc = "INVTYPE_HEAD" }); Ru.Summary(rule)
+  Check(Same(before, rule), "deciding changes nothing in a group")
 end
 
 ---------------------------------------------------------------------------
