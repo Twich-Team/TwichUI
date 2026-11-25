@@ -29,6 +29,7 @@ pages\Reminders.lua
 pages\HealerWatch.lua
 pages\ReturnTheFavor.lua
 pages\LootRolls.lua
+pages\LootRulesBuilder.lua
 pages\LootRules.lua
 pages\QoL.lua
 pages\Markers.lua

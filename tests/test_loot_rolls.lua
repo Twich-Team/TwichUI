@@ -1442,6 +1442,75 @@ do
   view.conditions[1].conditions[1].value = 5
   Check(LR.Rule(rid).conditions[1].conditions[1].value == 2, "the view of a rule is not the saved rule, groups included")
 
+  -- moving, copying and inserting at a place (what dragging does)
+  Fresh()
+  rid = Blank()
+  local function Kinds(list) local out = {} for i, x in ipairs(list) do out[i] = x.type == "group" and ("[" .. Kinds(x.conditions) .. "]") or (x.type == "quality" and ("q" .. x.value) or x.type) end return table.concat(out, ",") end
+  local function Top() return Kinds(LR.Rule(rid).conditions) end
+  Cond(rid, "quality", nil, { value = 1 }); Cond(rid, "quality", nil, { value = 2 }); Cond(rid, "quality", nil, { value = 3 })
+  Check(Top() == "q1,q2,q3", "three conditions")
+  local okAdd, place = LR.AddCondition(rid, "class", nil, 2)
+  Check(okAdd and place == 2 and Top() == "q1,class,q2,q3", "a condition can be inserted at a place")
+  LR.AddCondition(rid, "bind", nil, 99); LR.AddCondition(rid, "bind", nil, 0)
+  Check(Top() == "bind,q1,class,q2,q3,bind", "a place past either end is the end")
+  LR.RemoveCondition(rid, 1); LR.RemoveCondition(rid, 5); LR.RemoveCondition(rid, 2)
+  Check(Top() == "q1,q2,q3", "back to three")
+  Check(LR.MoveNode(rid, { 3 }, nil, 1) and Top() == "q3,q1,q2", "a condition moves up within the rule")
+  Check(LR.MoveNode(rid, { 1 }, nil, 4) and Top() == "q1,q2,q3", "and down to the end (a place past the last)")
+  Check(LR.MoveNode(rid, { 1 }, nil, 3) and Top() == "q2,q1,q3", "a place counts positions before the move: it lands between the others")
+  local same, path = LR.MoveNode(rid, { 2 }, nil, 2)
+  Check(same and #path == 1 and path[1] == 2 and Top() == "q2,q1,q3", "dropping it where it is changes nothing and says so")
+  Check(not LR.CanMoveNode(rid, { 2 }, nil, 2) and LR.CanMoveNode(rid, { 2 }, nil, 1), "CanMoveNode is false for a no-op and true for a real move")
+  local _, grp = LR.AddGroup(rid)
+  Check(Top() == "q2,q1,q3,[]", "a block at the end")
+  local moved, mp = LR.MoveNode(rid, { 1 }, grp, 1)
+  Check(moved and Top() == "q1,q3,[q2]" and mp[1] == 3 and mp[2] == 1, "a condition moves into a block, and its new path accounts for the list it left")
+  Check(LR.MoveNode(rid, { 3, 1 }, nil, 1) and Top() == "q2,q1,q3,[]", "and back out to the top")
+  grp = { 4 }
+  LR.MoveNode(rid, { 1 }, grp, 1); LR.MoveNode(rid, { 1 }, { 3 }, 2)
+  Check(Top() == "q3,[q2,q1]", "a condition dropped into a block lands at the place asked for")
+  -- a block cannot go into itself or what is in it
+  local _, inner = LR.AddGroup(rid, { 2 })
+  Check(not LR.MoveNode(rid, { 2 }, { 2 }, 1) and not LR.MoveNode(rid, { 2 }, inner, 1) and not LR.CanMoveNode(rid, { 2 }, inner, 1), "a block cannot be moved into itself or into what it holds")
+  Check(select(2, LR.MoveNode(rid, { 2 }, inner, 1)):find("itself", 1, true), "and says why")
+  -- depth: a block holding a block cannot go into a block
+  Fresh(); rid = Blank()
+  local _, ga = LR.AddGroup(rid); local _, gb = LR.AddGroup(rid, ga); local _, gc = LR.AddGroup(rid)
+  Cond(rid, "quality", gb)
+  Check(not LR.MoveNode(rid, { 1 }, { 2 }, 1) and select(2, LR.MoveNode(rid, { 1 }, { 2 }, 1)):find("levels", 1, true), "a block holding a block cannot go into another block (it would be too deep)")
+  Check(LR.MoveNode(rid, { 1, 1 }, { 2 }, 1), "a block holding only conditions can")
+  Check(not LR.MoveNode(rid, { 9 }, nil, 1) and not LR.MoveNode(rid, {}, nil, 1) and not LR.MoveNode(rid, { 1 }, { 9 }, 1) and not LR.MoveNode(rid, { 1 }, "x", 1) and not LR.MoveNode("lr999", { 1 }, nil, 1), "moves that lead nowhere do nothing")
+  -- moving re-decides a countdown (the rule reads differently), and never sends
+  Fresh(); LR.Set("auto", true)
+  rid = Blank(); Cond(rid, "quality", nil, { value = 2 }); Cond(rid, "class", nil, { value = 9 })
+  LR.SetMatch(rid, "any"); LR.SetEnabled(rid, true)
+  id = StartRoll("item:100"); roll = Ro.Find(id)
+  Check(roll.state == "scheduled", "any(Uncommon, recipe) takes an Uncommon helm")
+  local _, gm = LR.AddGroup(rid, nil, "all")
+  LR.MoveNode(rid, { 1 }, gm, 1); LR.MoveNode(rid, { 1 }, { 2 }, 2)
+  Check(LR.Rule(rid).conditions[1].type == "group" and #LR.Rule(rid).conditions == 1, "both conditions are now inside one all-block")
+  Check(roll.state == "pending" and not roll.auto, "as all(Uncommon, recipe) a helm no longer matches: the countdown ends")
+  Check(#rolled == 0, "and nothing is sent")
+  EndRoll(id)
+  -- copying
+  Fresh(); rid = Blank(); Cond(rid, "quality", nil, { value = 4 }); local _, gcopy = LR.AddGroup(rid); Cond(rid, "class", gcopy)
+  local copied, cp = LR.CopyNode(rid, { 1 })
+  Check(copied and cp[1] == 2 and Kinds(LR.Rule(rid).conditions) == "q4,q4,[class]", "a condition is copied right after itself")
+  LR.SetCondition(rid, { 2 }, { value = 3 })
+  Check(LR.Rule(rid).conditions[1].value == 4, "the copy shares nothing with the original")
+  local gcp, gp2 = LR.CopyNode(rid, { 3 })
+  Check(gcp and gp2[1] == 4 and Kinds(LR.Rule(rid).conditions) == "q4,q3,[class],[class]", "a block is copied with what is in it")
+  LR.SetCondition(rid, { 4, 1 }, { value = 7 })
+  Check(LR.Rule(rid).conditions[3].conditions[1].value == "equipment" and LR.Rule(rid).conditions[4].conditions[1].value == 7, "and the copy's contents share nothing with the original's")
+  Fresh(); rid = Blank()
+  for i = 1, Ru.MAX_CONDITIONS do Cond(rid, "bind") end
+  Check(not LR.CopyNode(rid, { 1 }) and select(2, LR.CopyNode(rid, { 1 })):find("conditions", 1, true), "copying past the most conditions is refused, with the reason")
+  Fresh(); rid = Blank(); for i = 1, Ru.MAX_GROUPS do LR.AddGroup(rid) end
+  Check(not LR.CopyNode(rid, { 1 }) and not LR.CopyNode(rid, { 9 }) and not LR.CopyNode(rid, {}), "and past the most blocks, or what is not there")
+  Fresh(); rid = Blank(); Cond(rid, "quality", nil, { value = 1 })
+  local _, firstGroup = LR.AddGroup(rid, nil, "any", 1)
+  Check(firstGroup[1] == 1 and Kinds(LR.Rule(rid).conditions) == "[],q1", "a block can be inserted at a place too")
+
   -- saved data that goes too deep, or loops, is unfinished and harmless
   Fresh(); LR.Set("auto", true)
   local q = { type = "quality", op = "is", value = 2 }
