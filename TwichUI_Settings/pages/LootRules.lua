@@ -16,11 +16,15 @@ local LIST_W = 224
 local ROW_H = 54
 local STRIP_H = 40
 local COND_H = 62
+local GROUP_H = 34
+local SEP_H = 18
+local INDENT = 18
 local W_MIN = 644
 
 local f, built
 local selected                 -- the rule open in the editor
 local rows, conds = {}, {}
+local groups, seps, hints = {}, {}, {}   -- the and / or blocks of the open rule, the "and" / "or" between neighbours, and the notes in empty groups
 local relayout = false
 local epoch = 0
 local say, sayTone
@@ -173,8 +177,8 @@ local function ValueText(c)
     return c.value
 end
 
-local function Apply(id, index, fields)
-    local ok, why = LR().SetCondition(id, index, fields)
+local function Apply(id, where, fields)
+    local ok, why = LR().SetCondition(id, where, fields)
     if not ok then P.Say(why or "That isn't a valid choice.", "warn") end
     P.QueueRefresh()
 end
@@ -184,6 +188,26 @@ local function ParseItem(text)
     if type(text) ~= "string" then return nil end
     local id = text:match("item:(%d+)") or text:match("^%s*(%d+)%s*$")
     return id and tonumber(id) or nil
+end
+
+-- The picker for a new condition: into the rule itself (groupPath nil) or into the group at groupPath.
+local function AddMenu(anchor, groupPath)
+    if not selected then return end
+    local choices = {}
+    for _, kind in ipairs(R.LootRules.ORDER) do choices[#choices + 1] = { value = kind, label = R.LootRules.TYPES[kind].label } end
+    Wg().ContextMenu(anchor, choices, function(kind)
+        if not selected then return end
+        local ok, why = LR().AddCondition(selected, kind, groupPath)
+        if not ok then P.Say(why, "warn") end
+        P.QueueRefresh()
+    end)
+end
+
+local function AddGroupHere(groupPath)
+    if not selected then return end
+    local ok, why = LR().AddGroup(selected, groupPath)
+    if not ok then P.Say(why, "warn") end
+    P.QueueRefresh()
 end
 
 ---------------------------------------------------------------------------
@@ -300,32 +324,32 @@ local function CondRow(i)
     c.icon = c.frame:CreateTexture(nil, "ARTWORK"); c.icon:SetSize(26, 26); c.icon:SetPoint("TOPLEFT", 0, 0)
     c.label = G.Text(c.frame, "body"); c.label:SetPoint("TOPLEFT", 34, -6); c.label:SetWidth(220); c.label:SetWordWrap(false)
     c.op = G.Dropdown(c.frame, 84, function(value)
-        if c.index and selected then Apply(selected, c.index, { op = value }) end
+        if c.path and selected then Apply(selected, c.path, { op = value }) end
     end)
     c.value = G.Dropdown(c.frame, 150, function(value)
-        if not (c.index and selected) then return end
+        if not (c.path and selected) then return end
         local kind = c.kind
         if kind == "quality" or kind == "class" or kind == "armor" then
-            Apply(selected, c.index, { value = (value == "equipment") and value or tonumber(value) })
-        elseif kind == "recipe" then Apply(selected, c.index, { mode = value })
-        elseif kind == "upgrade" or kind == "equippable" then Apply(selected, c.index, { value = value == "true" })
-        else Apply(selected, c.index, { value = value }) end
+            Apply(selected, c.path, { value = (value == "equipment") and value or tonumber(value) })
+        elseif kind == "recipe" then Apply(selected, c.path, { mode = value })
+        elseif kind == "upgrade" or kind == "equippable" then Apply(selected, c.path, { value = value == "true" })
+        else Apply(selected, c.path, { value = value }) end
     end)
     c.id = G.EditBox(c.frame, 150, 22)
     c.id:SetScript("OnEnterPressed", function(self)
         self:ClearFocus()
         local id = ParseItem(self:GetText())
-        if not (id and c.index and selected) then P.Say("Type or paste an item link, or its number.", "warn") P.QueueRefresh() return end
+        if not (id and c.path and selected) then P.Say("Type or paste an item link, or its number.", "warn") P.QueueRefresh() return end
         local name = C_Item and C_Item.GetItemInfo and C_Item.GetItemInfo(id)
-        Apply(selected, c.index, { id = id, name = type(name) == "string" and name or false })
+        Apply(selected, c.path, { id = id, name = type(name) == "string" and name or false })
     end)
     c.id:SetScript("OnEscapePressed", function(self) self:ClearFocus(); P.QueueRefresh() end)
     c.neg = G.Checkbox(c.frame, function(on)
-        if c.index and selected then Apply(selected, c.index, { negate = on or nil }) end
+        if c.path and selected then Apply(selected, c.path, { negate = on or nil }) end
     end)
     c.negText = G.Text(c.frame, "small"); c.negText:SetText("not")
     c.remove = G.Button(c.frame, "x", 24, "secondary", function()
-        if c.index and selected then LR().RemoveCondition(selected, c.index); P.QueueRefresh() end
+        if c.path and selected then LR().RemoveCondition(selected, c.path); P.QueueRefresh() end
     end)
     R.Interact.Tip(c.remove, "Remove this condition", "Takes this one condition out of the rule.")
     R.Interact.Tip(c.neg, "Not", "Turns the condition around: the rule applies when the item does NOT match it. An item the game hasn't described yet is still unknown, never a match.")
@@ -333,52 +357,147 @@ local function CondRow(i)
     return c
 end
 
-local function LayoutConds(v, y, w)
+local function GroupRow(i)
+    if groups[i] then return groups[i] end
+    local G = Wg()
+    local g = { frame = CreateFrame("Frame", nil, f.editor) }
+    g.frame:SetHeight(GROUP_H)
+    g.rail = g.frame:CreateTexture(nil, "ARTWORK"); g.rail:SetWidth(3); g.rail:SetPoint("TOPLEFT", 0, 0); g.rail:SetPoint("BOTTOMLEFT", 0, 0)
+    g.label = G.Text(g.frame, "body"); g.label:SetPoint("LEFT", 12, 0)
+    g.label:SetText("Block")
+    g.all = R.FrameLook.Toggle(g.frame, "All", 46, function() if g.path and selected then LR().SetMatch(selected, "all", g.path); P.QueueRefresh() end end)
+    g.any = R.FrameLook.Toggle(g.frame, "Any", 46, function() if g.path and selected then LR().SetMatch(selected, "any", g.path); P.QueueRefresh() end end)
+    g.all:SetHeight(24); g.any:SetHeight(24)
+    g.addCond = G.Button(g.frame, "+ Condition", 90, "secondary", function() if g.path then AddMenu(g.addCond, g.path) end end)
+    g.addGroup = G.Button(g.frame, "+ Block", 66, "secondary", function() if g.path then AddGroupHere(g.path) end end)
+    g.remove = G.Button(g.frame, "x", 24, "secondary", function()
+        if g.path and selected then LR().RemoveCondition(selected, g.path); P.QueueRefresh() end
+    end)
+    R.Interact.Tip(g.all, "All of these", "This block is true when every one of the conditions in it is true.")
+    R.Interact.Tip(g.any, "Any of these", "This block is true when at least one of the conditions in it is true.")
+    R.Interact.Tip(g.addCond, "Add a condition to this block", "Adds a condition inside this block, to be combined with the others in it.")
+    R.Interact.Tip(g.addGroup, "Add a block inside this block", "Adds another block inside this one (up to three levels in all), combined with the rest of this block's conditions.")
+    R.Interact.Tip(g.remove, "Remove this block", "Takes this block out of the rule, with everything in it.")
+    groups[i] = g
+    return g
+end
+
+local function Pooled(pool, i, make)
+    local item = pool[i]
+    if not item then item = make(); pool[i] = item end
+    return item
+end
+
+local function LayoutCondition(cond, path, c, x0, y, w)
     local G = Wg()
     local Rules = Ru()
-    for i, cond in ipairs(v.conditions) do
-        local c = CondRow(i)
-        local t = Rules.TYPES[cond.type]
-        c.index, c.kind = i, cond.type
-        R.Icons.Apply(c.icon, t and t.icon or "lootRolls", 26)
-        c.label:SetText(t and t.label or "?")
-        local hasOp = cond.type == "quality"
-        local inner = w - PAD * 2
-        c.frame:SetWidth(inner)
-        Put(c.frame, f.editor, PAD, y)
-        local x = 34
-        c.op:SetShown(hasOp)
-        if hasOp then
-            local ops = Choices("op")
-            c.op:SetWidth(112)
-            c.op:SetChoices(ops); c.op:SetValue(cond.op, LabelOf(ops, cond.op))
-            c.op:ClearAllPoints(); c.op:SetPoint("TOPLEFT", c.frame, "TOPLEFT", x, -30)
-            x = x + 118
+    local t = Rules.TYPES[cond.type]
+    c.path, c.kind = path, cond.type
+    c.index = path[#path]
+    R.Icons.Apply(c.icon, t and t.icon or "lootRolls", 26)
+    c.label:SetText(t and t.label or "?")
+    local hasOp = cond.type == "quality"
+    local inner = w - PAD * 2 - x0
+    c.frame:SetWidth(inner)
+    Put(c.frame, f.editor, PAD + x0, y)
+    local x = 34
+    c.op:SetShown(hasOp)
+    if hasOp then
+        local ops = Choices("op")
+        c.op:SetWidth(112)
+        c.op:SetChoices(ops); c.op:SetValue(cond.op, LabelOf(ops, cond.op))
+        c.op:ClearAllPoints(); c.op:SetPoint("TOPLEFT", c.frame, "TOPLEFT", x, -30)
+        x = x + 118
+    end
+    local width = math.max(90, inner - x)
+    if cond.type == "item" then
+        c.value:Hide(); c.id:Show()
+        c.id:SetWidth(width)
+        c.id:ClearAllPoints(); c.id:SetPoint("TOPLEFT", c.frame, "TOPLEFT", x, -30)
+        if not c.id:HasFocus() then
+            c.id:SetText(cond.id and cond.id > 0 and ((type(cond.name) == "string" and cond.name ~= "" and cond.name) or ("item #" .. cond.id)) or "")
         end
-        local width = math.max(90, inner - x)
-        if cond.type == "item" then
-            c.value:Hide(); c.id:Show()
-            c.id:SetWidth(width)
-            c.id:ClearAllPoints(); c.id:SetPoint("TOPLEFT", c.frame, "TOPLEFT", x, -30)
-            if not c.id:HasFocus() then
-                c.id:SetText(cond.id and cond.id > 0 and ((type(cond.name) == "string" and cond.name ~= "" and cond.name) or ("item #" .. cond.id)) or "")
+    else
+        c.id:Hide(); c.value:Show()
+        local choices = Choices(cond.type, cond)
+        c.value:SetWidth(width)
+        c.value:SetChoices(choices)
+        local value = ValueText(cond)
+        c.value:SetValue(value, LabelOf(choices, value))
+        c.value:ClearAllPoints(); c.value:SetPoint("TOPLEFT", c.frame, "TOPLEFT", x, -30)
+    end
+    c.neg:ClearAllPoints(); c.neg:SetPoint("TOPRIGHT", c.frame, "TOPRIGHT", -(24 + 8 + 34), -4)
+    c.neg:SetChecked(cond.negate == true)
+    c.negText:ClearAllPoints(); c.negText:SetPoint("LEFT", c.neg, "RIGHT", 4, 0)
+    c.remove:ClearAllPoints(); c.remove:SetPoint("TOPRIGHT", c.frame, "TOPRIGHT", 0, -3)
+end
+
+-- One list of conditions (the rule's, or a block's): each condition, or block and what is in it, with "and" / "or" between neighbours.
+-- st counts what has been placed, so the pools of frames are reused in reading order. Returns the y below the list.
+local function LayoutNodes(list, match, path, depth, y, w, st, v)
+    local G = Wg()
+    local Rules = Ru()
+    local x0 = (depth - 1) * INDENT
+    for i, cond in ipairs(list) do
+        if i > 1 then
+            st.sep = st.sep + 1
+            local sep = Pooled(seps, st.sep, function() return G.Text(f.editor, "small") end)
+            sep:SetText(match == "any" and "or" or "and")
+            Tone(sep, "quiet")
+            Put(sep, f.editor, PAD + x0 + 34, y)
+            y = y + SEP_H
+        end
+        local at = { unpack(path) }
+        at[#at + 1] = i
+        if cond.type == "group" then
+            st.group = st.group + 1
+            local g = GroupRow(st.group)
+            g.path = at
+            local inner = w - PAD * 2 - x0
+            g.frame:SetWidth(inner)
+            Put(g.frame, f.editor, PAD + x0, y)
+            local rail = cond.match == "any" and { 0.46, 0.53, 0.42 } or { 0.57, 0.46, 0.32 }
+            g.rail:SetColorTexture(rail[1], rail[2], rail[3], 0.8)
+                        g.all:SetOn(cond.match ~= "any"); g.any:SetOn(cond.match == "any")
+            g.remove:ClearAllPoints(); g.remove:SetPoint("RIGHT", g.frame, "RIGHT", 0, 0)
+            g.addGroup:ClearAllPoints(); g.addGroup:SetPoint("RIGHT", g.remove, "LEFT", -6, 0)
+            g.addCond:ClearAllPoints(); g.addCond:SetPoint("RIGHT", g.addGroup, "LEFT", -6, 0)
+            g.any:ClearAllPoints(); g.any:SetPoint("RIGHT", g.addCond, "LEFT", -10, 0)
+            g.all:ClearAllPoints(); g.all:SetPoint("RIGHT", g.any, "LEFT", -4, 0)
+            g.addGroup:SetEnabled(depth + 2 <= Rules.MAX_DEPTH and (v.counts.groups < Rules.MAX_GROUPS))
+            g.addCond:SetEnabled(v.counts.conditions < Rules.MAX_CONDITIONS)
+            g.frame:Show()
+            y = y + GROUP_H
+            local kids = type(cond.conditions) == "table" and cond.conditions or {}
+            if #kids == 0 then
+                st.hint = st.hint + 1
+                local hint = Pooled(hints, st.hint, function() return G.Text(f.editor, "small") end)
+                hint:SetWidth(inner - INDENT - 12); hint:SetWordWrap(true)
+                hint:SetText("Empty. Add a condition, or remove this block: the rule stays unfinished until you do.")
+                Tone(hint, "warn")
+                Put(hint, f.editor, PAD + x0 + INDENT + 12, y + 2)
+                y = y + math.max(18, hint:GetStringHeight() or 18) + 6
+            else
+                y = LayoutNodes(kids, cond.match, at, depth + 1, y, w, st, v)
             end
         else
-            c.id:Hide(); c.value:Show()
-            local choices = Choices(cond.type, cond)
-            c.value:SetWidth(width)
-            c.value:SetChoices(choices)
-            local value = ValueText(cond)
-            c.value:SetValue(value, LabelOf(choices, value))
-            c.value:ClearAllPoints(); c.value:SetPoint("TOPLEFT", c.frame, "TOPLEFT", x, -30)
+            st.cond = st.cond + 1
+            local c = CondRow(st.cond)
+            LayoutCondition(cond, at, c, x0, y, w)
+            c.frame:Show()
+            y = y + COND_H
         end
-        c.neg:ClearAllPoints(); c.neg:SetPoint("TOPRIGHT", c.frame, "TOPRIGHT", -(24 + 8 + 34), -4)
-        c.neg:SetChecked(cond.negate == true)
-        c.negText:ClearAllPoints(); c.negText:SetPoint("LEFT", c.neg, "RIGHT", 4, 0)
-        c.remove:ClearAllPoints(); c.remove:SetPoint("TOPRIGHT", c.frame, "TOPRIGHT", 0, -3)
-        y = y + COND_H
     end
-    for i = #v.conditions + 1, #conds do conds[i].index = nil; conds[i].frame:Hide() end
+    return y
+end
+
+local function LayoutConds(v, y, w)
+    local st = { cond = 0, group = 0, sep = 0, hint = 0 }
+    y = LayoutNodes(v.conditions, v.match, {}, 1, y, w, st, v)
+    for i = st.cond + 1, #conds do conds[i].path = nil; conds[i].index = nil; conds[i].frame:Hide() end
+    for i = st.group + 1, #groups do groups[i].path = nil; groups[i].frame:Hide() end
+    for i = st.sep + 1, #seps do seps[i]:Hide() end
+    for i = st.hint + 1, #hints do hints[i]:Hide() end
     return y
 end
 
@@ -428,8 +547,10 @@ local function LayoutEditor(v, w)
     Put(f.whenHelp, f.editor, PAD, y)
     y = y + 18
     y = LayoutConds(v, y, w)
-    f.addCond:SetEnabled(#v.conditions < Rules.MAX_CONDITIONS)
+    f.addCond:SetEnabled(v.counts.conditions < Rules.MAX_CONDITIONS)
+    f.addGroup:SetEnabled(v.counts.groups < Rules.MAX_GROUPS)
     Put(f.addCond, f.editor, PAD, y + 4)
+    Put(f.addGroup, f.editor, PAD + 158, y + 4)
     y = y + 40
 
     -- then roll
@@ -539,6 +660,9 @@ function P.Refresh()
     else
         for _, part in ipairs(f.editorParts) do part:Hide() end
         for _, c in ipairs(conds) do c.frame:Hide() end
+        for _, g in ipairs(groups) do g.frame:Hide() end
+        for _, t in ipairs(seps) do t:Hide() end
+        for _, t in ipairs(hints) do t:Hide() end
         f.noRule:SetWidth(ew - PAD * 2)
         Put(f.noRule, f.editor, PAD, 20)
         eh = 80
@@ -649,16 +773,9 @@ local function Build()
     f.whenHelp = Part(G.Text(e, "small")); f.whenHelp:SetWordWrap(true)
     f.matchAll = Part(Segment(e, "All of these", function() if selected then LR().SetMatch(selected, "all"); P.QueueRefresh() end end))
     f.matchAny = Part(Segment(e, "Any of these", function() if selected then LR().SetMatch(selected, "any"); P.QueueRefresh() end end))
-    f.addCond = Part(G.Button(e, "+ Add condition...", 150, "secondary", function()
-        if not selected then return end
-        local choices = {}
-        for _, kind in ipairs(R.LootRules.ORDER) do choices[#choices + 1] = { value = kind, label = R.LootRules.TYPES[kind].label } end
-        G.ContextMenu(f.addCond, choices, function(kind)
-            local ok, why = LR().AddCondition(selected, kind)
-            if not ok then P.Say(why, "warn") end
-            P.QueueRefresh()
-        end)
-    end))
+    f.addCond = Part(G.Button(e, "+ Add condition...", 150, "secondary", function() AddMenu(f.addCond, nil) end))
+    f.addGroup = Part(G.Button(e, "+ Add and / or block", 160, "secondary", function() AddGroupHere(nil) end))
+    R.Interact.Tip(f.addGroup, "Add an and / or block", "Adds a block of its own inside the rule, holding conditions that are combined as all-of or any-of. Use one for things like \"Rare or Epic, and equipment\": the rule says all of these, and the block says either quality.")
     f.thenTitle = Part(G.Text(e, "heading"))
     f.actions = {}
     for _, key in ipairs({ "none", "need", "greed", "pass" }) do
@@ -749,7 +866,7 @@ function P.Frame()
     return f
 end
 -- What has been built, read only (for the tests and the simulator).
-function P.Parts() return { frame = f, rows = rows, conds = conds } end
+function P.Parts() return { frame = f, rows = rows, conds = conds, groups = groups, seps = seps, hints = hints } end
 
 if R.OnSettingsClosed then R.OnSettingsClosed(function() ClosePicker(); epoch = epoch + 1; queued = false end) end
 if R.LootRolls then R.LootRolls.Subscribe(function(what)

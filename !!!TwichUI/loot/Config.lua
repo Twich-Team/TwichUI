@@ -213,6 +213,32 @@ local function Find(id)
     end
 end
 
+-- A plain copy of a list of conditions (groups and what is in them too), read no deeper than the limits allow; whatever is deeper becomes an
+-- unusable condition, so the copy of a rule that goes too deep is as unfinished as the rule.
+local function CopyList(list, depth)
+    local out = {}
+    if type(list) ~= "table" then return out end
+    for i, c in ipairs(list) do
+        if type(c) == "table" then
+            local copy = {}
+            for k, val in pairs(c) do if k ~= "conditions" or c.type ~= "group" then copy[k] = val end end
+            if c.type == "group" then
+                copy.conditions = depth > Ru.MAX_DEPTH and { { type = "too deep" } } or CopyList(c.conditions, depth + 1)
+            end
+            out[i] = copy
+        end
+    end
+    return out
+end
+
+local function UsesUpgrade(list)
+    for _, c in ipairs(list) do
+        if c.type == "upgrade" then return true end
+        if c.type == "group" and type(c.conditions) == "table" and UsesUpgrade(c.conditions) then return true end
+    end
+    return false
+end
+
 -- A rule as the editor and the list read it: a plain copy with what is missing filled in, never the saved table itself.
 local function View(rule, index)
     local v = {
@@ -227,18 +253,10 @@ local function View(rule, index)
         conditions = {},
     }
     if v.artwork and v.artwork.kind == "automatic" then v.artwork = nil end
-    for i, c in ipairs(type(rule.conditions) == "table" and rule.conditions or {}) do
-        if type(c) == "table" then
-            local copy = {}
-            for k, val in pairs(c) do copy[k] = val end
-            v.conditions[i] = copy
-        end
-    end
+    v.conditions = CopyList(rule.conditions, 1)
     v.incomplete = Ru.Incomplete(v)
-    v.usesUpgrade = false
-    for _, c in ipairs(v.conditions) do
-        if c.type == "upgrade" then v.usesUpgrade = true end
-    end
+    v.usesUpgrade = UsesUpgrade(v.conditions)
+    v.counts = Ru.Measure(v.conditions)   -- { conditions, groups, depth }: what the editor needs to know what may still be added
     v.summary = Ru.Summary(v)
     return v
 end
@@ -334,11 +352,7 @@ function LR.Duplicate(id)
     if art and art.kind ~= "automatic" then copy.artwork = art end
     local name = ValidName(rule.name) and rule.name or "Loot rule"
     copy.name = (name .. " (copy)"):sub(1, Ru.MAX_NAME)
-    for i, c in ipairs(type(rule.conditions) == "table" and rule.conditions or {}) do
-        local cc = {}
-        for k, v in pairs(c) do cc[k] = v end
-        copy.conditions[i] = cc
-    end
+    copy.conditions = CopyList(rule.conditions, 1)
     table.insert(list, index + 1, copy)
     LR.Invalidate("rules")
     return true, copy.id
@@ -413,9 +427,49 @@ function LR.SetDisplay(id, display)
     return Edit(id, function(r) if (r.display or "none") == display then return nil end r.display = display return true end)
 end
 
-function LR.SetMatch(id, mode)
+-- Conditions and groups are addressed by path: the indexes from the top down ({ 2, 1 } is the first item of the second item, a group).
+-- A plain number is a path of one; nil or {} is the top level itself where a group is wanted.
+local function ReadPath(p)
+    if p == nil then return {} end
+    if Whole(p) and p >= 1 then return { p } end
+    if type(p) ~= "table" or #p > Ru.MAX_DEPTH + 1 then return nil end
+    local out = {}
+    for i, k in ipairs(p) do
+        if not (Whole(k) and k >= 1) then return nil end
+        out[i] = k
+    end
+    return out
+end
+
+-- The stored list of the top level (path {}) or of the group at `path`; nil when the path leads to no group.
+local function ListAt(rule, path)
+    local list = rule.conditions
+    for _, k in ipairs(path) do
+        local g = type(list) == "table" and list[k]
+        if type(g) ~= "table" or g.type ~= "group" or type(g.conditions) ~= "table" then return nil end
+        list = g.conditions
+    end
+    return type(list) == "table" and list or nil
+end
+
+local function Totals(rule) return Ru.Measure(rule.conditions) end
+
+-- all or any, for the whole rule (no path) or for the group at the path.
+function LR.SetMatch(id, mode, groupPath)
     if mode ~= "all" and mode ~= "any" then return false end
-    return Edit(id, function(r) if (r.match or "all") == mode then return nil end r.match = mode return true end)
+    local path = ReadPath(groupPath)
+    if not path then return false end
+    return Edit(id, function(r)
+        local node = r
+        if #path > 0 then
+            local parent = ListAt(r, { unpack(path, 1, #path - 1) })
+            node = parent and parent[path[#path]]
+            if type(node) ~= "table" or node.type ~= "group" then return false end
+        end
+        if (node.match or "all") == mode then return nil end
+        node.match = mode
+        return true
+    end)
 end
 
 function LR.SetDelay(id, seconds)
@@ -429,28 +483,68 @@ function LR.SetShowResult(id, on)
     return Edit(id, function(r) if (r.result ~= false) == on then return nil end r.result = on return true end)
 end
 
--- Adds a condition of a kind (see Rules.ORDER) with its starting values; returns its place in the list.
-function LR.AddCondition(id, kind)
+-- Adds a condition of a kind (see Rules.ORDER) with its starting values at the end of the top level, or of the group at groupPath;
+-- returns its place in that list, then its whole path.
+function LR.AddCondition(id, kind, groupPath)
     local fresh = Ru.NewCondition(kind)
     if not fresh then return false, "No such condition." end
-    local index
-    local ok, why = Edit(id, function(r)
+    local path = ReadPath(groupPath)
+    if not path then return false, "That group is gone." end
+    local index, at
+    local why
+    local ok, reason = Edit(id, function(r)
         if type(r.conditions) ~= "table" then r.conditions = {} end
-        if #r.conditions >= Ru.MAX_CONDITIONS then return false end
-        r.conditions[#r.conditions + 1] = fresh
-        index = #r.conditions
+        local list = ListAt(r, path)
+        if not list then why = "That group is gone." return false end
+        if Totals(r).conditions >= Ru.MAX_CONDITIONS then why = ("A rule can have up to %d conditions."):format(Ru.MAX_CONDITIONS) return false end
+        list[#list + 1] = fresh
+        index = #list
+        at = { unpack(path) }
+        at[#at + 1] = index
         return true
     end)
-    if not ok then return false, why or ("A rule can have up to %d conditions."):format(Ru.MAX_CONDITIONS) end
-    return true, index
+    if not ok then return false, why or reason or "That rule is gone." end
+    return true, index, at
 end
 
--- Changes fields of one condition (a table of the fields to set); the result must still be a complete condition.
-function LR.SetCondition(id, index, fields)
+-- Adds an empty group at the end of the top level, or of the group at groupPath. It starts with the opposite of what holds it (a group
+-- in an "all" list reads "any"), and the rule is unfinished until something is put in it. Returns the group's path.
+function LR.AddGroup(id, groupPath, match)
+    if match ~= nil and match ~= "all" and match ~= "any" then return false, "Choose all or any." end
+    local path = ReadPath(groupPath)
+    if not path then return false, "That group is gone." end
+    local at, why
+    local ok, reason = Edit(id, function(r)
+        if type(r.conditions) ~= "table" then r.conditions = {} end
+        local list = ListAt(r, path)
+        if not list then why = "That group is gone." return false end
+        if #path + 2 > Ru.MAX_DEPTH then why = ("Groups can go %d levels deep."):format(Ru.MAX_DEPTH) return false end
+        if Totals(r).groups >= Ru.MAX_GROUPS then why = ("A rule can have up to %d groups."):format(Ru.MAX_GROUPS) return false end
+        local parentMatch = r.match
+        if #path > 0 then
+            local parent = ListAt(r, { unpack(path, 1, #path - 1) })
+            parentMatch = parent[path[#path]].match
+        end
+        list[#list + 1] = { type = "group", match = match or (parentMatch == "any" and "all" or "any"), conditions = {} }
+        at = { unpack(path) }
+        at[#at + 1] = #list
+        return true
+    end)
+    if not ok then return false, why or reason or "That rule is gone." end
+    return true, at
+end
+
+-- Changes fields of one condition (a table of the fields to set); the result must still be a complete condition. A group is changed
+-- with SetMatch, never here.
+function LR.SetCondition(id, where, fields)
     if type(fields) ~= "table" then return false end
+    local path = ReadPath(where)
+    if not path or #path == 0 then return false end
     return Edit(id, function(r)
-        local c = type(r.conditions) == "table" and r.conditions[index]
-        if type(c) ~= "table" then return false end
+        local list = ListAt(r, { unpack(path, 1, #path - 1) })
+        local index = path[#path]
+        local c = list and list[index]
+        if type(c) ~= "table" or c.type == "group" then return false end
         local copy = {}
         for k, v in pairs(c) do copy[k] = v end
         for k, v in pairs(fields) do
@@ -461,15 +555,19 @@ function LR.SetCondition(id, index, fields)
         for k, v in pairs(copy) do if c[k] ~= v then same = false end end
         for k in pairs(c) do if copy[k] == nil then same = false end end
         if same then return nil end
-        r.conditions[index] = copy
+        list[index] = copy
         return true
     end)
 end
 
-function LR.RemoveCondition(id, index)
+-- Removes one condition, or a group with everything in it.
+function LR.RemoveCondition(id, where)
+    local path = ReadPath(where)
+    if not path or #path == 0 then return false end
     return Edit(id, function(r)
-        if type(r.conditions) ~= "table" or not r.conditions[index] then return false end
-        table.remove(r.conditions, index)
+        local list = ListAt(r, { unpack(path, 1, #path - 1) })
+        if not (list and list[path[#path]]) then return false end
+        table.remove(list, path[#path])
         return true
     end)
 end

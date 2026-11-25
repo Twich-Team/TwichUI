@@ -1272,6 +1272,195 @@ do
 end
 
 ---------------------------------------------------------------------------
+-- 4c. Groups: and / or blocks inside a rule, edited and run end to end
+---------------------------------------------------------------------------
+do
+  local function Fresh()
+    for _, r in ipairs({ unpack(Ro.Rolls()) }) do Ro.Remove(r) end
+    rolled = {}
+    c.TwichUIDB.ui.lootRolls.rules = {}
+    LR.Set("auto", false); LR.Set("autoNeed", false); LR.Set("autoUpgrade", false); LR.Set("paused", false)
+    LR.Invalidate("rules")
+  end
+  local function Blank()
+    local _, rid = LR.Create("blank")
+    LR.RemoveCondition(rid, 1)
+    LR.SetAction(rid, "greed")
+    return rid
+  end
+  local function Cond(rid, kind, where, fields)
+    local ok, _, at = LR.AddCondition(rid, kind, where)
+    assert(ok, "add " .. kind)
+    if fields then assert(LR.SetCondition(rid, at, fields), "set " .. kind) end
+    return at
+  end
+  ITEMS["item:109"] = { id = 109, name = "Rare Blade", quality = 3, class = 2, sub = 7, loc = "INVTYPE_WEAPON", bind = 2, price = 9, icon = 1010, type = "Weapon", subType = "Swords" }
+  ITEMS["item:110"] = { id = 110, name = "Rare Potion", quality = 3, class = 0, sub = 1, loc = "", bind = 0, price = 9, icon = 1011, type = "Consumable", subType = "Potion" }
+
+  -- (Rare or Epic) and equipment, built through the calls the editor makes
+  Fresh()
+  local rid = Blank()
+  local ok, gpath = LR.AddGroup(rid)
+  Check(ok and #gpath == 1 and gpath[1] == 1, "a group is added at the end of the rule")
+  Check(LR.Rule(rid).conditions[1].type == "group" and LR.Rule(rid).conditions[1].match == "any", "inside an all-rule a new group starts as any")
+  Check(LR.Rule(rid).incomplete and LR.Rule(rid).incomplete:find("Group 1", 1, true), "an empty group makes the rule unfinished and says which")
+  local at = Cond(rid, "quality", gpath, { value = 3 })
+  Check(#at == 2 and at[1] == 1 and at[2] == 1, "a condition added inside the group reports its path")
+  Cond(rid, "quality", gpath, { value = 4 })
+  Check(LR.Rule(rid).conditions[1].conditions[2].value == 4, "a second one, edited by its path")
+  Cond(rid, "class")
+  Check(LR.Rule(rid).conditions[2].type == "class" and LR.Rule(rid).incomplete == nil, "a condition beside the group, at the top, completes the rule")
+  LR.SetEnabled(rid, true); LR.SetName(rid, "Good gear")
+  Check(LR.Rule(rid).summary == "Automatically choose Greed when the item (is Rare or is Epic) and is equipment, after 3 seconds.", "the summary reads the group")
+  LR.Set("auto", true)
+  local a, b, d, e = StartRoll("item:101"), StartRoll("item:109"), StartRoll("item:100"), StartRoll("item:110")
+  Check(Ro.Find(a).state == "scheduled" and Ro.Find(b).state == "scheduled", "an Epic weapon and a Rare weapon both count down")
+  Check(Ro.Find(d).state == "pending" and Ro.Find(e).state == "pending", "an Uncommon helm and a Rare potion do not")
+  Advance(4)
+  Check(#rolled == 2 and rolled[1].kind == 2 and rolled[2].kind == 2, "exactly the two matching rolls send Greed")
+  EndRoll(a); EndRoll(b); EndRoll(d); EndRoll(e)
+
+  -- flipping a group's operator re-decides a running countdown; flipping the rule's own does the same
+  Fresh(); LR.Set("auto", true)
+  rid = Blank(); Cond(rid, "class", nil, { value = 9 }); LR.AddGroup(rid, nil, "all")
+  Cond(rid, "quality", { 2 }, { value = 2 }); Cond(rid, "bind", { 2 }, { value = "equip" })
+  LR.SetMatch(rid, "any"); LR.SetAction(rid, "greed"); LR.SetEnabled(rid, true)
+  -- any( recipe , all( Uncommon, binds on equip ) ): item:100 is an Uncommon bind-on-equip
+  local id = StartRoll("item:100"); local roll = Ro.Find(id)
+  Check(roll.state == "scheduled", "any( recipe, all( Uncommon, binds when equipped ) ) takes an Uncommon bind-on-equip helm")
+  LR.SetCondition(rid, { 2, 2 }, { value = "pickup" })
+  Check(roll.state == "pending" and not roll.auto, "editing a condition inside the group ends the countdown when it no longer holds")
+  LR.SetMatch(rid, "any", { 2 })
+  Check(roll.state == "scheduled", "making the group 'any' lets Uncommon alone satisfy it again")
+  LR.SetMatch(rid, "all")
+  Check(roll.state == "pending" and not roll.auto, "making the rule itself 'all' needs the recipe too, which a helm is not: the countdown ends")
+  LR.SetMatch(rid, "any")
+  Check(roll.state == "scheduled", "and back to 'any' it counts down again")
+  LR.SetCondition(rid, { 2, 1 }, { value = 3 })
+  Check(roll.state == "pending", "a group that no longer holds ends the countdown")
+  Check(#rolled == 0, "and nothing was sent along the way")
+  EndRoll(id)
+
+  -- unknown inside a group stays unknown for the whole rule
+  Fresh(); LR.Set("auto", true)
+  rid = Blank(); LR.AddGroup(rid, nil, "all")
+  Cond(rid, "recipe", { 1 }, { mode = "known" }); Cond(rid, "quality", { 1 }, { value = 2 })
+  Cond(rid, "class", nil, { value = 9 })
+  LR.SetAction(rid, "pass"); LR.SetEnabled(rid, true)
+  id = StartRoll("item:103", { noTooltip = true }); roll = Ro.Find(id)
+  Check(roll.state == "pending" and roll.autoNote and roll.autoNote:find("could not be checked", 1, true), "a known-recipe check that cannot be read keeps a rule that is 'all(known, Uncommon) and recipe' manual")
+  Advance(10)
+  Check(#rolled == 0, "and sends nothing")
+  EndRoll(id)
+  id = StartRoll("item:104"); roll = Ro.Find(id)
+  Check(roll.state == "pending" and roll.autoNote == nil, "a trade good is a plain no: not a recipe")
+  EndRoll(id)
+
+  -- an upgrade condition inside a group still needs its own permission
+  Fresh(); LR.Set("auto", true)
+  rid = Blank(); LR.AddGroup(rid, nil, "any")
+  Cond(rid, "upgrade", { 1 }, { value = true }); Cond(rid, "quality", { 1 }, { value = 4 })
+  LR.SetAction(rid, "greed"); LR.SetEnabled(rid, true)
+  Check(LR.Rule(rid).usesUpgrade == true, "a rule knows it uses upgrades when the condition is inside a group")
+  JUDGED["item:101"] = { up = true }
+  id = StartRoll("item:101"); roll = Ro.Find(id)
+  Check(roll.state == "pending" and roll.autoNote and roll.autoNote:find("upgrades", 1, true), "an upgrade inside a group does nothing until upgrades are allowed")
+  LR.Set("autoUpgrade", true)
+  Check(roll.state == "scheduled", "then it counts")
+  EndRoll(id)
+  JUDGED["item:101"] = nil
+
+  -- Need inside a group is still gated by the Need switch
+  Fresh(); LR.Set("auto", true)
+  rid = Blank(); LR.AddGroup(rid, nil, "any"); Cond(rid, "quality", { 1 }, { value = 2 })
+  LR.SetAction(rid, "need"); LR.SetEnabled(rid, true)
+  id = StartRoll("item:100"); roll = Ro.Find(id)
+  Check(roll.state == "pending" and roll.autoNote and roll.autoNote:find("Need", 1, true), "a Need rule built from groups is still held back by the Need switch")
+  Advance(10)
+  Check(#rolled == 0, "and sends nothing")
+  EndRoll(id)
+
+  -- editing, limits, copying and removing
+  Fresh()
+  rid = Blank()
+  local _, g1 = LR.AddGroup(rid)
+  local _, g2 = LR.AddGroup(rid, g1)
+  Check(#g2 == 2 and LR.Rule(rid).conditions[1].conditions[1].type == "group" and LR.Rule(rid).conditions[1].conditions[1].match == "all",
+    "a group inside an any-group starts as all")
+  local deepOk, deepWhy = LR.AddGroup(rid, g2)
+  Check(not deepOk and deepWhy:find("levels", 1, true), "a group in a group in a group (past three levels, the top counting as one) is refused with the reason")
+  for i = 1, 4 do LR.AddGroup(rid) end
+  Check(LR.Rule(rid).conditions[#LR.Rule(rid).conditions].type == "group" and not LR.AddGroup(rid), "a rule holds a bounded number of groups")
+  local _, why = LR.AddGroup(rid)
+  Check(why and why:find("groups", 1, true), "and says so")
+  Check(not LR.AddGroup(rid, { 9 }) and not LR.AddGroup(rid, { 1, 1, 1, 9 }) and not LR.AddGroup(rid, "x") and not LR.AddGroup(rid, { 0 }) and not LR.AddGroup(rid, { 1.5 }), "a path that leads nowhere is refused")
+  Check(not LR.AddGroup("lr999") and not LR.AddCondition(rid, "quality", { 9 }) and not LR.AddCondition("lr999", "quality", { 1 }), "adding to a group or rule that is gone does nothing")
+  Check(not LR.AddGroup(rid, nil, "some"), "a group is all or any")
+  -- a quality condition is not a group, so nothing can be added inside it
+  Fresh(); rid = Blank(); Cond(rid, "quality")
+  Check(not LR.AddCondition(rid, "class", { 1 }) and not LR.AddGroup(rid, { 1 }) and not LR.SetMatch(rid, "any", { 1 }), "a condition is not a group: nothing goes inside it, and it has no operator")
+  -- limits across groups
+  Fresh(); rid = Blank(); local _, gp = LR.AddGroup(rid)
+  for i = 1, Ru.MAX_CONDITIONS do Cond(rid, "bind", i % 2 == 0 and gp or nil) end
+  Check(not LR.AddCondition(rid, "bind", gp) and not LR.AddCondition(rid, "bind"), "conditions are counted across the whole rule, groups included")
+  local cs = 0
+  local function Count(list) for _, x in ipairs(list) do if x.type == "group" then Count(x.conditions) else cs = cs + 1 end end end
+  Count(LR.Rule(rid).conditions)
+  Check(cs == Ru.MAX_CONDITIONS, "the rule holds exactly the limit")
+
+  -- paths of one number still work as before, and removal by path
+  Fresh(); rid = Blank(); Cond(rid, "quality"); local _, gq = LR.AddGroup(rid); Cond(rid, "class", gq); Cond(rid, "bind", gq)
+  Check(LR.SetCondition(rid, 1, { value = 3 }) and LR.Rule(rid).conditions[1].value == 3, "a plain index still addresses a top-level condition")
+  Check(not LR.SetCondition(rid, 2, { value = "x" }) and not LR.SetCondition(rid, { 2 }, { match = "any" }), "a group is not edited as a condition")
+  Check(LR.SetCondition(rid, { 2, 2 }, { value = "pickup" }) and LR.Rule(rid).conditions[2].conditions[2].value == "pickup", "a condition in a group")
+  Check(not LR.SetCondition(rid, { 2, 3 }, { value = "pickup" }) and not LR.SetCondition(rid, { 2, 1, 1 }, { value = 2 }) and not LR.SetCondition(rid, {}, { value = 2 }), "paths that lead to no condition do nothing")
+  Check(LR.RemoveCondition(rid, { 2, 1 }) and #LR.Rule(rid).conditions[2].conditions == 1, "a condition is removed from a group by its path")
+  Check(LR.RemoveCondition(rid, { 2 }) and #LR.Rule(rid).conditions == 1, "removing a group removes everything in it")
+  Check(not LR.RemoveCondition(rid, { 2 }) and not LR.RemoveCondition(rid, {}) and not LR.RemoveCondition(rid, { 1, 1 }), "removing what is not there does nothing")
+
+  -- emptying a group leaves the rule unfinished, never matching everything
+  Fresh(); LR.Set("auto", true)
+  rid = Blank(); local _, ge = LR.AddGroup(rid); Cond(rid, "quality", ge, { value = 2 }); LR.SetAction(rid, "greed"); LR.SetEnabled(rid, true)
+  id = StartRoll("item:100"); roll = Ro.Find(id)
+  Check(roll.state == "scheduled", "the rule works")
+  LR.RemoveCondition(rid, { 1, 1 })
+  Check(roll.state == "pending" and LR.Rule(rid).incomplete ~= nil, "emptying its only group ends the countdown and flags the rule")
+  Advance(10)
+  Check(#rolled == 0, "and sends nothing")
+  EndRoll(id)
+
+  -- a copy shares nothing with the original, groups included
+  Fresh(); rid = Blank(); local _, gc = LR.AddGroup(rid); Cond(rid, "quality", gc, { value = 2 }); Cond(rid, "class")
+  LR.SetAction(rid, "greed")
+  local dupOk, dupId = LR.Duplicate(rid)
+  Check(dupOk and #LR.Rule(dupId).conditions == 2 and LR.Rule(dupId).conditions[1].type == "group" and #LR.Rule(dupId).conditions[1].conditions == 1, "a copy has the group and what is in it")
+  LR.SetCondition(dupId, { 1, 1 }, { value = 4 }); LR.SetMatch(dupId, "all", { 1 }); LR.AddCondition(dupId, "bind", { 1 })
+  Check(LR.Rule(rid).conditions[1].conditions[1].value == 2 and LR.Rule(rid).conditions[1].match == "any" and #LR.Rule(rid).conditions[1].conditions == 1,
+    "editing the copy's group changes nothing in the original")
+  -- the editor's view is a copy too: changing it changes nothing saved
+  local view = LR.Rule(rid)
+  view.conditions[1].conditions[1].value = 5
+  Check(LR.Rule(rid).conditions[1].conditions[1].value == 2, "the view of a rule is not the saved rule, groups included")
+
+  -- saved data that goes too deep, or loops, is unfinished and harmless
+  Fresh(); LR.Set("auto", true)
+  local q = { type = "quality", op = "is", value = 2 }
+  c.TwichUIDB.ui.lootRolls.rules[1] = { id = "lr1", name = "Deep", enabled = true, action = "greed", match = "all",
+    conditions = { { type = "group", match = "all", conditions = { { type = "group", match = "all", conditions = { { type = "group", match = "all", conditions = { { type = "group", match = "all", conditions = { q } } } } } } } } } }
+  local loopGroup = { type = "group", match = "all", conditions = {} }
+  loopGroup.conditions[1] = loopGroup
+  c.TwichUIDB.ui.lootRolls.rules[2] = { id = "lr2", name = "Loop", enabled = true, action = "greed", match = "all", conditions = { loopGroup } }
+  LR.Invalidate("rules")
+  Check(LR.Rule("lr1").incomplete ~= nil and LR.Rule("lr2").incomplete ~= nil, "a rule that goes too deep, or that contains itself, is unfinished in the editor")
+  id = StartRoll("item:100"); roll = Ro.Find(id)
+  Check(roll.state == "pending", "and a roll is left alone")
+  Advance(10)
+  Check(#rolled == 0, "nothing is sent")
+  EndRoll(id)
+  Fresh()
+end
+
+---------------------------------------------------------------------------
 -- 5. The game's own frames
 ---------------------------------------------------------------------------
 do
