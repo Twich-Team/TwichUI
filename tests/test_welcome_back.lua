@@ -47,6 +47,7 @@ function c.EventRegistry:RegisterCallback(event, fn, owner) assert(owner, "regis
 function c.EventRegistry:UnregisterCallback(event, owner) assert(owner, "unregistered with an owner"); self.callbacks[event] = nil end
 c.EditModeManagerFrame = { IsEditModeActive = function() return c.EDITING end }
 
+local utcTime = c.time   -- calendar fixtures use the same UTC clock as the harness
 c.NOW = 1700000000
 c.time = function() return c.NOW end
 c.GetTime = function() return c.NOW end   -- the coordinator's expiry runs on this clock too
@@ -79,9 +80,9 @@ assert(B.Ago(now - 3 * 86400, now) == C.FormatDay(C.DayKey(now - 3 * 86400)), "o
 assert(B.Ago(now + 3600, now) == nil, "a time in the future is not shown")
 assert(B.Ago(nil, now) == nil and B.Ago("x", now) == nil and B.Ago(-5, now) == nil, "unreadable times are not shown")
 do -- yesterday is the previous calendar day, between 24 and 48 hours back
-  local noon = os.time({year = 2026, month = 5, day = 10, hour = 12})
-  assert(B.Ago(os.time({year = 2026, month = 5, day = 9, hour = 8}), noon + 0) == "yesterday")
-  assert(B.Ago(os.time({year = 2026, month = 5, day = 8, hour = 20}), noon) == C.FormatDay(20260508), "two days back is a date")
+  local noon = utcTime({year = 2026, month = 5, day = 10, hour = 12})
+  assert(B.Ago(utcTime({year = 2026, month = 5, day = 9, hour = 8}), noon + 0) == "yesterday")
+  assert(B.Ago(utcTime({year = 2026, month = 5, day = 8, hour = 20}), noon) == C.FormatDay(20260508), "two days back is a date")
 end
 
 -- No history: nothing to show. The Recorder's own "Chronicle begun" line has no place.
