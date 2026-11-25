@@ -148,7 +148,7 @@ local function Lines(rollID)
     local TI = C_TooltipInfo
     if not (TI and TI.GetLootRollItem) then return nil end
     local ok, data = Call(TI.GetLootRollItem, rollID)
-    if ok and type(data) == "table" and type(data.lines) == "table" then return data.lines end
+    if ok and type(data) == "table" and type(data.lines) == "table" then return data.lines, Plain(data.dataInstanceID) end
 end
 
 local function HasKnownLine(lines)
@@ -173,7 +173,7 @@ local function RecipeFacts(roll, obs, lines)
         name = ok and Plain(name)
         if type(name) == "string" and name ~= "" then facts.profession = names[name] == true end
     end
-    if lines then
+    if lines and #lines > 0 then
         facts.known = HasKnownLine(lines)
         local D = R.GearData
         if facts.known == false and D and D.RedLines then facts.canLearn = D.RedLines(lines) == 0 end
@@ -281,7 +281,8 @@ function Ro.Observe(roll)
             end
         end
     end
-    local lines = Lines(id)
+    local lines, tooltipDataID = Lines(id)
+    roll.tooltipDataID = tooltipDataID
     obs.recipe = RecipeFacts(roll, obs, lines)
     obs.equippable = EquippableFact(obs, lines)
     obs.upgrade, roll.judged = UpgradeFact(roll.link, lines)
@@ -598,16 +599,36 @@ function Ro.OnConfirm(rollID, rollType)
     Tell("updated", roll)
 end
 
--- Item data arrives late: read the rolls that were not complete again, a few times each.
-local function Retry()
+local function RefreshFacts(r)
+    Ro.Observe(r)
+    Scan(r)
+    Tell("updated", r)
+end
+
+local function IsRecipe(r)
+    return r.obs and r.obs.recipe and r.obs.recipe.isRecipe == true
+end
+
+-- Recipe tooltip/skill facts can arrive after the basic item is already ready.
+-- Event-driven refreshes are limited to open choices, and a tooltip's own roll when known.
+local function RefreshRecipes(dataID)
     for _, r in ipairs(rolls) do
-        if IsLive(r) and not r.obs.ready then
+        if (r.state == "pending" or r.state == "scheduled") and IsRecipe(r)
+            and (dataID == nil or r.tooltipDataID == nil or r.tooltipDataID == dataID) then
+            RefreshFacts(r)
+        end
+    end
+end
+
+-- Item data arrives late: read incomplete items a few times, plus open recipe facts.
+local function Retry()
+    RefreshRecipes()
+    for _, r in ipairs(rolls) do
+        if IsLive(r) and not r.obs.ready and not IsRecipe(r) then
             local n = (retryAt[r.key] or 0) + 1
             retryAt[r.key] = n
             if n <= 6 then
-                Ro.Observe(r)
-                Scan(r)
-                Tell("updated", r)
+                RefreshFacts(r)
             end
         end
     end
@@ -621,12 +642,13 @@ local function OnEvent(_, event, a, b, c)
     elseif event == "CONFIRM_LOOT_ROLL" then Ro.OnConfirm(a, b)
     elseif event == "LOOT_HISTORY_UPDATE_DROP" then Absorb(a, b)
     elseif event == "GET_ITEM_INFO_RECEIVED" then Retry()
-    elseif event == "SKILL_LINES_CHANGED" then Ro.ForgetProfessions()
+    elseif event == "TOOLTIP_DATA_UPDATE" then RefreshRecipes(Plain(a))
+    elseif event == "SKILL_LINES_CHANGED" then Ro.ForgetProfessions(); RefreshRecipes()
     elseif event == "PLAYER_ENTERING_WORLD" then Ro.Adopt() end
 end
 
 local EVENTS = { "START_LOOT_ROLL", "CANCEL_LOOT_ROLL", "CANCEL_ALL_LOOT_ROLLS", "LOOT_ROLLS_COMPLETE", "CONFIRM_LOOT_ROLL",
-    "LOOT_HISTORY_UPDATE_DROP", "GET_ITEM_INFO_RECEIVED", "SKILL_LINES_CHANGED", "PLAYER_ENTERING_WORLD" }
+    "LOOT_HISTORY_UPDATE_DROP", "GET_ITEM_INFO_RECEIVED", "TOOLTIP_DATA_UPDATE", "SKILL_LINES_CHANGED", "PLAYER_ENTERING_WORLD" }
 Ro.EVENTS = EVENTS
 
 -- Rolls already open when this starts (a reload, or the feature switched on mid-roll): taken in as they are, with the time they have left.
