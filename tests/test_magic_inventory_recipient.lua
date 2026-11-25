@@ -87,22 +87,24 @@ Check(P.Editing().cats[1] == "7:9" and #P.Editing().cats == 1, "the builder's ca
 Click("destinationChoicemail")
 Check(P.Editing().kind == "mail", "Mail to... is chosen")
 Check(P.Control("recipientBox") and P.Control("recipientBox").shown and Has(f, "^Recipient character$"), "a Recipient character field appears right away, in the builder")
-Check(Has(f, "Name, or Name%-Realm") and Has(f, "Use Name%-Realm for a character on another realm"), "with the supported format")
+Check(Has(f, "Name or First Last, optionally %-Realm") and Has(f, "Use Name%-Realm for a character on another realm"), "with the supported full-name format")
 Check(Has(f, "can't tell whether the character exists or who plays it"), "and honest about what is checked")
 Check(not P.Control("recipientSaved") or not P.Control("recipientSaved").shown, "no saved-recipient chooser while none exist")
 Check(not P.Control("e2dd") or not P.Control("e2dd").shown, "no abstract destination chooser in the normal view")
 local before = Saved()
-Type("recipientBox", "thornbrook")
+Type("recipientBox", "thornbrook ")
+Check(P.Control("recipientBox").text == "thornbrook ", "refreshing keeps the space while the surname is being typed")
+Type("recipientBox", "thornbrook willowmere")
 Check(Saved() == before and #MI.Dests() == 0, "typing writes nothing")
-Check(P.Control("recipientStatus").text:find("Saves Thornbrook as this rule's recipient, on this character only, when you save", 1, true), "the field says what saving will do, in the game's capitalization")
+Check(P.Control("recipientStatus").text:find("Saves Thornbrook Willowmere as this rule's recipient, on this character only, when you save", 1, true), "the field says what saving will do, in the game's capitalization")
 local keep = P.Control("builderKeep"); keep:SetText("20"); keep:read(); Flush()
 Check(P.Editing().keep == 20, "keep 20 of each")
-Check(P.Control("reviewLabel2").text == "Recipient:" and P.Control("reviewValue2").text == "Thornbrook", "the review names the recipient")
-Check(P.Control("reviewPlain").text == "Mail matching items (Herb) to Thornbrook. Keep 20 of each matching item in your bags. Only whole stacks are sent, so a few more may stay.",
+Check(P.Control("reviewLabel2").text == "Recipient:" and P.Control("reviewValue2").text == "Thornbrook Willowmere", "the review names the recipient")
+Check(P.Control("reviewPlain").text == "Mail matching items (Herb) to Thornbrook Willowmere. Keep 20 of each matching item in your bags. Only whole stacks are sent, so a few more may stay.",
   "the plain review comes from the rule's own selections: " .. tostring(P.Control("reviewPlain").text))
 Check(P.Control("reviewHowSent").text:find("Saving sets up the rule; it sends nothing", 1, true) and P.Control("reviewHowSent").text:find("Prepare mail and Send mail", 1, true), "it says sending happens later, at the mailbox review")
 Check(P.Control("builderReady").text == "Ready to save", "nothing else is needed")
-Check(P.Control("summaryDetail").text:find("Mail to Thornbrook", 1, true), "the summary banner names the recipient")
+Check(P.Control("summaryDetail").text:find("Mail to Thornbrook Willowmere", 1, true), "the summary banner names the recipient")
 local n0 = P.ControlCount()
 for _ = 1, 4 do P.QueueRefresh(); Flush() end
 Check(P.ControlCount() == n0, "redrawing the builder makes no new controls")
@@ -111,11 +113,11 @@ Check(P.Editing() == nil, "saved without leaving the builder first")
 local herbs = MI.Rules()[1]
 Check(herbs and herbs.kind == "mail" and herbs.cats[1] == "7:9" and herbs.keep == 20 and herbs.enabled == false, "the rule is saved off (it was never turned on)")
 local w = MI.Resolve(herbs.dest)
-Check(w and w.recipient == "Thornbrook" and not w.shared, "it mails to Thornbrook from this character only")
+Check(w and w.recipient == "Thornbrook Willowmere" and not w.shared, "it mails to Thornbrook Willowmere from this character only")
 Check(MI.Dest(herbs.dest).label == "Mail recipient", "no label was asked for, and the label isn't the recipient's name: " .. MI.Dest(herbs.dest).label)
-Check(Has(f, "Mails to Thornbrook from this character"), "the page says exactly who")
-Check(P.Control("rule1to") and P.Control("rule1to").text == "To Thornbrook", "the saved rule's row shows the recipient")
-Check(not Holds(c.TwichUIDB.ui, "Thornbrook") and Holds(c.TwichUIDB.magicInventory, "Thornbrook"), "the recipient is kept in the account's table, never in the profile's rules")
+Check(Has(f, "Mails to Thornbrook Willowmere from this character"), "the page says exactly who")
+Check(P.Control("rule1to") and P.Control("rule1to").text == "To Thornbrook Willowmere", "the saved rule's row shows the recipient")
+Check(not Holds(c.TwichUIDB.ui, "Thornbrook Willowmere") and Holds(c.TwichUIDB.magicInventory, "Thornbrook Willowmere"), "the recipient is kept in the account's table, never in the profile's rules")
 
 -- turning on is the player's choice, and is kept
 Click("rule1edit")
@@ -129,13 +131,13 @@ Check(MI.Rules()[1].enabled == true, "turned on when asked")
 local saved = Saved()
 local nDests = #MI.Dests()
 Click("rule1edit")
-Check(P.Control("recipientBox").text == "Thornbrook", "editing shows the current recipient")
+Check(P.Control("recipientBox").text == "Thornbrook Willowmere", "editing shows the current recipient")
 Type("recipientBox", "Otherguy")
 P.Control("recipientAll").scripts.OnClick(P.Control("recipientAll"), "LeftButton"); Flush()
 Click("eCancel")
-Check(Saved() == saved and #MI.Dests() == nDests and MI.Resolve(herbs.dest).recipient == "Thornbrook", "Cancel: nothing saved changed")
+Check(Saved() == saved and #MI.Dests() == nDests and MI.Resolve(herbs.dest).recipient == "Thornbrook Willowmere", "Cancel: nothing saved changed")
 Click("rule1edit")
-Check(P.Control("recipientBox").text == "Thornbrook", "and the next edit starts from the saved recipient")
+Check(P.Control("recipientBox").text == "Thornbrook Willowmere", "and the next edit starts from the saved recipient")
 Type("recipientBox", "Otherguy")
 Click("builderBack"); c.StaticPopupDialogs.TWICHUI_MI_DISCARD_DRAFT.OnAccept(); Flush()
 Check(Saved() == saved, "Back and discard: nothing saved changed")
@@ -148,13 +150,13 @@ R.Profiles.Refresh()
 Flush()
 Check(P.Editing() == nil and Saved() == saved, "a profile change puts the draft away unsaved")
 Click("rule1edit")
-Check(P.Control("recipientBox").text == "Thornbrook", "and the draft's recipient doesn't come back")
+Check(P.Control("recipientBox").text == "Thornbrook Willowmere", "and the draft's recipient doesn't come back")
 Click("eCancel")
 
 -- a name that can't be one: the field says why, Save is refused, nothing is written
 Click("rule1edit")
-Type("recipientBox", "Bad Name")
-Check(P.Control("recipientStatus").text:find("only letters", 1, true) and P.Control("builderReady").text:find("Needs attention", 1, true), "a name with a space is refused, with the reason")
+Type("recipientBox", "Bad Name2")
+Check(P.Control("recipientStatus").text:find("only letters", 1, true) and P.Control("builderReady").text:find("Needs attention", 1, true), "a name with a number is refused, with the reason")
 Click("eSave")
 Check(P.Editing() ~= nil and Saved() == saved and Has(f, "only letters"), "Save is refused and nothing is written")
 Type("recipientBox", "Rich")
@@ -187,11 +189,11 @@ local clothRow
 for i, r in ipairs(MI.Rules()) do if r.id == cloth then clothRow = i end end
 Click("rule" .. clothRow .. "edit")
 Type("recipientBox", "Hollowmere")
-Check(Has(f, "also sends to Thornbrook") and P.Control("recipientUpdateShared").shown, "the other rule is named, with an explicit choice to change it too")
+Check(Has(f, "also sends to Thornbrook Willowmere") and P.Control("recipientUpdateShared").shown, "the other rule is named, with an explicit choice to change it too")
 Check(P.Control("recipientStatus").text:find("Saves Hollowmere as this rule's recipient", 1, true), "by default only this rule changes")
 Click("eSave")
 Check(MI.Resolve(MI.Rule(cloth).dest).recipient == "Hollowmere", "the edited rule mails to Hollowmere")
-Check(MI.Rule(herbs.id).dest == herbs.dest and MI.Resolve(herbs.dest).recipient == "Thornbrook", "the other rule still mails to Thornbrook")
+Check(MI.Rule(herbs.id).dest == herbs.dest and MI.Resolve(herbs.dest).recipient == "Thornbrook Willowmere", "the other rule still mails to Thornbrook Willowmere")
 Check(MI.Rule(cloth).enabled == true and MI.Rule(herbs.id).enabled == true, "neither rule was turned on or off")
 
 -- choosing the shared change on purpose changes it for the rules it names, and only them
@@ -205,7 +207,7 @@ P.Control("recipientUpdateShared").scripts.OnClick(P.Control("recipientUpdateSha
 Check(P.Control("recipientStatus").text:find("for this rule and 1 other rule", 1, true), "the shared change says how many rules it changes")
 Click("eSave")
 Check(MI.Resolve(MI.Rule(ore).dest).recipient == "Marrowind" and MI.Resolve(MI.Rule(cloth).dest).recipient == "Marrowind", "both rules named mail to the new name")
-Check(MI.Resolve(herbs.dest).recipient == "Thornbrook", "the unrelated rule is untouched")
+Check(MI.Resolve(herbs.dest).recipient == "Thornbrook Willowmere", "the unrelated rule is untouched")
 Check(MI.Rule(ore).enabled == false, "an off rule stays off")
 
 ---------------------------------------------------------------------------
@@ -218,9 +220,9 @@ local dd = P.Control("recipientSaved")
 Check(dd and dd.shown, "saved recipients are offered beside the field")
 local labels = {}
 for _, choice in ipairs(dd.choices()) do labels[#labels + 1] = choice.label end
-Check(table.concat(labels, "|"):find("Thornbrook", 1, true) and table.concat(labels, "|"):find("Marrowind", 1, true), "by the recipient's name: " .. table.concat(labels, "|"))
+Check(table.concat(labels, "|"):find("Thornbrook Willowmere", 1, true) and table.concat(labels, "|"):find("Marrowind", 1, true), "by the recipient's name: " .. table.concat(labels, "|"))
 dd.onPick(herbs.dest); Flush()
-Check(P.Control("recipientBox").text == "Thornbrook" and P.Control("recipientStatus").text:find("Sends to Thornbrook, on this character only", 1, true), "choosing one fills the field")
+Check(P.Control("recipientBox").text == "Thornbrook Willowmere" and P.Control("recipientStatus").text:find("Sends to Thornbrook Willowmere, on this character only", 1, true), "choosing one fills the field")
 PickCategory("7:6")
 Click("eSave")
 local leather = MI.Rules()[#MI.Rules()]
@@ -315,7 +317,7 @@ end
 ---------------------------------------------------------------------------
 -- Recipients stay out of the profile, configuration shares and portable backups
 ---------------------------------------------------------------------------
-for _, name in ipairs({ "Thornbrook", "Hollowmere", "Marrowind", "Everyalt", "Localpick" }) do
+for _, name in ipairs({ "Thornbrook Willowmere", "Hollowmere", "Marrowind", "Everyalt", "Localpick" }) do
   Check(not Holds(c.TwichUIDB.ui, name), name .. " is not in the profile")
 end
 Check(R.Restore.OWN_LEFT_OUT.magicInventory ~= nil, "backups leave the account's recipients out")
@@ -330,7 +332,7 @@ do
   c.Bags({ [0] = { size = 16, slots = { [1] = { 2447, 20 }, [2] = { 2447, 20 }, [3] = { 2447, 5 }, [4] = { 2589, 20 } } } })
   local plan = MI.CurrentPlan("mail")
   local grp = plan.groups[1]
-  Check(#plan.groups == 1 and grp.where.recipient == "Thornbrook", "the mail plan is for Thornbrook")
+  Check(#plan.groups == 1 and grp.where.recipient == "Thornbrook Willowmere", "the mail plan is for Thornbrook Willowmere")
   local herbStacks = 0
   for _, batch in ipairs(grp.batches) do for _, e in ipairs(batch) do if e.id == 2447 then herbStacks = herbStacks + 1 end Check(e.id == 2447, "only herbs are planned") end end
   Check(herbStacks == 2, "keeping 20 of 45 in stacks of 20, 20 and 5: the 20 and the 5 go, one stack of 20 stays: " .. herbStacks)
@@ -340,7 +342,7 @@ do
   local Win = MI.Window
   Win.Show(); Flush()
   local wf = c.TwichUIMagicInventory
-  Check(Win.IsShown() and Has(wf, "Send by mail to Thornbrook"), "the review shows the exact recipient")
+  Check(Win.IsShown() and Has(wf, "Send by mail to Thornbrook Willowmere"), "the review shows the exact recipient")
   Check(Has(wf, "Peacebloom") or Has(wf, "Herb"), "and the matching items")
   Check(c.SENDMAIL_CALLS == 0 and #c.SENT == 0 and #c.PICKUPS == 0, "nothing was sent or picked up")
   Win.Hide(); Flush()

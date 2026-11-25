@@ -342,17 +342,21 @@ function MI.NormalizeRecipient(text)
     if text == "" then return nil, "Type the character's name." end
     local name, realm = text:match("^([^%-]+)%-(.+)$")
     if not name then name = text end
-    if name:find("[%s%d%p%c]") then return nil, "A character's name has only letters: no spaces, numbers or punctuation." end
-    local len = Utf8Len(name)
-    if len < 2 or len > 12 then return nil, "A character's name is 2 to 12 letters long." end
+    local firstName, lastName = name:match("^([^ ]+) ([^ ]+)$")
+    if name:find(" ", 1, true) and not firstName then return nil, "Separate the first and last names with one space." end
+    local parts = { firstName or name, lastName }
+    for i, part in ipairs(parts) do
+        if part:find("[%s%d%p%c]") then return nil, "A character's first and last names have only letters: no numbers or punctuation." end
+        local len = Utf8Len(part)
+        if len < 2 or len > 12 then return nil, "A character's first and last names are each 2 to 12 letters long." end
+        -- Forever capitalizes each name separately; keep non-ASCII letters as typed.
+        local first = part:sub(1, 1)
+        if first:match("%a") then parts[i] = first:upper() .. part:sub(2):gsub("%u", string.lower) end
+    end
+    name = table.concat(parts, " ")
     if realm then
         realm = realm:gsub("%s", "")
         if realm == "" or #realm > 40 or realm:find("[%c|%-]") then return nil, "Write another realm as Name-Realm." end
-    end
-    -- the game's own form: an ASCII first letter in capitals, the rest of the ASCII letters lower case
-    local first = name:sub(1, 1)
-    if first:match("%a") then
-        name = first:upper() .. name:sub(2):gsub("%u", string.lower)
     end
     local me = Plain(UnitName and UnitName("player"))
     local myRealm = Plain(GetNormalizedRealmName and GetNormalizedRealmName())
