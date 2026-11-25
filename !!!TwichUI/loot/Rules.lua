@@ -8,7 +8,7 @@
 -- does not say). Unknown is not a match, and negating a condition ("not a recipe") leaves it unknown. A rule's answer is built from
 -- its conditions' (all: one "no" is a "no", otherwise one unknown is unknown; any: one match is a match, otherwise one unknown is unknown).
 --
--- Priority: the rules are read from the top. The first enabled, complete rule that is not a definite "no" decides:
+-- Priority: the rules are read from the top. The first enabled (exactly true: a rule that never said it was on is off, as the editor shows it), complete rule that is not a definite "no" decides:
 -- "match" is a decision; "unknown" stops the search with no decision (a rule above may have matched, so a rule below must not speak
 -- for it). Roll and display decisions use this order independently; No change is skipped per channel. A rule with nothing in it, or a condition that is not valid, is incomplete:
 -- it is skipped, and the editor says why.
@@ -280,7 +280,7 @@ T.upgrade = {
     check = function(c) if type(c.value) ~= "boolean" then return "Choose whether it is an upgrade." end end,
     eval = function(c, obs, opts)
         -- an upgrade is a hint, never a reason to roll by itself: it counts only when the player allowed rolls to use it
-        if not (opts and opts.allowUpgrade) then return nil end
+        if not (opts and opts.allowUpgrade == true) then return nil end
         local u = obs.upgrade
         if u == nil then return nil end
         return u == c.value
@@ -328,7 +328,8 @@ end
 -- true, false or nil for one condition about one item.
 function Ru.EvalCondition(c, obs, opts)
     local t = type(c) == "table" and T[c.type]
-    if not t or t.check(c) ~= nil then return nil end
+    -- the same completeness the editor reports (a negate that is not a real boolean included): an unfinished condition never answers
+    if not t or Ru.CheckCondition(c) ~= nil then return nil end
     local ok, value = pcall(t.eval, c, obs or {}, opts)
     if not ok or type(value) ~= "boolean" then return nil end
     if c.negate then return not value end
@@ -374,7 +375,7 @@ end
 function Ru.Decide(rules, obs, opts)
     if type(rules) ~= "table" then return { status = "none" } end
     for i, rule in ipairs(rules) do
-        if type(rule) == "table" and rule.enabled ~= false and rule.action ~= "none" and not Ru.Incomplete(rule) then
+        if type(rule) == "table" and rule.enabled == true and rule.action ~= "none" and not Ru.Incomplete(rule) then
             local v = Ru.EvalRule(rule, obs, opts)
             if v == Ru.MATCH then return { status = "match", rule = rule, index = i } end
             if v == Ru.UNKNOWN then return { status = "unknown", rule = rule, index = i } end
@@ -388,7 +389,7 @@ end
 function Ru.DecideDisplay(rules, obs)
     if type(rules) ~= "table" then return { status = "none" } end
     for i, rule in ipairs(rules) do
-        if type(rule) == "table" and rule.enabled ~= false and (rule.display == "expanded" or rule.display == "collapsed")
+        if type(rule) == "table" and rule.enabled == true and (rule.display == "expanded" or rule.display == "collapsed")
             and not Ru.Incomplete(rule) then
             local v = Ru.EvalRule(rule, obs, { allowUpgrade = true })
             if v ~= Ru.NO then return { status = v, rule = rule, index = i } end

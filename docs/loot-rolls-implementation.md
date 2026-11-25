@@ -39,7 +39,8 @@ Two parts, both off until the player turns them on.
 | `loot/Cards.lua` | The cards, their stack, the renderer shared with the settings preview. |
 | `loot/Main.lua` | The switch (`LootRolls.Refresh`), the diagnostics snapshot. |
 | `media/loot/*.tga` | Icons cut from the approved mockup by `tools/make_loot_roll_art.py` (sources: `assets/LOOT_ROLLS_*_MOCKUP.png`). |
-| `tests/test_loot_rolls.lua` | Unit tests (fake world). |
+| `tests/test_loot_rolls.lua` | Unit tests (fake world), including the end-to-end rule-safety matrix (section 4b). |
+| `tests/test_loot_rules_engine.lua` | The pure rule engine's safety contract: condition truth tables, all/any against an independent model, and a seeded sweep of the invariants (unknown never matches, forgetting a fact never creates or changes a decision, first non-"no" rule decides). |
 | `tools/simlab/loot.sh`, `scenarios/loot.lua` | Simulator scenarios and screenshots. |
 
 ## Client API capability matrix

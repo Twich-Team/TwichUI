@@ -994,6 +994,284 @@ do
 end
 
 ---------------------------------------------------------------------------
+-- 4b. Safety matrix: the ways a rule could roll on something the player wanted, end to end (rules -> model -> countdown -> RollOnLoot)
+---------------------------------------------------------------------------
+do
+  local function Fresh()
+    for _, r in ipairs({ unpack(Ro.Rolls()) }) do Ro.Remove(r) end
+    rolled = {}
+    c.TwichUIDB.ui.lootRolls.rules = {}
+    LR.Set("auto", false); LR.Set("autoNeed", false); LR.Set("autoUpgrade", false); LR.Set("paused", false)
+    LR.Invalidate("rules")
+  end
+  -- a rule built through the same calls the editor makes: conds = { { kind, fields }, ... }
+  local function Make(name, action, conds, over)
+    over = over or {}
+    local ok, rid = LR.Create("blank")
+    LR.RemoveCondition(rid, 1)
+    for _, cd in ipairs(conds) do
+      local _, index = LR.AddCondition(rid, cd[1])
+      if cd[2] then assert(LR.SetCondition(rid, index, cd[2]), "condition " .. cd[1]) end
+    end
+    LR.SetName(rid, name); LR.SetAction(rid, action)
+    if over.display then LR.SetDisplay(rid, over.display) end
+    if over.match then LR.SetMatch(rid, over.match) end
+    if over.delay then LR.SetDelay(rid, over.delay) end
+    if over.enabled ~= false then LR.SetEnabled(rid, true) end
+    return rid
+  end
+  local UNCOMMON = { "quality", { op = "is", value = 2 } }
+  local EPIC = { "quality", { op = "is", value = 4 } }
+  local function Start(link, opts) local id = StartRoll(link, opts); return id, Ro.Find(id) end
+  local function Quiet(roll, seconds) Advance(seconds or 12); return #rolled end
+
+  -- 1. A higher rule that is blocked never hands the item to a lower rule.
+  Fresh(); LR.Set("auto", true)
+  local needId = Make("Need green", "need", { UNCOMMON })
+  Make("Greed green", "greed", { UNCOMMON })
+  local id, roll = Start("item:100")
+  Check(roll.state == "pending" and roll.autoNote and roll.autoNote:find("Need green", 1, true), "Need blocked by the player's own setting names the rule that wanted it")
+  Check(Quiet() == 0, "the lower Greed rule never takes over for a blocked Need rule")
+  LR.Set("autoNeed", true)
+  Check(roll.state == "scheduled" and roll.auto.action == "need" and roll.auto.ruleId == needId, "allowing Need starts the top rule's countdown, not the lower one's")
+  Advance(4)
+  Check(#rolled == 1 and rolled[1].kind == 1, "exactly one Need goes out")
+  EndRoll(id)
+  -- ...and withdrawing the permission after the countdown began stops it before it sends
+  Fresh(); LR.Set("auto", true); LR.Set("autoNeed", true)
+  Make("Need green", "need", { UNCOMMON })
+  id, roll = Start("item:100")
+  Check(roll.state == "scheduled", "a Need countdown is running")
+  c.TwichUIDB.ui.lootRolls.autoNeed = false   -- written behind the model's back: the check at the end of the countdown is its own guard
+  Advance(4)
+  Check(#rolled == 0 and roll.state ~= "submitted", "Need permission withdrawn silently before the countdown ends: nothing is sent")
+  EndRoll(id)
+
+  -- 2. A rule that cannot be judged keeps everything below it quiet.
+  Fresh(); LR.Set("auto", true)
+  Make("Pass known recipes", "pass", { { "recipe", { mode = "known" } } })
+  Make("Greed everything uncommon", "greed", { UNCOMMON })
+  id, roll = Start("item:102", { noTooltip = true })
+  Check(roll.state == "pending" and roll.autoNote and roll.autoNote:find("could not be checked", 1, true), "an unreadable tooltip: the known-recipe rule cannot be judged")
+  Check(Quiet() == 0, "so the Greed rule below it does not take a recipe that may be one the player already knows")
+  EndRoll(id)
+  -- with the tooltip the same two rules sort it out
+  id, roll = Start("item:103")
+  Check(roll.state == "scheduled" and roll.auto.action == "pass", "a known recipe is passed")
+  EndRoll(id)
+  id, roll = Start("item:102")
+  Check(roll.state == "scheduled" and roll.auto.action == "greed", "an unknown recipe falls to the Greed rule")
+  EndRoll(id)
+
+  -- 3. Priority is the order of the list, and moving a rule changes the outcome at once.
+  Fresh(); LR.Set("auto", true)
+  local greedTop = Make("Greed green", "greed", { UNCOMMON })
+  local passBottom = Make("Pass green", "pass", { UNCOMMON })
+  id, roll = Start("item:100")
+  Check(roll.auto and roll.auto.action == "greed", "the upper rule decides")
+  LR.Move(passBottom, -1)
+  Check(roll.state == "scheduled" and roll.auto.action == "pass" and roll.auto.ruleId == passBottom, "moving another rule up replaces the countdown with its action")
+  LR.Move(passBottom, 1)
+  Check(roll.auto and roll.auto.action == "greed" and roll.auto.ruleId == greedTop, "and moving it back restores the first")
+  Advance(4)
+  Check(#rolled == 1 and rolled[1].kind == 2, "only the final decision is ever sent")
+  EndRoll(id)
+
+  -- 4. Editing a rule while it counts down: the roll follows the rule, never the rule as it was.
+  Fresh(); LR.Set("auto", true)
+  local rid = Make("Greed green", "greed", { UNCOMMON })
+  id, roll = Start("item:100")
+  Check(roll.state == "scheduled", "counting down")
+  LR.SetCondition(rid, 1, { value = 3 })   -- now only Rare
+  Check(roll.state == "pending" and not roll.auto, "an edit that stops the rule matching ends the countdown")
+  Check(Quiet() == 0, "and nothing is sent")
+  LR.SetCondition(rid, 1, { value = 2 })
+  Check(roll.state == "scheduled", "editing it back starts a fresh countdown")
+  local firstStart = roll.auto.startedAt
+  Advance(1.5)
+  LR.SetDelay(rid, 6)
+  Check(roll.state == "scheduled" and roll.auto.startedAt == firstStart and math.abs(roll.auto.fireAt - (firstStart + 6)) < 0.01, "a longer delay extends the same countdown from where it started")
+  LR.AddCondition(rid, "bind"); LR.SetCondition(rid, 2, { value = "pickup" })   -- item:100 binds on equip, so this no longer applies
+  Check(roll.state == "pending" and not roll.auto, "adding a condition the item fails ends the countdown")
+  Check(Quiet() == 0, "nothing is sent for the narrower rule")
+  EndRoll(id)
+  -- changing the action to Need while Need is not allowed hands the roll back instead of sending Need
+  Fresh(); LR.Set("auto", true)
+  rid = Make("Greed green", "greed", { UNCOMMON })
+  id, roll = Start("item:100")
+  LR.SetAction(rid, "need")
+  Check(roll.state == "pending" and not roll.auto and roll.autoNote and roll.autoNote:find("Need", 1, true), "turning a Greed rule into Need ends its countdown while Need is not allowed")
+  Check(Quiet() == 0, "and nothing is sent")
+  EndRoll(id)
+
+  -- 5. The saved rule changed under a running countdown (a profile switch, a copy from another character, a hand edit): the end-of-countdown recheck.
+  local function Raw() return c.TwichUIDB.ui.lootRolls.rules end
+  for _, case in ipairs({
+    { "the rule was switched off", function(r) r.enabled = false end },
+    { "the rule's action changed", function(r) r.action = "pass" end },
+    { "the rule's condition changed", function(r) r.conditions[1].value = 3 end },
+    { "the rule was removed", function(r) table.remove(Raw(), 1) end },
+    { "the rule lost its conditions", function(r) r.conditions = {} end },
+    { "the rule's action became junk", function(r) r.action = "roll" end },
+  }) do
+    Fresh(); LR.Set("auto", true)
+    Make("Greed green", "greed", { UNCOMMON })
+    id, roll = Start("item:100")
+    Check(roll.state == "scheduled", case[1] .. ": counting down")
+    case[2](Raw()[1] or {})
+    local before = #rolled
+    Advance(4)
+    local sentGreed = false
+    for i = before + 1, #rolled do if rolled[i].kind == 2 then sentGreed = true end end
+    Check(not sentGreed, case[1] .. " behind the model's back: no Greed is sent")
+    EndRoll(id)
+  end
+  -- a modified action is never sent as the old action either
+  Fresh(); LR.Set("auto", true)
+  Make("Greed green", "greed", { UNCOMMON })
+  id, roll = Start("item:100")
+  Raw()[1].action = "pass"
+  Advance(4)
+  Check(#rolled == 0, "a rule that now says Pass is not sent as the Greed it was scheduled as")
+  EndRoll(id)
+
+  -- 6. Saved rules that are not what the editor shows must not act.
+  Fresh(); LR.Set("auto", true)
+  local raw = Raw()
+  raw[1] = { id = "lr1", name = "Never switched", action = "greed", conditions = { { type = "quality", op = "is", value = 2 } } }   -- no 'enabled'
+  LR.Invalidate("rules")
+  Check(LR.Rule("lr1").enabled == false, "the editor shows a rule that never said it was on as off")
+  id, roll = Start("item:100")
+  Check(roll.state == "pending" and not roll.auto and Quiet() == 0, "and automation agrees: it is not switched on, so it never rolls")
+  EndRoll(id)
+  for _, flag in ipairs({ "true", 1, "yes", {} }) do
+    Fresh(); LR.Set("auto", true)
+    Raw()[1] = { id = "lr1", name = "Odd flag", enabled = flag, action = "greed", conditions = { { type = "quality", op = "is", value = 2 } } }
+    LR.Invalidate("rules")
+    id, roll = Start("item:100")
+    Check(roll.state == "pending" and Quiet() == 0, "enabled = " .. tostring(flag) .. " is not on")
+    EndRoll(id)
+  end
+  -- duplicate ids (a bad import): the rule that decides is the rule the countdown is built from
+  Fresh(); LR.Set("auto", true)
+  Raw()[1] = { id = "lr1", name = "Pass epics", enabled = true, action = "pass", conditions = { { type = "quality", op = "is", value = 4 } } }
+  Raw()[2] = { id = "lr1", name = "Greed greens", enabled = true, action = "greed", conditions = { { type = "quality", op = "is", value = 2 } } }
+  LR.Invalidate("rules")
+  id, roll = Start("item:100")
+  Advance(5)
+  Check(not (rolled[1] and rolled[1].kind == 0), "a green is never passed because a rule above it shares an id with the Greed rule that matched")
+  Check(#rolled == 0 or (rolled[1].kind == 2), "whatever is sent for a duplicated id is the matching rule's own action")
+  EndRoll(id)
+
+  -- 7. Facts the client has not given: no decision until they arrive, then exactly one
+  Fresh(); LR.Set("auto", true)
+  Make("Greed green", "greed", { UNCOMMON })
+  MISSING["item:100"] = true
+  id, roll = Start("item:100")
+  Check(roll.state == "pending" and not roll.auto and not (roll.obs and roll.obs.ready), "an item the client has not loaded makes no countdown")
+  Check(Quiet(roll, 5) == 0, "and sends nothing while it is unknown")
+  MISSING["item:100"] = nil
+  Fire("GET_ITEM_INFO_RECEIVED", 100, true)
+  Check(roll.state == "scheduled", "when the item arrives the rule applies")
+  Advance(4)
+  Check(#rolled == 1, "and one choice is sent")
+  EndRoll(id)
+
+  -- 8. The rest of the roll's own limits always win
+  Fresh(); LR.Set("auto", true)
+  Make("Greed green", "greed", { UNCOMMON })
+  id, roll = Start("item:100", { canGreed = false })
+  Advance(10)
+  Check(#rolled == 0 and roll.state == "pending", "Greed is never sent when the game says the player cannot Greed")
+  EndRoll(id)
+  Fresh(); LR.Set("auto", true); LR.Set("autoNeed", true)
+  Make("Need green", "need", { UNCOMMON })
+  id, roll = Start("item:100", { canNeed = false, reasonNeed = 1 })
+  Advance(10)
+  Check(#rolled == 0 and roll.state == "pending" and roll.autoNote and roll.autoNote:find("not for your class", 1, true), "Need is never sent when it is closed to the player, and the card says why")
+  EndRoll(id)
+  -- stack of three rolls: each gets its own decision; a stopped one does not stop the others; a manual choice on one leaves the rest
+  Fresh(); LR.Set("auto", true)
+  Make("Greed green", "greed", { UNCOMMON })
+  Make("Pass epic gear", "pass", { EPIC, { "class", { value = "equipment" } } })
+  local a, ra = Start("item:100")
+  local b, rb = Start("item:101")
+  local d2, rd = Start("item:104")
+  Check(ra.auto and ra.auto.action == "greed" and rb.auto and rb.auto.action == "pass" and rd.state == "pending", "three rolls, three independent decisions (the third matches no rule)")
+  A.Stop(ra)
+  Advance(4)
+  local kinds = {}
+  for _, r in ipairs(rolled) do kinds[r.id] = r.kind end
+  Check(kinds[b] == 0 and kinds[a] == nil and kinds[d2] == nil, "stopping one leaves the others to count down and the unmatched one untouched")
+  EndRoll(a); EndRoll(b); EndRoll(d2)
+
+  -- 9. Off means off: every switch that disables automation sends nothing, in any order
+  for _, how in ipairs({ "auto off", "paused", "module off" }) do
+    Fresh(); LR.Set("auto", true)
+    Make("Greed green", "greed", { UNCOMMON })
+    id, roll = Start("item:100")
+    Check(roll.state == "scheduled", how .. ": counting down")
+    if how == "auto off" then LR.Set("auto", false) elseif how == "paused" then LR.Set("paused", true) else c.TwichUIDB.modules.lootRolls = false; LR.Refresh() end
+    Advance(5)
+    Check(#rolled == 0, how .. ": nothing is sent")
+    if how == "module off" then c.TwichUIDB.modules.lootRolls = true; LR.Refresh() end
+    EndRoll(id)
+  end
+
+  -- 10. The player's choice is never overridden by a rule, and a rule never sends twice
+  Fresh(); LR.Set("auto", true)
+  Make("Greed green", "greed", { UNCOMMON })
+  id, roll = Start("item:100")
+  Ro.Submit(roll, "need", "player")
+  LR.Set("autoUpgrade", true); LR.Set("autoUpgrade", false); A.Refresh()
+  Advance(10)
+  Check(#rolled == 1 and rolled[1].kind == 1, "a manual Need stays the only choice however the settings change afterwards")
+  EndRoll(id)
+  Fresh()
+  Advance(30)
+  Check(PendingTimers() <= 2, "the safety scenarios leave no timers behind (" .. PendingTimers() .. ")")
+
+  -- 11. What the editor can save is always safe to read back
+  Fresh()
+  Raw()[1] = { id = "lr1", name = "First", enabled = true, action = "pass", conditions = { { type = "quality", op = "is", value = 4 } } }
+  Raw()[2] = { id = "lr1", name = "Second", enabled = true, action = "greed", conditions = { { type = "quality", op = "is", value = 2 } } }
+  Raw()[3] = { id = "lr2", name = "Third", enabled = true, action = "greed", conditions = { { type = "quality", op = "is", value = 2 } } }
+  LR.Invalidate("rules")
+  Check(LR.Count() == 2 and #LR.Active() == 2 and LR.List()[2].id == "lr2" and LR.Rule("lr1").name == "First",
+    "a rule that reuses an earlier rule's id is ignored by both the list and the engine, so they always agree")
+  Check(LR.Active()[1] == Raw()[1] and LR.Active()[2] == Raw()[3], "the engine reads the same saved rules the editor lists")
+  Fresh()
+  for _, template in ipairs(LR.TEMPLATES) do
+    local ok, tid = LR.Create(template.key)
+    local view = LR.Rule(tid)
+    Check(ok and view.enabled == false, "starting point '" .. template.key .. "' is switched off")
+    Check(template.key == "blank" and view.incomplete ~= nil or template.key ~= "blank" and view.incomplete == nil,
+      "starting point '" .. template.key .. "' is finished, except the blank one, which does nothing until the player picks an action")
+    id, roll = Start("item:100")
+    Check(roll.state == "pending" and not roll.auto, "a new '" .. template.key .. "' rule never acts before it is switched on")
+    EndRoll(id)
+  end
+  Fresh()
+  rid = Make("Edits", "greed", { UNCOMMON })
+  for _, bad in ipairs({ "2", 2.5, -1, 6, 0 / 0, math.huge, true, {} }) do
+    Check(not LR.SetCondition(rid, 1, { value = bad }) and LR.Rule(rid).conditions[1].value == 2, "quality value " .. tostring(bad) .. " is refused and changes nothing")
+  end
+  for _, bad in ipairs({ 0 / 0, math.huge, -math.huge, "3", true, 0.99, 15.01 }) do
+    Check(not LR.SetDelay(rid, bad) and LR.Rule(rid).delay == 3, "delay " .. tostring(bad) .. " is refused and changes nothing")
+  end
+  Check(not LR.SetEnabled(rid, "yes") and not LR.SetEnabled(rid, 1) and LR.Rule(rid).enabled == true, "switching a rule needs a real true or false")
+  Check(not LR.SetAction("lr999", "greed") and not LR.SetEnabled("lr999", true) and not LR.SetCondition("lr999", 1, { value = 2 }) and not LR.Delete("lr999"), "editing a rule that is gone does nothing")
+  Check(not LR.SetCondition(rid, 9, { value = 2 }) and not LR.RemoveCondition(rid, 9) and not LR.SetCondition(rid, 1, "value"), "editing a condition that is not there does nothing")
+  Check(LR.SetCondition(rid, 1, { type = "item", id = 5 }) and LR.Rule(rid).conditions[1].type == "quality", "a condition's kind cannot be swapped through an edit")
+  LR.RemoveCondition(rid, 1)
+  Check(LR.Rule(rid).incomplete ~= nil, "a rule left with no conditions is flagged unfinished")
+  id, roll = Start("item:100")
+  Check(roll.state == "pending" and not roll.auto, "and a rule with no conditions matches nothing, not everything")
+  EndRoll(id)
+  Fresh()
+end
+
+---------------------------------------------------------------------------
 -- 5. The game's own frames
 ---------------------------------------------------------------------------
 do

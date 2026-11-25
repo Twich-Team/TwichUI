@@ -243,12 +243,23 @@ local function View(rule, index)
     return v
 end
 
-function LR.List()
-    local out = {}
+-- The saved rules that count, in order, with their place in the saved list. A rule whose id an earlier rule already has is ignored
+-- (a bad import or a hand edit): every lookup by id finds the first one, so the one that decides must be the one that is found.
+local function Counted()
+    local out, seen = {}, {}
     for i, rule in ipairs(List(false) or {}) do
         if #out >= LR.MAX_RULES then break end   -- a saved list longer than the limit (hand-edited, or from elsewhere) is read only this far
-        if type(rule) == "table" and ValidId(rule.id) then out[#out + 1] = View(rule, i) end
+        if type(rule) == "table" and ValidId(rule.id) and not seen[rule.id] then
+            seen[rule.id] = true
+            out[#out + 1] = { rule = rule, index = i }
+        end
     end
+    return out
+end
+
+function LR.List()
+    local out = {}
+    for _, entry in ipairs(Counted()) do out[#out + 1] = View(entry.rule, entry.index) end
     return out
 end
 
@@ -262,10 +273,7 @@ end
 -- The saved rules in order, for Rules.Decide (it reads them and checks each; it never changes one).
 function LR.Active()
     local out = {}
-    for _, rule in ipairs(List(false) or {}) do
-        if #out >= LR.MAX_RULES then break end
-        if type(rule) == "table" and ValidId(rule.id) then out[#out + 1] = rule end
-    end
+    for _, entry in ipairs(Counted()) do out[#out + 1] = entry.rule end
     return out
 end
 
