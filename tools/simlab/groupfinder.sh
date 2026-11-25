@@ -7,11 +7,11 @@ mkdir -p "$RUN"
 export SIMLAB_ASSETS="${SIMLAB_ASSETS:-1}"
 export SIMLAB_FORWARD="WOW_SIM_SOFTWARE_RENDER=1 WOW_SIM_NO_PARTY=1"
 poses=("$@")
-[ "${#poses[@]}" -gt 0 ] || poses=(groups players small)
+[ "${#poses[@]}" -gt 0 ] || poses=(groups players picker filters empty stale small)
 simlab_stage
 echo "artifacts: $RUN"
 for pose in "${poses[@]}"; do
-    case "$pose" in groups|players|small) ;; *) echo "unknown Group Finder pose: $pose" >&2; exit 2 ;; esac
+    case "$pose" in groups|players|picker|filters|empty|stale|small|default|before-groups|before-players) ;; *) echo "unknown Group Finder pose: $pose" >&2; exit 2 ;; esac
     { printf 'SIMLAB_PARAMS = { pose = "%s" }\n' "$pose"; cat "$SIMLAB_DIR/scenarios/lib.lua" "$SIMLAB_DIR/scenarios/groupfinder.lua"; } > "$LAB/fixtures/groupfinder-$pose.lua"
     width=1626; height=968
     [ "$pose" != small ] || { width=1280; height=800; }

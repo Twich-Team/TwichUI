@@ -7,6 +7,9 @@ local a = { id=1, leader="Stoneward", solo=false, activities={10,11}, activityNa
 local b = { id=2, leader="Dawnmend", solo=true, activities={10,11}, activityName="Blackrock Depths", activityNames={"Blackrock Depths","Scholomance"}, roles={HEALER=true,DAMAGER=true}, class="PRIEST", level=60, style="UNKNOWN",age=12,friendCount=1 }
 local filters = M.Defaults("groups")
 assert(M.Matches(a, filters, "groups") and not M.Matches(b,filters,"groups"))
+filters.activitiesNone=true
+assert(not M.Matches(a,filters,"groups") and not M.Matches(b,filters,"players"), "explicit no dungeons never means all")
+filters.activitiesNone=false
 filters.activities = { [11]=true }
 assert(M.Matches(a,filters,"groups"), "multi-activity OR matching")
 filters.activities = { [12]=true }
@@ -63,6 +66,10 @@ assert(M.SavePreset("players","Dungeons",p))
 assert(M.LoadPreset("players","Dungeons",{{id=10}}).activities[10])
 assert(not M.Get("players").activities[999],"unavailable IDs do not hide all loaded listings")
 assert(M.GetPresets("players").Dungeons.activities[999],"saved preset retains temporarily unavailable ID")
+M.Set("players","activitiesNone",true)
+assert(M.SavePreset("players","None",M.Get("players")))
+M.Set("players","activitiesNone",false)
+assert(M.LoadPreset("players","None",{{id=10}}).activitiesNone, "preset preserves explicit empty selection")
 M.DeletePreset("players","Healers")
 assert(not M.GetPresets("players").Healers)
 assert(not M.SavePreset("players","|Tbad",{}))

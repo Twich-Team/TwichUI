@@ -27,6 +27,7 @@ c.C_LFGList = {
     GetSearchResultMemberCounts = function() return { TANK_REMAINING = 0, HEALER_REMAINING = 1, DAMAGER_REMAINING = 0 } end,
 }
 local function Load(file) local f = assert(loadfile(ROOT .. file)); setfenv(f, c); f("!!!TwichUI", {}) end
+Load("groupfinder/Art.lua")
 Load("groupfinder/Data.lua")
 local D = c.TwichUI.GroupFinder.Data
 local list = D.Activities()
@@ -34,7 +35,29 @@ assert(#list == 3 and list[3].name == "Scholomance", "live five-player activitie
 assert(list[1].minLevel == 52 and list[1].maxLevel == 60, "suggestions kept separate")
 assert(list[1].icon:find("blackrock%-depths$") and list[3].icon:find("scholomance$"), "featured dungeons use packaged original art")
 assert(D.ActivityIcon({fullName="Un nouveau donjon",mapID=289}):find("scholomance$"), "verified map mapping survives localization")
-assert(D.ActivityIcon({fullName="New Forever dungeon"}):find("reminder%-dungeon%-entrance$"), "new and unmatched dungeons have packaged art")
+assert(D.ActivityIcon({fullName="New Forever dungeon"}):find("groupfinder\\dungeon%-entrance$"), "new and unmatched dungeons have packaged art")
+assert(D.ActivityIcon({fullName="Maraudon"}):find("maraudon$"))
+assert(D.ActivityIcon({fullName="Zul'Farrak"}):find("zul%-farrak$"))
+assert(D.ActivityIcon({fullName="Uldaman"}):find("uldaman$"))
+assert(D.ActivityIcon({fullName="Maraudon"}) ~= D.ActivityIcon({fullName="Zul'Farrak"}) and D.ActivityIcon({fullName="Uldaman"}) ~= D.ActivityIcon({fullName="Zul'Farrak"}), "featured Classic dungeons have distinct artwork")
+assert(D.ActivityIcon({fullName="Localized name",mapID=349},32):find("maraudon%-tiny$"))
+assert(D.ActivityIcon({fullName="Uldaman"},true):find("uldaman%-small$"))
+assert(D.ActivityIcon({fullName=SECRET,mapID=SECRET},32):find("dungeon%-entrance%-tiny$"), "secret artwork hints use safe neutral icon")
+assert(D.ActivityIcon(SECRET):find("dungeon%-entrance$"))
+assert(D.ActivityIcon({fullName="Unrelated dungeon",shortName="Zul'Farrak"}):find("zul%-farrak$"), "public short names are supported")
+assert(D.ActivityIcon({fullName="Ancient Zul'Gurub",mapID=309}):find("ancient%-zul%-gurub$"), "verified Forever dungeon has dedicated art")
+assert(D.ActivityIcon({fullName="Scarlet Monastery - Cathedral"}):find("scarlet%-monastery$"), "subareas share recognizable parent art")
+assert(D.ActivityIcon({name="Maraudon"},64):find("maraudon%-small$"), "normalized public activity names are supported")
+local foreverArt = {}
+for _, name in ipairs({"Alcaz Prison","Blackmaw Hold","City of Dalaran","Excavation Site: Wetlands"}) do
+    local icon = D.ActivityIcon({fullName=name},32)
+    assert(not icon:find("dungeon%-entrance") and icon:find("%-tiny$"), "confirmed Forever activity has packaged small art")
+    assert(not foreverArt[icon], "Forever activity paintings are distinct")
+    foreverArt[icon] = true
+end
+for _, wing in ipairs({"East","West","North"}) do
+    assert(D.ActivityIcon({fullName="Dire Maul ("..wing..")"}):find("dire%-maul$"), "native parenthesized wing labels share Dire Maul art")
+end
 local group, solo = D.Read(1), D.Read(2)
 assert(group and not group.solo and group.openings.HEALER == 1 and group.openings.TANK == 0)
 assert(group.level == 60 and group.zone == "Searing Gorge" and #group.activities == 2)
