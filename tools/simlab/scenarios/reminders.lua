@@ -585,6 +585,44 @@ Lab.Step("pose", function()
     end
     R.SettingsUI.RevealFrame(R.SettingsUI.View("reminders").frame); Lab.Settle(0.2)
     local UI = R.SettingsUI
+    if view == "glow" then
+        -- the action button glow section, through its own controls; the reminder stays off
+        local glow, GW, Draw = Ed.sections[6], R.ReminderGlow, R.BarGlowDraw
+        Lab.Check("construct", "glow section drawn, off by default", true, glow:IsShown() and not RM.Get(id).glow.enabled)
+        glow.enable:Click(); Lab.Settle(0.2)
+        Lab.Check("interact", "the switch turns the glow on", true, RM.Get(id).glow.enabled)
+        glow.spellBox:SetText("8017"); glow.spellBox:GetScript("OnEnterPressed")(glow.spellBox); Lab.Settle(0.2)
+        Lab.Check("interact", "a typed spell ID is saved", 8017, RM.Get(id).glow.spell)
+        Lab.Check("construct", "spell, look, motion, color and sample shown", true,
+            glow.spellBox:IsShown() and glow.look:IsShown() and glow.motion:IsShown() and glow.color:IsShown() and glow.sample:IsShown())
+        Lab.Check("construct", "the sample glows on its own frame", true, Draw.IsGlowing(glow.sample, "reminderSample") and Draw.IsShown(glow.sample))
+        Lab.Check("construct", "a line says where the spell is", true, (glow.note:GetText() or "") ~= "")
+        local mine = 0
+        for _ in pairs(Draw.Owned("reminders")) do mine = mine + 1 end
+        Lab.Check("state", "an off reminder lights no action button", 0, mine)
+        UI.RevealFrame(glow); Lab.Settle(0.2)
+        local overlay
+        for _, child in ipairs({ glow.sample:GetChildren() }) do
+            if child.inner then overlay = child; break end
+        end
+        Lab.Check("geometry", "sample has a shared glow overlay", true, overlay ~= nil)
+        if overlay then
+            for _, look in ipairs({ "proc", "ants", "soft", "pixel" }) do
+                RM.SetGlow(id, "look", look)
+                for _, motion in ipairs({ "still", "breathing", "moving" }) do
+                    RM.SetGlow(id, "motion", motion); Lab.Settle(0.1)
+                    glow.sample:SetSize(48, 32); Lab.Settle(0.1)
+                    Lab.Check("geometry", look .. "/" .. motion .. " fits the resized sample", true,
+                        math.abs(overlay:GetWidth() - glow.sample:GetWidth()) < 0.01
+                        and math.abs(overlay:GetHeight() - glow.sample:GetHeight()) < 0.01
+                        and math.abs(overlay:GetLeft() - glow.sample:GetLeft()) < 0.01
+                        and math.abs(overlay:GetTop() - glow.sample:GetTop()) < 0.01)
+                end
+            end
+            RM.SetGlow(id, "look", "proc"); RM.SetGlow(id, "motion", "moving")
+            UI.Refresh(); Lab.Settle(0.2)
+        end
+    end
     if view:find("^advanced") then
         local UI, a = R.SettingsUI, Ed.sections[3]
         UI.Frame():SetSize(936, (view == "advancedNested" or view == "advancedNestedBottom") and 950 or 820)

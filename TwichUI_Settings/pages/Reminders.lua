@@ -18,7 +18,7 @@ local PAD, GAP = 12, 9
 local ROW_H, THUMB = 66, 30
 local LIST_H, LIST_SCROLLBAR = 420, 8
 local LIST_W, EDIT_MIN = 220, 415
-local EDIT_ORDER = { 1, 2, 4, 3, 5 }
+local EDIT_ORDER = { 1, 2, 4, 6, 3, 5 }   -- Appearance, When, Sound, Action button glow, Advanced, Diagnostics
 local listWidth, editWidth, editorX = W_MIN, W_MIN, 0
 
 local f, built

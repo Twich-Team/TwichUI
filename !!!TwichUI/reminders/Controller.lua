@@ -37,6 +37,7 @@ local C = R.ReminderConditions
 local E = R.ReminderEval
 local ST = R.ReminderState
 local D = R.ReminderDisplay
+local GW = R.ReminderGlow   -- the action button glow, which follows a reminder's visibility exactly
 local Perf = R.Perf
 local CT = {}
 R.ReminderController = CT
@@ -119,6 +120,7 @@ local function Show(v, r)
     r.visible, r.shownAt = true, GetTime()
     stats.shows = stats.shows + 1
     D.SetLive(v, true)
+    GW.Set(v.id, true)
     Sound(v, r, r.shownAt)
 end
 
@@ -128,6 +130,7 @@ local function Hide(v, r, immediate)
     r.visible, r.shownAt = false, nil
     stats.hides = stats.hides + 1
     D.SetLive(v, false, immediate)
+    GW.Set(v.id, false)
 end
 
 -- Hidden now, whatever its timing says (off, deleted, not for this character, invalid, switched off).
@@ -271,6 +274,7 @@ local function Refresh()
         end
     end
     D.Prune(present)
+    GW.Prune(present)
 
     for k in pairs(index) do index[k] = nil end
     for k in pairs(active) do active[k] = nil end
@@ -280,6 +284,7 @@ local function Refresh()
         ST.Stop()
         for _, r in pairs(rt) do Cancel(r); r.visible, r.sounded = false, nil; r.out = nil end
         D.HideAll()
+        GW.Clear()
         Tell(nil)
         return
     end
@@ -322,6 +327,7 @@ local function Refresh()
             HardHide(v, r)
         end
     end
+    GW.Update(nil)   -- the glows of what shows, from the views as they are now (a profile's reminder may share an id)
     Tell(nil)
 end
 -- (inside a scope while TwichUI Diagnostics records; a plain call otherwise)
@@ -352,6 +358,11 @@ end)
 -- A reminder changed in the settings (or a profile change, id nil).
 RM.Subscribe(function(id, what)
     if id and what == "sound" then return end   -- read when it next appears; nothing is drawn or decided again
+    if id and what == "glow" then                -- only the glow is drawn again; nothing is decided again
+        GW.Update(id)
+        Tell(id)
+        return
+    end
     if id == nil then D.PreviewStop() end   -- another profile's reminders: a preview of the old one ends
     if id and (what == "display" or what == "place" or what == "name") then
         local v = RM.Get(id)
@@ -432,9 +443,11 @@ function CT.Snapshot()
     end
     local keys = 0
     for _ in pairs(index) do keys = keys + 1 end
+    local glow = GW.Snapshot()
     return { enabled = R:Enabled("reminders"), running = running, reminders = n, turnedOn = on, valid = valid,
         active = act, visible = visible, pending = pending, holding = holding, timed = timed, keys = keys, conditions = conditions, groups = groups,
         refreshes = stats.refreshes, decisions = stats.decisions, shows = stats.shows, hides = stats.hides,
+        glowing = glow.glowing, glowEvents = glow.events,
         sounds = stats.sounds, soundsHeld = stats.soundsHeld, soundsMissing = stats.soundsMissing, soundsRefused = stats.soundsRefused, soundsQuiet = stats.soundsQuiet,
         timeWaits = stats.timeWaits, timeChecks = stats.timeChecks }
 end

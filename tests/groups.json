@@ -92,8 +92,8 @@
     ]
   },
   "reminders": {
-    "tests": ["test_reminders*.lua", "test_reminder_gallery.lua", "test_reminder_gallery.py", "test_artwork_picker.lua"],
-    "syntax": ["!!!TwichUI/artwork/**/*.lua", "!!!TwichUI/reminders/**/*.lua", "TwichUI_Settings/pages/Remind*.lua", "TwichUI_Settings/ArtworkPicker.lua", "TwichUI_Settings/Material.lua", "TwichUI_Settings/Window.lua"],
+    "tests": ["test_reminders*.lua", "test_reminder_gallery.lua", "test_reminder_gallery.py", "test_artwork_picker.lua", "test_bar_glows.lua", "test_bar_glows_settings.lua"],
+    "syntax": ["!!!TwichUI/glows/**/*.lua", "!!!TwichUI/artwork/**/*.lua", "!!!TwichUI/reminders/**/*.lua", "TwichUI_Settings/pages/Remind*.lua", "TwichUI_Settings/ArtworkPicker.lua", "TwichUI_Settings/Material.lua", "TwichUI_Settings/Window.lua"],
     "dependencies": ["settings"],
     "simulators": [{"script": "reminders"}]
   },

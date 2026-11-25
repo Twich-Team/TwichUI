@@ -583,6 +583,7 @@ function D.PreviewStart(view, moving)
     preview.id, preview.positioning = view.id, moving and true or false
     local f = Acquire(view.id)
     f.view = view
+    if R.ReminderGlow then R.ReminderGlow.SetPreview(view.id) end   -- its action button glow shows with it
     if old and old ~= view.id then
         local of = frames[old]
         if of then of.immediate = true end
@@ -600,6 +601,7 @@ function D.PreviewStop()
     if not old then return end
     preview.id, preview.positioning, preview.dragging = nil, false, false
     SyncEvents()
+    if R.ReminderGlow then R.ReminderGlow.SetPreview(nil) end
     local f = frames[old]
     if f then
         f:StopMovingOrSizing()

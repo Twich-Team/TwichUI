@@ -18,7 +18,10 @@
 --     display = { mode, art, iconSource, icon, item, text, size, keepAspect, width, height, opacity, textSize,
 --                 textPlace, font, outline, textColor, panel, strata, fade, pulse, delay, minShow },
 --     place = { preset, point, x, y },
---     sound = "<a sound's name>" }   optional: played once when the reminder appears (RM.SetSound; none when absent)
+--     sound = "<a sound's name>",   optional: played once when the reminder appears (RM.SetSound; none when absent)
+--     glow = { enabled, spell, look, color, motion } }   optional: while it shows, the action buttons holding that spell
+--         glow (RM.SetGlow; reminders/ButtonGlow.lua). Absent, or enabled ~= true, means no glow. The spell is a spell ID
+--         and need not be one the conditions read; one that is on no button glows nothing and never stops the reminder.
 -- Nothing else: no result, no observation, no preview state, no frame. Who a reminder is for (scope) is kept apart
 -- from how it looks (display) and where it sits (place).
 --
@@ -178,6 +181,56 @@ function RM.ValidDisplay(key, value)
 end
 
 ---------------------------------------------------------------------------
+-- An action button glow: optional, off until turned on. The looks are those Action bar glows draws (glows/Draw.lua,
+-- the same keys as its BG.LOOKS); the size, opacity and speed are always the drawing's defaults. Reading never writes:
+-- an unusable stored value reads as its default. A glow turned on without a spell glows nothing and is said so in the
+-- editor; it is never one of the reminder's problems, so the reminder's own display and sound are never held back by it.
+---------------------------------------------------------------------------
+RM.GLOW_DEFAULTS = { enabled = false, look = "proc", color = "fff2c14e", motion = "moving" }
+RM.GLOW_CHOICES = {
+    look = {
+        { "proc", "Spell alert", "The game's own spell alert: a bright loop around the button." },
+        { "ants", "Marching ants", "A thin line that runs around the button." },
+        { "soft", "Soft frame", "A soft, glowing square frame. Calm, and easy on the eyes." },
+        { "pixel", "Pixel border", "A crisp line on the button's edge." },
+    },
+    motion = {
+        { "moving", "Moving", "The glow runs around the button (the soft frame and pixel border breathe instead)." },
+        { "breathing", "Breathing", "It stands still and slowly fades out and in." },
+        { "still", "Still", "It stands still and does not move at all." },
+    },
+}
+local GLOW_ENUM = {}
+for key, list in pairs(RM.GLOW_CHOICES) do
+    local set = {}
+    for _, c in ipairs(list) do set[c[1]] = true end
+    GLOW_ENUM[key] = set
+end
+
+function RM.ValidSpell(v) return Whole(v) and v >= 1 and v <= 2147483647 end
+
+-- Whether a glow value is usable. spell may be nil (none chosen yet).
+function RM.ValidGlow(key, value)
+    if key == "spell" then return value == nil or RM.ValidSpell(value) end
+    if key == "enabled" then return type(value) == "boolean" end
+    if key == "color" then return Hex(value) end
+    return GLOW_ENUM[key] ~= nil and type(value) == "string" and GLOW_ENUM[key][value] == true
+end
+
+-- The glow as it is used: every field usable, `on` when it is turned on and has a spell.
+function RM.ReadGlow(raw)
+    raw = type(raw) == "table" and raw or {}
+    local g = {}
+    for key, default in pairs(RM.GLOW_DEFAULTS) do
+        local v = raw[key]
+        if v ~= nil and RM.ValidGlow(key, v) then g[key] = v else g[key] = default end
+    end
+    g.spell = RM.ValidSpell(raw.spell) and raw.spell or nil
+    g.on = g.enabled and g.spell ~= nil
+    return g
+end
+
+---------------------------------------------------------------------------
 -- Where a reminder sits: a point of the screen, and an offset from it. The presets set all three.
 ---------------------------------------------------------------------------
 RM.POINTS = {
@@ -233,7 +286,7 @@ local function ValidCharacter(v) return type(v) == "string" and #v >= 3 and #v <
 
 ---------------------------------------------------------------------------
 -- Change notices: fn(id, what) after every change; id nil for "everything" (a profile change, a reset).
--- what: "list" (added or removed), "rule", "display", "place", "enabled", "name", "sound".
+-- what: "list" (added or removed), "rule", "display", "place", "enabled", "name", "sound", "glow".
 ---------------------------------------------------------------------------
 local subscribers = {}
 local rev = 0
@@ -447,6 +500,7 @@ local function MakeView(raw, index, t, newer)
     v.display = ReadDisplay(raw.display)
     v.place = ReadPlace(raw.place)
     v.sound = RM.ValidSound(raw.sound) and raw.sound or nil
+    v.glow = RM.ReadGlow(raw.glow)
     if newer then v.problems[#v.problems + 1] = PROBLEM.newer end
 
     -- the tree: v.conditions are the top level's entries (leaf or group); v.flat every entry in reading order (a group
@@ -1245,6 +1299,21 @@ function RM.SetSound(id, name)
     return true
 end
 
+-- One value of the action button glow (RM.GLOW_DEFAULTS' keys, and spell: a spell ID, or nil for none). Told as "glow":
+-- only the glow is drawn again; nothing is decided again.
+function RM.SetGlow(id, key, value)
+    local raw, why, _, _, v = Locate(id)
+    if not raw then return false, why end
+    if v.broken then return false, REFUSE.broken end
+    if key ~= "spell" and RM.GLOW_DEFAULTS[key] == nil then return false, REFUSE.value end
+    if not RM.ValidGlow(key, value) then return false, REFUSE.value end
+    local g = Sub(raw, "glow")
+    if g[key] == value then return true end
+    g[key] = value
+    Tell(id, "glow")
+    return true
+end
+
 -- A preset sets the point and offsets with it; "custom" keeps the place it is at now.
 function RM.SetPreset(id, preset)
     local raw, why, _, _, v = Locate(id)
@@ -1354,12 +1423,17 @@ function RM.Export(id)
     local display = {}
     for key in pairs(RM.DISPLAY_DEFAULTS) do display[key] = v.display[key] end
     display.item = v.display.item
+    -- the glow, when one was ever set up (an older TwichUI ignores it, so the reminder arrives there without a glow)
+    local glow
+    if type(v.raw.glow) == "table" then
+        glow = { enabled = v.glow.enabled, spell = v.glow.spell, look = v.glow.look, color = v.glow.color, motion = v.glow.motion }
+    end
     return {
         v = RM.SHARE_VERSION, name = v.name, match = v.match,
         conditions = ExportList(v.conditions),
         display = display,
         place = { preset = v.place.preset, point = v.place.point, x = v.place.x, y = v.place.y },
-        sound = v.sound, class = v.scope.class,
+        sound = v.sound, class = v.scope.class, glow = glow,
     }
 end
 
@@ -1420,9 +1494,27 @@ function RM.Admit(p)
         display.item = p.display.item
     end
 
+    -- the glow is optional; one that is there must be readable as a whole, like the look
+    local glow
+    if p.glow ~= nil then
+        if type(p.glow) ~= "table" then return false, "Its action button glow can't be used here." end
+        glow = {}
+        for key in pairs(RM.GLOW_DEFAULTS) do
+            local value = p.glow[key]
+            if value ~= nil then
+                if not RM.ValidGlow(key, value) then return false, "Its action button glow can't be used here." end
+                glow[key] = value
+            end
+        end
+        if p.glow.spell ~= nil then
+            if not RM.ValidSpell(p.glow.spell) then return false, "The spell its action button glow uses can't be used here." end
+            glow.spell = p.glow.spell
+        end
+    end
+
     local me = RM.CharacterKey()
     local raw = {
-        name = name, enabled = false, match = p.match, conditions = conditions, display = display,
+        name = name, enabled = false, match = p.match, conditions = conditions, display = display, glow = glow,
         scope = me and { who = "characters", characters = { me } } or { who = "all", characters = {} },
         place = ReadPlace(p.place),
         sound = RM.ValidSound(p.sound) and p.sound or nil,

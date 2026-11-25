@@ -47,6 +47,7 @@ local pendingBlessing = {}     -- [castGUID] = target name
 local classToken
 
 local Schedule
+local mappedGeneration = -1    -- the buttons' map (Buttons.lua, shared with Reminders) as it was last looked at
 
 ---------------------------------------------------------------------------
 -- Messages and sounds
@@ -95,14 +96,13 @@ local function Render()
             if r.buttons then Take(r.buttons) end
         end
     end
-    for button in pairs(D.Glowing()) do
-        if not desired[button] then D.Clear(button) end
-    end
-    for button, style in pairs(desired) do D.Set(button, style) end
+    -- only this feature's own requests change here: a Reminder's glow on a button (Draw.lua's owners) is left alone
+    D.Sync(D.OWNER, desired)
     if BG.AnyFaded() then
         local alpha = BG.Get("fadedOpacity") / 100
         BT.Each(function(button, bar)
-            if BG.BarFaded(bar) and not desired[button] then D.Fade(button, alpha) else D.Unfade(button) end
+            -- a button that glows for anything (one of these, or a Reminder's) is not faded
+            if BG.BarFaded(bar) and not desired[button] and not D.HasOther(D.OWNER, button) then D.Fade(button, alpha) else D.Unfade(button) end
         end)
     elseif next(D.Faded()) then
         D.UnfadeAll()
@@ -220,7 +220,9 @@ local function Observe()
     local ctx = ST.Context()
     cache.ctx = ctx
     if stale.book then ST.ReadBook(); stale.book = false; stale.ranks = true end
-    if BT.dirty then BT.Map(); stale.ranks = true end
+    if BT.dirty then BT.Map() end
+    -- the map is shared: Reminders may have read the buttons again since the last look
+    if BT.generation ~= mappedGeneration then mappedGeneration = BT.generation; stale.ranks = true end
     if stale.auras then cache.auras = ST.AuraNames("player"); stale.auras = false end
     if stale.weapon then
         local before = cache.weapon
@@ -572,6 +574,12 @@ local function StopRunning()
 end
 
 function CT.Enabled() return R:Enabled("barGlows") end
+
+-- Another owner (a Reminder) started or stopped lighting buttons: faded bars are worked out again, so a button that
+-- glows for it is not faded. Nothing else is decided again.
+D.OnRequests(function(owner)
+    if owner ~= D.OWNER and CT.running and (BG.AnyFaded() or next(D.Faded())) then Render() end
+end)
 
 if R.QuietScreen then
     R.QuietScreen.OnChange(function(on)
