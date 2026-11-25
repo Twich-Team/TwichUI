@@ -136,7 +136,7 @@ c.C_TooltipInfo = { GetLootRollItem = function(id)
   local lines = { { leftText = it.name } }
   if it.redLine then lines[#lines + 1] = { leftText = it.redLine, leftColor = { r = 1, g = 0.1, b = 0.1 } } end
   if it.known then lines[#lines + 1] = { leftText = "Already known", leftColor = { r = 1, g = 0.1, b = 0.1 } } end
-  return { lines = lines }
+  return { lines = lines, dataInstanceID = id }
 end }
 c.C_SkillInfo = { GetNumSkillLines = function() return 2 end, GetSkillLineInfo = function(i)
   return ({ { isHeader = true, name = "Professions" }, { isHeader = false, name = "Alchemy", rank = 150 } })[i]
@@ -785,6 +785,66 @@ do
   EndRoll(id)
   id = StartRoll("item:102", { noTooltip = true }); roll = Ro.Find(id)
   Check(roll.state == "pending" and not roll.auto, "a missing tooltip cannot satisfy not already known")
+  EndRoll(id)
+
+  -- Delayed recipe facts must recover after the basic item has become ready.
+  Fresh(); LR.Set("auto", true); LR.Set("autoNeed", true)
+  local delayedNeed = Rule("professionRecipes")
+  LR.SetAction(delayedNeed, "need"); LR.SetDisplay(delayedNeed, "collapsed")
+  local _, notKnown = LR.AddCondition(delayedNeed, "recipe")
+  LR.SetCondition(delayedNeed, notKnown, { mode = "known", negate = true })
+  local delayedGreed = Rule("blank")
+  LR.RemoveCondition(delayedGreed, 1); LR.AddCondition(delayedGreed, "recipe")
+  LR.SetCondition(delayedGreed, 1, { mode = "any" })
+  LR.SetAction(delayedGreed, "greed"); LR.SetDisplay(delayedGreed, "collapsed")
+  for _, sample in ipairs({ { "item:102", "need", 1, "GET_ITEM_INFO_RECEIVED" },
+      { "item:103", "greed", 2, "TOOLTIP_DATA_UPDATE" }, { "item:105", "greed", 2, "SKILL_LINES_CHANGED" } }) do
+    local before = #rolled
+    id = StartRoll(sample[1], { noTooltip = true }); roll = Ro.Find(id)
+    if sample[1] ~= "item:105" then
+      Check(roll.obs.ready and roll.obs.recipe.known == nil and roll.state == "pending" and roll.displayMode == "expanded",
+        "missing learned status blocks Need and the lower Greed rule even when the basic item is ready")
+      for i = 1, 8 do Fire("GET_ITEM_INFO_RECEIVED", roll.obs.itemID) end
+      Check(roll.state == "pending" and #rolled == before, "repeated missing data never guesses whether a recipe is learned")
+    end
+    rolls[id].noTooltip = false
+    Fire(sample[4], sample[4] == "TOOLTIP_DATA_UPDATE" and id or roll.obs.itemID)
+    Check(roll.auto and roll.auto.action == sample[2] and roll.displayMode == "collapsed", "late recipe data selects the expected roll and collapsed display")
+    Advance(4)
+    Check(#rolled == before + 1 and rolled[#rolled].kind == sample[3], "the recovered recipe sends exactly one expected choice")
+    Fire("TOOLTIP_DATA_UPDATE", id); Fire("SKILL_LINES_CHANGED")
+    Advance(4)
+    Check(#rolled == before + 1, "later tooltip and skill events do not resubmit a chosen roll")
+    EndRoll(id)
+  end
+
+  id = StartRoll("item:102"); roll = Ro.Find(id)
+  Check(roll.state == "scheduled" and roll.auto.action == "need", "an unlearned recipe initially schedules Need")
+  ITEMS["item:102"].known = true
+  Fire("TOOLTIP_DATA_UPDATE", id + 10000)
+  Check(roll.auto and roll.auto.action == "need", "an unrelated tooltip update does not refresh this roll")
+  Fire("TOOLTIP_DATA_UPDATE", id)
+  Check(roll.auto and roll.auto.action == "greed", "a learned-status update rechecks an existing Need countdown")
+  EndRoll(id)
+  ITEMS["item:102"].known = nil
+
+  local tooltipInfo = c.C_TooltipInfo.GetLootRollItem
+  c.C_TooltipInfo.GetLootRollItem = function(rid) return { lines = {}, dataInstanceID = rid } end
+  id = StartRoll("item:102"); roll = Ro.Find(id)
+  Check(roll.obs.recipe.known == nil and roll.state == "pending", "an empty tooltip cannot prove a recipe is unlearned")
+  c.C_TooltipInfo.GetLootRollItem = tooltipInfo
+  Fire("TOOLTIP_DATA_UPDATE", id)
+  Check(roll.auto and roll.auto.action == "need", "an initially empty tooltip recovers on its data update")
+  EndRoll(id)
+
+  local skillCount = c.C_SkillInfo.GetNumSkillLines
+  c.C_SkillInfo.GetNumSkillLines = function() return nil end
+  Ro.ForgetProfessions()
+  id = StartRoll("item:102"); roll = Ro.Find(id)
+  Check(roll.obs.recipe.profession == nil and roll.state == "pending", "missing profession data leaves the recipe manual")
+  c.C_SkillInfo.GetNumSkillLines = skillCount
+  Fire("SKILL_LINES_CHANGED")
+  Check(roll.auto and roll.auto.action == "need", "a skill update resolves the open recipe's profession and starts Need")
   EndRoll(id)
 
   -- Need is a separate opt-in
