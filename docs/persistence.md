@@ -19,6 +19,7 @@ is keyed by `"Name - Realm"` inside an account-wide variable.
 | `TwichUIBackupDB` | undo snapshots | `setup/Setups.lua` | none | one `[character]` snapshot per character that applied a setup |
 | `TwichUIRestoreDB` | restore points ("Backups") | `setup/Restore.lua` | none | `points[]` (each: addon `tables`, and `own`: TwichUI's own settings, see "Backups of TwichUI's own settings"), `ownUndo` (the TwichUI settings the last restore replaced; one slot), `applyOwn` (a restore or Undo of them queued for the next load) |
 | `TwichUIChronicleDB` | feature data (the Journey Chronicle) | `chronicle/Data.lua` | `version` (integer) | `chars["Name - Realm"]` records: entries, notes, tracking state |
+| `TwichUIFishingDB` | feature data and preferences (TwichUI Fishing), declared by `TwichUI_Fishing.toc`, read only once that addon loads | `TwichUI_Fishing/Store.lua` | `schema` (integer) | `config` (fishing preferences, account-wide, not yet in profiles), `client` (interaction settings to put back), `capability`, `chars["Name - Realm"]` records: the session in progress, session summaries (at most 100), lifetime totals, the container queue, the gear snapshot; see `docs/fishing.md` |
 
 Kept apart on purpose: configuration (`TwichUIDB`) is small and safe to reset; sharing records and restore points are
 other addons' tables kept verbatim; the Chronicle is the player's own writing. The Chronicle is never part of

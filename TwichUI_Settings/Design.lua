@@ -16,8 +16,9 @@ Page("ammoCustom", "Teach reminders which ammunition your character can use.")
 Page("healerWatch", "Keep your healer's mana and messages in view.", { "Mana thresholds", "Chat channels and sound", "Colors", "Mana bar", "Attention effects", "Position" })
 Page("buffBack", "Choose which friendly buffs you want to return.")
 Page("lootRolls", "Beautiful loot cards and simple automatic rolling rules.", { "Size and place", "What a card shows" })
-Page("lootRules", "Choose when a rule applies and what it rolls.")
+Page("lootRules", "Choose when rules apply, roll choices, and card display.")
 Page("qol", "Small conveniences. Choose what works for you.")
+Page("executeRange", "Your health threshold on EllesmereUI target frames and enemy nameplates.")
 Page("markers", "Mark targets and places with your own shortcuts.")
 Page("markersTarget", "Choose your target sequence and keys.", { "Target marker keys" })
 Page("markersWorld", "Choose your world marker sequence and keys.", { "World marker keys" })
@@ -37,6 +38,7 @@ Page("magicInventory", "Choose where your items belong, then review the moves.")
 Page("auction", "Keep selling and collecting mail close at hand.")
 Page("junkMarking", "Choose which Vendor recommendations may be marked as junk, using rules you build.")
 Page("workshop", "Experimental crafting, shopping and market research. Enable it when you want to try it.")
+Page("fishing", "One key to fish with, and a calmer screen while you do.")
 Page("chronicle", "Keep a journal of your adventures.")
 Page("chronicleLook", "Make your journal comfortable to read.", { "Border", "Controls and accents" })
 Page("cozyBag", "Follow your progress toward the Cozy Sleeping Bag.", { "Previews" })
@@ -65,7 +67,7 @@ Page("barGlowsSpells", "Choose spells and customize their glow.")
 Page("skins", "Make supported addons feel at home with TwichUI.")
 Page("restedxp", "Choose your guide's behavior and appearance.", { "Window background and border", "Current step", "Header and footer", "Text size", "Spacing", "Scroll bar", "Waypoint arrow", "Timer bars", "Timer bar background and border" })
 Page("classPortrait", "Add class artwork around your EllesmereUI player portrait.")
-Page("targetArt", "Choose dragon artwork for your target frame.", { "Fine-tune each artwork", "Reset" })
+Page("targetArt", "Decorate your target portrait by enemy classification.", { "Fine-tune each artwork", "Reset" })
 Page("sharing", "Share selected configurations and review incoming changes.", { "Sending options", "Inspect saved data" })
 Page("profiles", "Choose the settings this character uses.", { "Delete or reset" })
 Page("troubleshooting", "Check status, then open the tools you need.", { "Temporary tracing" })
@@ -91,6 +93,8 @@ end
 local TASKS = {
     workshop = { { "General", "General" }, { "Auction House", "Auction House" }, { "Tooltip Designer", "Tooltip Designer" },
         { "Market Data", "Market Data" }, { "Crafting & Shopping", "Crafting & Shopping" } },
+    fishing = { { "Fishing", "Fishing" }, { "Assistance", "Fishing assistance" }, { "Fishing Mode", "Fishing Mode" },
+        { "Fading", "Interface fading" }, { "HUD", "Fishing HUD" } },
     notifications = { { "Arrivals", "Zone arrival" }, { "Training", "New training" }, { "Friends", "Friend login" }, { "Party", "Party deaths" },
         { "Comfort", "Accessibility" }, { "Try it", "Notification previews", "Appearance" } },
     notificationsLook = { { "Customize", "Notification appearance", "Text" },
@@ -126,8 +130,7 @@ local TASKS = {
         { "Reading", "Text", "Current step", "Text size", "Spacing" },
         { "Surfaces", "Window background and border", "Header and footer", "Scroll bar" },
         { "Arrow / timers", "Waypoint arrow", "Timer bars", "Timer bar background and border" } },
-    targetArt = { { "Choose artwork", "Target dragon artwork", "Artwork for each kind of enemy", "Preview" },
-        { "Appearance", "Appearance", "Fine-tune each artwork", "Reset" } },
+
     troubleshooting = { { "Status", "Status", "Optional integrations" },
         { "Tools", "Performance and support", "Layout setup", "Full report", "Temporary tracing" } },
 }

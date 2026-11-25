@@ -1,16 +1,22 @@
 -- TwichUI: Loot Rolls, the rule engine
 -- Pure: no frame, no event, no saved data, no game call except for words (item class and slot names come from the
 -- game's own strings so nothing is guessed from a translation). A rule says "when an item matches these conditions,
--- roll Need, Greed or Pass". This file knows what a condition is, whether a rule is complete, and what a rule says about one
+-- optionally roll Need, Greed or Pass and/or change card display". This file knows what a condition is, whether a rule is complete, and what a rule says about one
 -- item. loot/Config.lua keeps the rules, loot/Roll.lua observes the roll and builds the item's facts, loot/Auto.lua acts.
 --
 -- Three answers, never two. A condition about an item answers "match", "no" or "unknown" (the fact is not there yet, or this client
 -- does not say). Unknown is not a match, and negating a condition ("not a recipe") leaves it unknown. A rule's answer is built from
 -- its conditions' (all: one "no" is a "no", otherwise one unknown is unknown; any: one match is a match, otherwise one unknown is unknown).
 --
--- Priority: the rules are read from the top. The first enabled, complete rule that is not a definite "no" decides:
+-- Groups: a condition of type "group" ({ type = "group", match = "all" | "any", conditions = { ... } }) holds a list of conditions of its
+-- own, answered by the same three-valued rule, so (A or B) and C is match "all" over { group any { A, B }, C }. A group is not a
+-- condition the picker offers: it is made by Config.lua's AddGroup. Limits: Ru.MAX_CONDITIONS conditions in all (groups not counted),
+-- Ru.MAX_GROUPS groups, Ru.MAX_DEPTH levels counting the top as the first. An empty or over-deep group makes the rule incomplete. No
+-- migration: a build from before groups reads a group as a condition of an unknown kind, so the rule is incomplete there and never acts.
+--
+-- Priority: the rules are read from the top. The first enabled (exactly true: a rule that never said it was on is off, as the editor shows it), complete rule that is not a definite "no" decides:
 -- "match" is a decision; "unknown" stops the search with no decision (a rule above may have matched, so a rule below must not speak
--- for it). Nothing combines the actions of two rules. A rule with nothing in it, or a condition that is not valid, is incomplete:
+-- for it). Roll and display decisions use this order independently; No change is skipped per channel. A rule with nothing in it, or a condition that is not valid, is incomplete:
 -- it is skipped, and the editor says why.
 --
 -- The facts (an "observation") are a plain table; a missing field is unknown:
@@ -20,13 +26,17 @@
 --   context = { instanceType ("none", "party", "raid", ...), inRaidGroup }
 
 local R = TwichUI
+local Families = R.ForeverItemFamilies
 local Ru = {}
 R.LootRules = Ru
 
 Ru.MATCH, Ru.NO, Ru.UNKNOWN = "match", "no", "unknown"
 Ru.ACTIONS = { "need", "greed", "pass" }
-Ru.ACTION_LABEL = { need = "Need", greed = "Greed", pass = "Pass" }
-Ru.MAX_CONDITIONS = 8
+Ru.ACTION_LABEL = { need = "Need", greed = "Greed", pass = "Pass", none = "No change" }
+Ru.DISPLAY_LABEL = { none = "No change", expanded = "Expanded", collapsed = "Collapsed (Mini)" }
+Ru.MAX_CONDITIONS = 8   -- conditions in one rule, in all its groups together (a group is not a condition)
+Ru.MAX_GROUPS = 4       -- groups in one rule, at any depth (the top level is not one)
+Ru.MAX_DEPTH = 3        -- levels of conditions: the top level is 1, a group in it 2, a group in that 3
 Ru.MAX_NAME = 40
 
 local function Whole(v) return type(v) == "number" and v == v and v % 1 == 0 and v ~= math.huge and v ~= -math.huge end
@@ -99,6 +109,14 @@ Ru.CONTEXT_CHOICES = {
     { "outsideRaid", "Only outside raids" }, { "inRaid", "Only in raids" },
     { "inDungeon", "Only in dungeons" }, { "outsideDungeon", "Only outside dungeons" },
 }
+Ru.FAMILY_CHOICES = { { "waylaid-crates", "Waylaid crate" }, { "craftsmans-writs", "Craftsman's Writ" } }
+local FAMILY_MATCH = {
+    ["waylaid-crates"] = Families.IsWaylaidCrate,
+    ["craftsmans-writs"] = Families.IsCraftsmansWrit,
+}
+local FAMILY_LABEL = {}
+for _, choice in ipairs(Ru.FAMILY_CHOICES) do FAMILY_LABEL[choice[1]] = choice[2] end
+
 Ru.BIND_CHOICES = { { "pickup", "Binds when picked up" }, { "equip", "Binds when equipped" } }
 Ru.QUALITY_OPS = { { "is", "is" }, { "atLeast", "is at least" }, { "atMost", "is at most" } }
 
@@ -114,7 +132,7 @@ end
 ---------------------------------------------------------------------------
 local T = {}
 Ru.TYPES = T
-Ru.ORDER = { "quality", "class", "armor", "equippable", "equip", "recipe", "item", "bind", "upgrade", "context" }
+Ru.ORDER = { "quality", "class", "armor", "equippable", "equip", "recipe", "item", "family", "bind", "upgrade", "context" }
 
 T.quality = {
     label = "Item quality", icon = "lootQuality",
@@ -240,6 +258,18 @@ T.item = {
     end,
 }
 
+T.family = {
+    label = "Item family", icon = "lootItem",
+    new = function() return { type = "family", value = "waylaid-crates" } end,
+    check = function(c) if not FAMILY_MATCH[c.value] then return "Choose an item family." end end,
+    eval = function(c, obs)
+        local id = obs.itemID
+        if not Whole(id) or id <= 0 then return nil end
+        return FAMILY_MATCH[c.value](id)
+    end,
+    phrase = function(c) return "is a " .. FAMILY_LABEL[c.value] end,
+}
+
 T.bind = {
     label = "Binding", icon = "lootBind",
     new = function() return { type = "bind", value = "equip" } end,
@@ -258,7 +288,7 @@ T.upgrade = {
     check = function(c) if type(c.value) ~= "boolean" then return "Choose whether it is an upgrade." end end,
     eval = function(c, obs, opts)
         -- an upgrade is a hint, never a reason to roll by itself: it counts only when the player allowed rolls to use it
-        if not (opts and opts.allowUpgrade) then return nil end
+        if not (opts and opts.allowUpgrade == true) then return nil end
         local u = obs.upgrade
         if u == nil then return nil end
         return u == c.value
@@ -289,9 +319,58 @@ T.context = {
 ---------------------------------------------------------------------------
 -- Conditions and rules
 ---------------------------------------------------------------------------
--- nil when the condition is complete, else why not.
+local function IsGroup(c) return type(c) == "table" and c.type == "group" end
+Ru.IsGroup = IsGroup
+
+-- What a list of conditions holds (groups counted, and how deep it goes), reading no further than the limits allow, so a table that
+-- loops or nests absurdly is only ever read a few levels. depth is the level of this list (the top is 1).
+local function Measure(list, depth, st)
+    st = st or { conditions = 0, groups = 0, depth = depth }
+    if depth > st.depth then st.depth = depth end
+    if depth > Ru.MAX_DEPTH + 1 then return st end
+    for _, c in ipairs(list) do
+        if IsGroup(c) then
+            st.groups = st.groups + 1
+            if type(c.conditions) == "table" then Measure(c.conditions, depth + 1, st) end
+        else
+            st.conditions = st.conditions + 1
+        end
+    end
+    return st
+end
+function Ru.Measure(list) return Measure(type(list) == "table" and list or {}, 1) end
+
+-- Why a list of conditions (the top level's, or a group's) is not usable: nil when it is. path is where the list sits, for the words.
+local function ListProblem(list, depth, path)
+    if type(list) ~= "table" or #list == 0 then
+        if depth == 1 then return "Add at least one condition: a rule with none would match every item." end
+        return ("Group %s: add a condition or remove the group."):format(table.concat(path, "."))
+    end
+    for i, c in ipairs(list) do
+        local at = { unpack(path) }
+        at[#at + 1] = i
+        local label = table.concat(at, ".")
+        if IsGroup(c) then
+            if depth + 1 > Ru.MAX_DEPTH then return ("Group %s: groups can go only %d levels deep."):format(label, Ru.MAX_DEPTH) end
+            if c.match ~= "all" and c.match ~= "any" then return ("Group %s: choose all or any."):format(label) end
+            if c.negate ~= nil then return ("Group %s: invalid."):format(label) end
+            local why = ListProblem(c.conditions, depth + 1, at)
+            if why then return why end
+        else
+            local why = Ru.CheckCondition(c)
+            if why then return ("Condition %s: %s"):format(label, why) end
+        end
+    end
+end
+
+-- nil when the condition is complete, else why not. A group is complete when everything in it is.
 function Ru.CheckCondition(c)
     if type(c) ~= "table" then return "Not a condition." end
+    if IsGroup(c) then
+        if c.match ~= "all" and c.match ~= "any" then return "Choose all or any." end
+        if c.negate ~= nil then return "Invalid." end
+        return ListProblem(c.conditions, 2, {})   -- its own list is level 2 from here: a group in it may go on one level, no more (Incomplete reads the whole rule)
+    end
     local t = T[c.type]
     if not t then return "Unknown kind of condition." end
     if c.negate ~= nil and type(c.negate) ~= "boolean" then return "Invalid." end
@@ -303,10 +382,33 @@ function Ru.NewCondition(kind)
     return t and t.new() or nil
 end
 
--- true, false or nil for one condition about one item.
+-- One list of conditions about one item, "all" or "any": match, Ru.NO or Unknown.
+local function EvalList(match, list, obs, opts)
+    local sawNo, sawYes, sawUnknown = false, false, false
+    for _, c in ipairs(list) do
+        local v = Ru.EvalCondition(c, obs, opts)
+        if v == nil then sawUnknown = true elseif v then sawYes = true else sawNo = true end
+    end
+    if match == "any" then
+        if sawYes then return Ru.MATCH end
+        return sawUnknown and Ru.UNKNOWN or Ru.NO
+    end
+    if sawNo then return Ru.NO end
+    return sawUnknown and Ru.UNKNOWN or Ru.MATCH
+end
+
+local ANSWER = { match = true, no = false }
+
+-- true, false or nil for one condition about one item. A group answers as its own list does.
 function Ru.EvalCondition(c, obs, opts)
-    local t = type(c) == "table" and T[c.type]
-    if not t or t.check(c) ~= nil then return nil end
+    if type(c) ~= "table" then return nil end
+    if IsGroup(c) then
+        if Ru.CheckCondition(c) ~= nil then return nil end
+        return ANSWER[EvalList(c.match, c.conditions, obs or {}, opts)]   -- unknown has no entry: nil
+    end
+    local t = T[c.type]
+    -- the same completeness the editor reports (a negate that is not a real boolean included): an unfinished condition never answers
+    if not t or Ru.CheckCondition(c) ~= nil then return nil end
     local ok, value = pcall(t.eval, c, obs or {}, opts)
     if not ok or type(value) ~= "boolean" then return nil end
     if c.negate then return not value end
@@ -316,31 +418,24 @@ end
 -- nil when the rule can run, else why not (words for the editor).
 function Ru.Incomplete(rule)
     if type(rule) ~= "table" then return "Not a rule." end
-    if rule.action ~= "need" and rule.action ~= "greed" and rule.action ~= "pass" then return "Choose Need, Greed or Pass." end
+    if not Ru.ACTION_LABEL[rule.action] then return "Choose a roll action (or No change)." end
+    if not Ru.DISPLAY_LABEL[rule.display or "none"] then return "Choose a valid card display." end
+    if rule.action == "none" and (rule.display == nil or rule.display == "none") then return "Choose a roll or card display action; both are No change." end
     local list = rule.conditions
     if type(list) ~= "table" or #list == 0 then return "Add at least one condition: a rule with none would match every item." end
-    if #list > Ru.MAX_CONDITIONS then return "Too many conditions." end
-    for i, c in ipairs(list) do
-        local why = Ru.CheckCondition(c)
-        if why then return ("Condition %d: %s"):format(i, why) end
+    local m = Measure(list, 1)
+    if m.depth > Ru.MAX_DEPTH or m.conditions > Ru.MAX_CONDITIONS or m.groups > Ru.MAX_GROUPS then
+        if m.depth > Ru.MAX_DEPTH then return ("Groups can go only %d levels deep."):format(Ru.MAX_DEPTH) end
+        if m.groups > Ru.MAX_GROUPS then return "Too many groups." end
+        return "Too many conditions."
     end
-    return nil
+    return ListProblem(list, 1, {})
 end
 
 -- Match, Ru.NO or Unknown for one rule about one item (ignores whether it is switched on).
 function Ru.EvalRule(rule, obs, opts)
     if Ru.Incomplete(rule) then return Ru.UNKNOWN end
-    local sawNo, sawYes, sawUnknown = false, false, false
-    for _, c in ipairs(rule.conditions) do
-        local v = Ru.EvalCondition(c, obs, opts)
-        if v == nil then sawUnknown = true elseif v then sawYes = true else sawNo = true end
-    end
-    if rule.match == "any" then
-        if sawYes then return Ru.MATCH end
-        return sawUnknown and Ru.UNKNOWN or Ru.NO
-    end
-    if sawNo then return Ru.NO end
-    return sawUnknown and Ru.UNKNOWN or Ru.MATCH
+    return EvalList(rule.match, rule.conditions, obs, opts)
 end
 
 -- What the rules say about one item. Returns { status = "match" | "unknown" | "none", rule, index }:
@@ -350,7 +445,7 @@ end
 function Ru.Decide(rules, obs, opts)
     if type(rules) ~= "table" then return { status = "none" } end
     for i, rule in ipairs(rules) do
-        if type(rule) == "table" and rule.enabled ~= false and not Ru.Incomplete(rule) then
+        if type(rule) == "table" and rule.enabled == true and rule.action ~= "none" and not Ru.Incomplete(rule) then
             local v = Ru.EvalRule(rule, obs, opts)
             if v == Ru.MATCH then return { status = "match", rule = rule, index = i } end
             if v == Ru.UNKNOWN then return { status = "unknown", rule = rule, index = i } end
@@ -359,27 +454,61 @@ function Ru.Decide(rules, obs, opts)
     return { status = "none" }
 end
 
+-- Display has its own ordered decision. Unknown blocks only this channel;
+-- rules with no explicit display never participate, even when their roll wins.
+function Ru.DecideDisplay(rules, obs)
+    if type(rules) ~= "table" then return { status = "none" } end
+    for i, rule in ipairs(rules) do
+        if type(rule) == "table" and rule.enabled == true and (rule.display == "expanded" or rule.display == "collapsed")
+            and not Ru.Incomplete(rule) then
+            local v = Ru.EvalRule(rule, obs, { allowUpgrade = true })
+            if v ~= Ru.NO then return { status = v, rule = rule, index = i } end
+        end
+    end
+    return { status = "none" }
+end
+
+function Ru.ActionSummary(rule)
+    local action = rule.action ~= "none" and Ru.ACTION_LABEL[rule.action] or nil
+    local display = rule.display == "collapsed" and "Collapsed" or rule.display == "expanded" and "Expanded" or nil
+    if action and display then return action .. " · " .. display end
+    return action or (display and (rule.display == "collapsed" and "Collapse card" or "Expand card")) or "No action"
+end
+
 -- A sentence for a rule: "Automatically choose Greed when the item is Uncommon and is equipment, after 3 seconds."
 function Ru.Summary(rule)
     if type(rule) ~= "table" then return "" end
     local action = Ru.ACTION_LABEL[rule.action]
-    if not action then return "Choose Need, Greed or Pass to finish this rule." end
-    local parts = {}
-    for _, c in ipairs(rule.conditions or {}) do
-        local t = T[c.type]
-        if t and t.check(c) == nil then
+    if not action then return "Choose a roll action or card display to finish this rule." end
+    local function Phrase(c)
+        if not IsGroup(c) then
+            local t = type(c) == "table" and T[c.type]
+            if not (t and t.check(c) == nil) then return nil end
             local text = t.phrase(c)
             if c.negate then text = "not (" .. text .. ")" end
-            parts[#parts + 1] = text
+            return text
         end
+        if Ru.CheckCondition(c) ~= nil then return nil end
+        local inner = {}
+        for _, child in ipairs(c.conditions) do inner[#inner + 1] = Phrase(child) end
+        if #inner == 0 then return nil end
+        return "(" .. table.concat(inner, c.match == "any" and " or " or " and ") .. ")"
+    end
+    local parts = {}
+    for _, c in ipairs(rule.conditions or {}) do
+        local text = Phrase(c)
+        if text then parts[#parts + 1] = text end
     end
     if #parts == 0 then return ("Choose %s once you add a condition."):format(action) end
     local joiner = rule.match == "any" and " or " or " and "
     local subject
-    local first = T[rule.conditions[1].type]
-    local lead = first and rule.conditions[1].type
-    if lead == "context" then subject = "when " .. table.concat(parts, joiner) else subject = "when the item " .. table.concat(parts, joiner) end
+    local first = type(rule.conditions[1]) == "table" and rule.conditions[1].type
+    if first == "context" then subject = "when " .. table.concat(parts, joiner) else subject = "when the item " .. table.concat(parts, joiner) end
     local delay = tonumber(rule.delay) or 0
     local after = delay > 0 and (", after %s second%s"):format(delay % 1 == 0 and tostring(math.floor(delay)) or ("%.1f"):format(delay), delay == 1 and "" or "s") or ""
-    return ("Automatically choose %s %s%s."):format(action, subject, after)
+    local display = rule.display == "collapsed" and "collapse the card" or rule.display == "expanded" and "expand the card" or nil
+    if rule.action == "none" then
+        return display and (display:gsub("^%l", string.upper) .. " " .. subject .. ".") or "Choose a roll or card display action."
+    end
+    return ("Automatically choose %s %s%s%s."):format(action, subject, after, display and ("; " .. display) or "")
 end

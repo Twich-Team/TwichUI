@@ -22,16 +22,26 @@ class Encrypted(CascError):
     """A BLTE chunk is encrypted; this reader has no keys and never guesses."""
 
 
-def _build_info(root, product):
+def builds(root):
+    """Read installed product/build rows, without inferring a product from a folder."""
     path = os.path.join(root, ".build.info")
-    with open(path, "r", encoding="utf-8") as f:
+    if os.path.getsize(path) > 1024 * 1024:
+        raise CascError(".build.info exceeds metadata size limit")
+    with open(path, "r", encoding="utf-8-sig") as f:
         lines = [ln.rstrip("\r\n") for ln in f if ln.strip()]
-    names = [h.split("!")[0] for h in lines[0].split("|")]
-    for ln in lines[1:]:
-        row = dict(zip(names, ln.split("|")))
-        if row.get("Product") == product:
-            return row
-    raise CascError("product %r not in .build.info" % product)
+    if not lines:
+        raise CascError(".build.info is empty")
+    names = [h.split("!")[0].strip() for h in lines[0].split("|")]
+    if "Product" not in names:
+        raise CascError(".build.info has no Product column")
+    return [dict(zip(names, (v.strip() for v in ln.split("|")))) for ln in lines[1:]]
+
+
+def _build_info(root, product):
+    matches = [row for row in builds(root) if row.get("Product") == product]
+    if not matches:
+        raise CascError("product %r not in .build.info" % product)
+    return next((row for row in matches if row.get("Active") == "1"), matches[0])
 
 
 def _config(root, key):

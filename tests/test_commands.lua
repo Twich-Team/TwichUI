@@ -20,8 +20,12 @@ assert(SL.TWICHUI == a.TwichUI.RunCommand)
 
 -- help
 out = {}; SL.TWICHUI("")
-local n = #out; assert(n > 5 and n < 20, n); assert(out[1]:find("commands"))
+local n = #out; assert(n == 20, n); assert(out[1]:find("commands"))
 local noarg = table.concat(out, "\n")
+assert(noarg:find("/tui mapdiag", 1, true), "map support command is discoverable")
+local openedMap = 0
+a.TwichUI.DiagnosticsLauncher = { OpenMap = function() openedMap = openedMap + 1 end }
+SL.TWICHUI("mapdiag"); assert(openedMap == 1, "mapdiag uses the diagnostics launcher")
 out = {}; SL.TWICHUI("help"); assert(table.concat(out, "\n") == noarg)
 out = {}; SL.TWICHUI("?"); assert(table.concat(out, "\n") == noarg)
 

@@ -225,19 +225,25 @@ function O.BagCount(item)
     return W.Count(n)   -- a whole number from 0, or nil: a NaN, an infinity, a fraction or a negative is "unknown", never a count
 end
 
--- name, icon (either may be nil while the game loads the item; it is asked once per call and GET_ITEM_INFO_RECEIVED follows)
+-- name, icon, quality (any may be nil while the game loads the item; it is asked once per call and GET_ITEM_INFO_RECEIVED follows)
 function O.ItemFacts(item)
-    local name, icon
+    local name, icon, quality
     if C_Item and C_Item.GetItemInfoInstant then
         local ok, _, _, _, _, tex = pcall(C_Item.GetItemInfoInstant, item)
         if ok then icon = Int(tex, 0, W.MAX_ID) end
     end
     if C_Item and C_Item.GetItemInfo then
-        local ok, n = pcall(C_Item.GetItemInfo, item)
-        if ok then name = Text(n, 80) end
+        local ok, n, _, q = pcall(C_Item.GetItemInfo, item)
+        if ok then name, quality = Text(n, 80), Int(q, 0, 8) end
     end
-    if not name and C_Item and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, item) end
-    return name, icon
+    -- Name and quality can become readable independently. A cached name is not
+    -- proof that the full GetItemInfo record (including quality) has arrived.
+    if quality == nil and C_Item and C_Item.GetItemQualityByID then
+        local ok, q = pcall(C_Item.GetItemQualityByID, item)
+        if ok then quality = Int(q, 0, 8) end
+    end
+    if (not name or quality == nil) and C_Item and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, item) end
+    return name, icon, quality
 end
 
 ---------------------------------------------------------------------------

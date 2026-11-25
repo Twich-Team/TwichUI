@@ -1,0 +1,417 @@
+{
+  "source": {
+    "commit": "b677c9d89140f714288aa4aee91bac3e9f512791",
+    "dirty": false,
+    "working_tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "source_after": {
+    "commit": "b677c9d89140f714288aa4aee91bac3e9f512791",
+    "dirty": false,
+    "working_tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "source_unchanged": true,
+  "complete": true,
+  "passed": false,
+  "exit_code": 1,
+  "seconds": 448.6043918079995,
+  "syntax_passed": true,
+  "tests": [
+    {
+      "name": "test_auction_host.lua",
+      "passed": true,
+      "seconds": 1.0683774780009117
+    },
+    {
+      "name": "test_auction_price.lua",
+      "passed": true,
+      "seconds": 0.005440318000182742
+    },
+    {
+      "name": "test_auction_window.lua",
+      "passed": true,
+      "seconds": 0.02210664699668996
+    },
+    {
+      "name": "test_cleanup.lua",
+      "passed": true,
+      "seconds": 0.34502686700216145
+    },
+    {
+      "name": "test_commands.lua",
+      "passed": true,
+      "seconds": 0.04171809699982987
+    },
+    {
+      "name": "test_defaults.lua",
+      "passed": true,
+      "seconds": 0.052323992997116875
+    },
+    {
+      "name": "test_frame_look.lua",
+      "passed": true,
+      "seconds": 0.031896255000901874
+    },
+    {
+      "name": "test_lifecycle.lua",
+      "passed": true,
+      "seconds": 0.07693704499979503
+    },
+    {
+      "name": "test_lod_apply.lua",
+      "passed": true,
+      "seconds": 0.049523208999744384
+    },
+    {
+      "name": "test_media_border.lua",
+      "passed": true,
+      "seconds": 0.03561362300024484
+    },
+    {
+      "name": "test_menu_style.lua",
+      "passed": true,
+      "seconds": 0.023747584997181548
+    },
+    {
+      "name": "test_notify.lua",
+      "passed": true,
+      "seconds": 0.028397485002642497
+    },
+    {
+      "name": "test_notify_look.lua",
+      "passed": true,
+      "seconds": 0.04055935200085514
+    },
+    {
+      "name": "test_perf_engine.lua",
+      "passed": true,
+      "seconds": 0.2352080359996762
+    },
+    {
+      "name": "test_persist.lua",
+      "passed": true,
+      "seconds": 1.7642774539999664
+    },
+    {
+      "name": "test_press.lua",
+      "passed": true,
+      "seconds": 0.0066993959990213625
+    },
+    {
+      "name": "test_pricing_conformance.py",
+      "passed": true,
+      "seconds": 0.10519890700015821
+    },
+    {
+      "name": "test_profiles.lua",
+      "passed": true,
+      "seconds": 2.2289505240005383
+    },
+    {
+      "name": "test_reach.lua",
+      "passed": true,
+      "seconds": 0.04020662300172262
+    },
+    {
+      "name": "test_routing.lua",
+      "passed": true,
+      "seconds": 0.06785435699930531
+    },
+    {
+      "name": "test_simlab_diagnostics.lua",
+      "passed": true,
+      "seconds": 0.014358431999426102
+    },
+    {
+      "name": "test_status.lua",
+      "passed": true,
+      "seconds": 0.19274014600159717
+    },
+    {
+      "name": "test_storage.lua",
+      "passed": true,
+      "seconds": 0.024195584002882242
+    },
+    {
+      "name": "test_stored_data.lua",
+      "passed": true,
+      "seconds": 0.044502238000859506
+    },
+    {
+      "name": "test_theme_defaults.lua",
+      "passed": true,
+      "seconds": 0.037396676001662854
+    },
+    {
+      "name": "test_window_smoke.lua",
+      "passed": true,
+      "seconds": 0.03956350600128644
+    },
+    {
+      "name": "test_workshop.lua",
+      "passed": true,
+      "seconds": 0.4415143309997802
+    },
+    {
+      "name": "test_workshop_a7.lua",
+      "passed": true,
+      "seconds": 0.05475615900286357
+    },
+    {
+      "name": "test_workshop_auction_market.lua",
+      "passed": true,
+      "seconds": 0.62297450099868
+    },
+    {
+      "name": "test_workshop_auction_market_chart.lua",
+      "passed": true,
+      "seconds": 4.008712642000319
+    },
+    {
+      "name": "test_workshop_auction_market_chart_interaction.lua",
+      "passed": true,
+      "seconds": 0.08722584099814412
+    },
+    {
+      "name": "test_workshop_auction_market_history.lua",
+      "passed": true,
+      "seconds": 0.2614589980003075
+    },
+    {
+      "name": "test_workshop_auction_market_scoped.lua",
+      "passed": true,
+      "seconds": 0.4405381180004042
+    },
+    {
+      "name": "test_workshop_auction_market_search.lua",
+      "passed": true,
+      "seconds": 0.18039113099803217
+    },
+    {
+      "name": "test_workshop_auction_market_server.lua",
+      "passed": true,
+      "seconds": 0.33854857600090327
+    },
+    {
+      "name": "test_workshop_auction_market_summary.lua",
+      "passed": true,
+      "seconds": 0.19619203000183916
+    },
+    {
+      "name": "test_workshop_auction_market_ui.lua",
+      "passed": true,
+      "seconds": 3.7807607379982073
+    },
+    {
+      "name": "test_workshop_auto.lua",
+      "passed": true,
+      "seconds": 0.7874446599998919
+    },
+    {
+      "name": "test_workshop_bridge.lua",
+      "passed": true,
+      "seconds": 0.08826602299814112
+    },
+    {
+      "name": "test_workshop_bridge.py",
+      "passed": true,
+      "seconds": 0.5576096969998616
+    },
+    {
+      "name": "test_workshop_bridge_compatibility.py",
+      "passed": true,
+      "seconds": 1.336897532997682
+    },
+    {
+      "name": "test_workshop_bridge_freshness.lua",
+      "passed": true,
+      "seconds": 0.054127425002661766
+    },
+    {
+      "name": "test_workshop_bridge_performance.lua",
+      "passed": true,
+      "seconds": 4.927361023997946
+    },
+    {
+      "name": "test_workshop_bridge_scoped.lua",
+      "passed": true,
+      "seconds": 0.49620059999870136
+    },
+    {
+      "name": "test_workshop_bridge_scoped.py",
+      "passed": true,
+      "seconds": 2.3742769099990255
+    },
+    {
+      "name": "test_workshop_compact.lua",
+      "passed": true,
+      "seconds": 0.10689424000156578
+    },
+    {
+      "name": "test_workshop_crafting_reference.lua",
+      "passed": true,
+      "seconds": 0.9694659070009948
+    },
+    {
+      "name": "test_workshop_craftplanner.lua",
+      "passed": true,
+      "seconds": 9.693784819999564
+    },
+    {
+      "name": "test_workshop_disenchant.lua",
+      "passed": true,
+      "seconds": 0.07436367900299956
+    },
+    {
+      "name": "test_workshop_disenchant_market.lua",
+      "passed": true,
+      "seconds": 0.1579639670017059
+    },
+    {
+      "name": "test_workshop_dist.lua",
+      "passed": true,
+      "seconds": 1.4478817939998407
+    },
+    {
+      "name": "test_workshop_estimate.lua",
+      "passed": true,
+      "seconds": 0.03685718899942003
+    },
+    {
+      "name": "test_workshop_history2.lua",
+      "passed": true,
+      "seconds": 42.471498366998276
+    },
+    {
+      "name": "test_workshop_market.lua",
+      "passed": true,
+      "seconds": 1.1170796370024618
+    },
+    {
+      "name": "test_workshop_market_consumption.lua",
+      "passed": true,
+      "seconds": 0.27143544499995187
+    },
+    {
+      "name": "test_workshop_market_consumption_async.lua",
+      "passed": true,
+      "seconds": 0.12124819200107595
+    },
+    {
+      "name": "test_workshop_market_current.lua",
+      "passed": true,
+      "seconds": 0.3096078380003746
+    },
+    {
+      "name": "test_workshop_market_pending.lua",
+      "passed": true,
+      "seconds": 2.262844220997067
+    },
+    {
+      "name": "test_workshop_market_performance.lua",
+      "passed": true,
+      "seconds": 1.5940601059992332
+    },
+    {
+      "name": "test_workshop_market_reference.lua",
+      "passed": true,
+      "seconds": 16.71373295200101
+    },
+    {
+      "name": "test_workshop_market_scale.lua",
+      "passed": true,
+      "seconds": 27.696106874998804
+    },
+    {
+      "name": "test_workshop_memory.lua",
+      "passed": true,
+      "seconds": 0.7648460019991035
+    },
+    {
+      "name": "test_workshop_opportunity_engine.lua",
+      "passed": true,
+      "seconds": 0.28390028000285383
+    },
+    {
+      "name": "test_workshop_opportunity_ui.lua",
+      "passed": true,
+      "seconds": 1.70367767100106
+    },
+    {
+      "name": "test_workshop_prices.lua",
+      "passed": true,
+      "seconds": 0.7153861840015452
+    },
+    {
+      "name": "test_workshop_pricing_v1.lua",
+      "passed": true,
+      "seconds": 0.004493412001465913
+    },
+    {
+      "name": "test_workshop_schema.lua",
+      "passed": true,
+      "seconds": 1.4740231300020241
+    },
+    {
+      "name": "test_workshop_scoped_bridge_l1.py",
+      "passed": true,
+      "seconds": 1.3086789310000313
+    },
+    {
+      "name": "test_workshop_shopping.lua",
+      "passed": true,
+      "seconds": 0.6645555079994665
+    },
+    {
+      "name": "test_workshop_storage.lua",
+      "passed": true,
+      "seconds": 1.5512645970011363
+    },
+    {
+      "name": "test_workshop_strategy.lua",
+      "passed": true,
+      "seconds": 0.5486477410013322
+    },
+    {
+      "name": "test_workshop_strategy_ui.lua",
+      "passed": true,
+      "seconds": 0.10034229599841638
+    },
+    {
+      "name": "test_workshop_summary.lua",
+      "passed": true,
+      "seconds": 0.22275041600005352
+    },
+    {
+      "name": "test_workshop_valuation.lua",
+      "passed": true,
+      "seconds": 14.103843046999827
+    },
+    {
+      "name": "test_workshop_vendor_places.lua",
+      "passed": true,
+      "seconds": 0.03314952299842844
+    },
+    {
+      "name": "test_workshop_worth.lua",
+      "passed": true,
+      "seconds": 0.3700189980008872
+    }
+  ],
+  "simulators": [
+    {
+      "script": "workshop",
+      "passed": false,
+      "seconds": 230.6165081850013,
+      "exit_code": 1
+    },
+    {
+      "script": "auctionpreview",
+      "passed": true,
+      "seconds": 135.7419546730016,
+      "exit_code": 0
+    }
+  ],
+  "test_count": 76,
+  "tests_passed": 76,
+  "classification": "Offline and Auction preview pass; strict integration FAIL on unchanged baseline Workshop tooltip assertions. Cloud profile is not native/local/release certification."
+}

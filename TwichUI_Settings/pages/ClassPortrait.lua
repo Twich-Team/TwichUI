@@ -10,7 +10,7 @@ local STATUS = {
 K.Page({
     key = "classPortrait", name = "Class Portrait Decorations", icon = "classPortrait", order = 98, group = "addons",
     description = "Add a class-themed decorative frame around your EllesmereUI player portrait.",
-    keywords = "class portrait decorations ellesmereui player artwork automatic fit size offset preview strata layer above front z level",
+    keywords = "class portrait decorations ellesmereui player artwork automatic fit size offset preview strata layer above front z level slim compact original artwork",
     overview = { label = "Class Portrait Decorations", tip = "Class artwork around your player portrait.",
         status = function() return K.OnOff(C.Get("enabled")) end },
     when = function() return C ~= nil and D ~= nil end,
@@ -30,6 +30,8 @@ K.Page({
             "Decorate only EllesmereUI's player portrait. Nothing appears if the portrait is unavailable. Changes made in combat wait until combat ends.")
         K.Status("Player class", function() return D.Class() or "Available after login" end)
         K.Status("EllesmereUI", function() return STATUS[D.Status()] or STATUS.missing end)
+        K.Dropdown(Setting("artwork", "Artwork style"), function() return C.CHOICES.artwork end,
+            "Choose Original or the alternate Slim set for your class. Mage, Warlock and Druid reuse the earlier designs in the Slim set. Each set fits its own measured portrait opening. Changes in combat wait until combat ends.")
         K.Checkbox(Setting("automatic", "Automatic Fit"),
             "Follow the portrait's size automatically. Turn off to use a fixed starting size; the artwork still follows the portrait when moved or scaled.")
         for _, row in ipairs({ { "size", "Size Adjustment", "Percent of the automatic fit. 100% uses the measured portrait opening." },
@@ -42,7 +44,7 @@ K.Page({
         K.Dropdown(Setting("strata", "Frame strata"), function() return C.CHOICES.strata end,
             "Choose the decoration's overall screen layer. Follow unit frame keeps EllesmereUI's layer. A higher strata can place the artwork above other windows; strata takes priority over the above/behind preference. Changes in combat wait until combat ends.")
         K.Button("Reset to Automatic", "Reset", function() C.Reset(); K.RefreshOverview() end,
-            "Restore Automatic Fit, 100% size and zero offsets. Keeps your enabled and layering preferences.")
+            "Restore Automatic Fit, 100% size and zero offsets. Keeps your enabled, artwork and layering preferences.")
         K.Button("Show Decoration Preview", "Preview", function()
             if D.PreviewActive() then D.PreviewStop() else D.PreviewStart() end
             K.RefreshOverview()

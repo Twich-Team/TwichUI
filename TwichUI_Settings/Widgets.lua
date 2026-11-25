@@ -279,21 +279,11 @@ function Wg.CloseMenu()
     if menu and menu:IsShown() then menu:Hide() end
 end
 
--- WoW region geometry is in layout coordinates. A UIParent popup additionally
--- needs every ancestor scroll transform; those are applied while rendering the child.
+-- Native region extents already include ancestor scrolling, in the owner's
+-- effective-scale units. Adding GetVerticalScroll again detaches root popups.
 function Wg.VisibleRect(owner)
     local l, r, b, t = owner:GetLeft(), owner:GetRight(), owner:GetBottom(), owner:GetTop()
     if not (type(l) == "number" and type(r) == "number" and type(b) == "number" and type(t) == "number") then return end
-    local parent, scale = owner:GetParent(), owner:GetEffectiveScale()
-    while parent do
-        if parent.IsObjectType and parent:IsObjectType("ScrollFrame") then
-            local ratio = parent:GetEffectiveScale() / scale
-            local dy = (parent:GetVerticalScroll() or 0) * ratio
-            local dx = (parent:GetHorizontalScroll() or 0) * ratio
-            l, r, b, t = l - dx, r - dx, b + dy, t + dy
-        end
-        parent = parent:GetParent()
-    end
     return l, r, b, t
 end
 
@@ -324,9 +314,8 @@ local function OpenMenu(owner)
     menu:SetSize(width, shown * MENU_ROW_H + 8)
     menu:SetScale(owner:GetEffectiveScale() / UIParent:GetEffectiveScale())
     menu:ClearAllPoints()
-    -- A UIParent popup must anchor to the *visible* owner rectangle, including
-    -- its scroll offset. Relative anchors to a scroll child can use its unclipped
-    -- layout coordinates on this client. Convert pixels once, after setting scale.
+    -- Use the native owner rectangle directly. Convert effective scales once;
+    -- applying ancestor scroll offsets here would count scrolling twice.
     local left, right, bottom, top = Wg.VisibleRect(owner)
     if type(left) == "number" and type(right) == "number" and type(bottom) == "number" and type(top) == "number" then
         local ratio = owner:GetEffectiveScale() / menu:GetEffectiveScale()

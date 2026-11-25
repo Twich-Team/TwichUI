@@ -434,4 +434,67 @@ assert(dm.TwichUI.Profiles.Current() == "Rich only")
 dm.TwichUI.Profiles.Switch("Odd")
 assert(dm.TwichUIDB.modules.arrival == true and dm.TwichUI.Arrival and dm.TwichUIDB.ui.arrivalHold == "short", "a removed value takes its default when used")
 
+-- Flight authorization belongs to this account, never to a profile snapshot.
+do
+  local cl = Boot("FlightConsent")
+  local pf, consentDB = cl.TwichUI.Profiles, cl.TwichUIDB
+  local original = pf.Current()
+  consentDB.ui.flightAck = true
+  assert(pf.Duplicate("Flight copy"))
+  assert(consentDB.ui.flightAck == true and consentDB.profiles[original].ui.flightAck == nil,
+    "profile duplication keeps local flight consent without storing it in a profile")
+  -- An old profile may already contain this field. Reading it cannot grant consent.
+  consentDB.ui.flightAck = nil
+  consentDB.profiles[original].ui.flightAck = true
+  assert(pf.Switch(original))
+  assert(consentDB.ui.flightAck == nil, "switching to an old acknowledged profile cannot authorize this account")
+  consentDB.profiles["Flight copy"].ui.flightAck = true
+  assert(pf.CopyFrom("Flight copy"))
+  assert(consentDB.ui.flightAck == nil, "profile copy cannot import automatic-flight authorization")
+  consentDB.ui.flightAck = true
+  assert(pf.Reset())
+  assert(consentDB.ui.flightAck == true, "resetting profile settings preserves existing account consent")
+  local reloaded = Boot("FlightConsent", Logout(cl))
+  assert(reloaded.TwichUIDB.ui.flightAck == true, "local account consent survives reload")
+end
+
+-- Rule artwork travels with profile settings and own backups, independently of
+-- catalog availability. Exercise the real profile/reload path, not just raw copy.
+do
+  local function LoadLoot(cl)
+    for _, file in ipairs({ "loot/Rules.lua", "loot/Config.lua" }) do
+      local chunk = assert(loadfile(ROOT .. file)); setfenv(chunk, cl); chunk()
+    end
+  end
+  local art = Boot("Artwork", nil, LoadLoot)
+  local adb, ar = art.TwichUIDB, art.TwichUI
+  adb.ui.lootRolls = { seq = 1, rules = {
+    { id = "lr1", name = "Artwork loot", action = "greed", enabled = false,
+      conditions = {}, artwork = { kind = "art", id = "future-rule-picture" } },
+  } }
+  adb.ui.magicInventory = { rules = {
+    { id = "mi1", name = "Artwork inventory", kind = "keep", enabled = false,
+      artwork = { kind = "item", id = 6948 } },
+  } }
+  local original = ar.Profiles.Current()
+  assert(ar.Profiles.Duplicate("Artwork copy"))
+  local stored = adb.profiles[original].ui
+  assert(not shares(stored.lootRolls, adb.ui.lootRolls)
+    and not shares(stored.magicInventory, adb.ui.magicInventory), "rule refs independent across profiles")
+  adb.ui.lootRolls.rules[1].artwork.id = "art-crown"
+  adb.ui.magicInventory.rules[1].artwork.id = 25
+  assert(stored.lootRolls.rules[1].artwork.id == "future-rule-picture"
+    and stored.magicInventory.rules[1].artwork.id == 6948)
+  local backup = ar.Restore.CaptureOwn()
+  assert(ar.Restore.OwnProblem(backup) == nil and not shares(backup.keys.ui, adb.ui))
+  adb.ui.lootRolls.rules[1].artwork.id = "art-dice"
+  assert(backup.keys.ui.lootRolls.rules[1].artwork.id == "art-crown", "backup identity is an independent snapshot")
+  assert(ar.Profiles.Switch(original))
+  local reloaded = Boot("Artwork", Logout(art), LoadLoot)
+  assert(reloaded.TwichUI.LootRolls.Rule("lr1").artwork.id == "future-rule-picture",
+    "unknown valid art survives profile switch, saved settings reload and feature view")
+  assert(reloaded.TwichUI.MagicInventory.Rule("mi1").artwork.id == 6948,
+    "item artwork survives profile switch, saved settings reload and feature cleaner")
+end
+
 print("PROFILES TESTS PASSED")

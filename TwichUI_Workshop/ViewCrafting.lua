@@ -100,6 +100,7 @@ local function MakeRecipeRow(parent)
         O.Fill(rec)
         self.icon:SetTexture(rec.icon or UI.ICON_BLANK)
         self.name:SetText(rec.name)
+        UI.ItemQuality(self.name, UI.OutputQuality(rec))
         local d = W.DIFFICULTY[rec.diff]
         if d then
             self.diff:SetText(d.word)
@@ -164,6 +165,11 @@ local function QueueTip(row)
         GameTooltip:AddLine("Its materials aren't known: open " .. (e.profName or "its profession") .. " to update.", 1, 0.82, 0.3, true)
     end
     GameTooltip:AddLine("Click to choose it.", 0.55, 0.55, 0.55)
+    GameTooltip:AddLine("Right-click: Open recipe or Remove from queue.", 0.8, 0.8, 0.8, true)
+    local a = W.AuctionUI
+    if a and a.Context and a.Context() == "auctioneer" then
+        GameTooltip:AddLine("Shift-click: search its output in TwichUI Auction House.", 0.8, 0.8, 0.8, true)
+    end
     GameTooltip:Show()
 end
 
@@ -179,6 +185,34 @@ local function MakeQueueRow(parent)
     row.iconFrame = UI.ItemIcon(row.iconBtn, 42)
     row.iconFrame:SetAllPoints()
     row.icon = row.iconFrame.tex
+    local function SearchOutput()
+        local a = W.AuctionUI
+        if not (IsShiftKeyDown and IsShiftKeyDown() and a and a.Context and a.Context() == "auctioneer") then return false end
+        S.SearchQueuedOutput(row.id)
+        UI.Redraw()
+        return true
+    end
+    local function OpenQueueMenu()
+        local id = row.id
+        if not (id and W.Queue.Find(id)) then return end
+        if not (MenuUtil and MenuUtil.CreateContextMenu) then
+            R.Print("Queue menu unavailable. Use Open recipe and Remove in the craft details.")
+            return
+        end
+        row.countEdit:ClearFocus()
+        MenuUtil.CreateContextMenu(row, function(_, root)
+            local function Current()
+                return W.Active() and row:IsVisible() and row.id == id and W.Queue.Find(id)
+            end
+            root:CreateButton("Open recipe", function()
+                if Current() then S.OpenRecipe(id); UI.Redraw() end
+            end)
+            local remove = root:CreateButton("Remove from queue", function()
+                if Current() then S.Remove(id); UI.Redraw() end
+            end)
+            remove:SetEnabled(not W.Queue.Held())
+        end)
+    end
     row.iconBtn:SetScript("OnEnter", function(self)
         local item = row.entry and row.entry.outItem
         if not GameTooltip then return end
@@ -189,7 +223,10 @@ local function MakeQueueRow(parent)
         end
     end)
     row.iconBtn:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
-    row.iconBtn:SetScript("OnClick", function()
+    row.iconBtn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    row.iconBtn:SetScript("OnClick", function(_, button)
+        if button == "RightButton" then OpenQueueMenu(); return end
+        if SearchOutput() then return end
         local item = row.entry and row.entry.outItem
         if item and IsModifiedClick and IsModifiedClick("CHATLINK") and ChatEdit_InsertLink then
             local ok, _, link = pcall(C_Item.GetItemInfo, item)
@@ -208,6 +245,41 @@ local function MakeQueueRow(parent)
     row.count:SetWidth(30)
     row.count:SetJustifyH("CENTER")
     row.count:SetPoint("RIGHT", row.more, "LEFT", -1, 0)
+    row.countButton = CreateFrame("Button", nil, row)
+    row.countButton:SetAllPoints(row.count)
+    UI.Tip(row.countButton, "Set crafts", "Click to enter an exact quantity. Press Enter to save or Escape to cancel.")
+    row.countEdit = UI.L.EditBox(row, 38, 24)
+    UI.CL.Dress(row.countEdit, "field")
+    row.countEdit:SetPoint("CENTER", row.count, "CENTER")
+    row.countEdit:Hide()
+    local function StopEdit()
+        row.editId = nil
+        row.countEdit:Hide()
+        row.countEdit:ClearFocus()
+        row.count:Show()
+        row.countButton:Show()
+    end
+    row.countButton:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    row.countButton:SetScript("OnClick", function(_, button)
+        if button == "RightButton" then OpenQueueMenu(); return end
+        if not row.entry then return end
+        row.editId = row.id
+        row.countEdit:SetText(tostring(row.entry.crafts))
+        row.count:Hide(); row.countButton:Hide()
+        row.countEdit:Show(); row.countEdit:SetFocus(); row.countEdit:HighlightText()
+    end)
+    row.countEdit:SetScript("OnEnterPressed", function(self)
+        local text, id = self:GetText(), row.editId
+        local n = text:match("^%d+$") and tonumber(text)
+        StopEdit()
+        if id and id == row.id and n and n >= 1 and n <= W.MAX_CRAFTS then
+            S.SetCrafts(id, n)
+            UI.Redraw()
+        end
+    end)
+    row.countEdit:SetScript("OnEscapePressed", StopEdit)
+    row.countEdit:SetScript("OnEditFocusLost", StopEdit)
+    row:HookScript("OnHide", StopEdit)
     row.less = UI.Glyph(row, "-", function()
         if row.id then S.Change(row.id, IsShiftKeyDown and IsShiftKeyDown() and -5 or -1); UI.Redraw() end
     end, 24)
@@ -224,16 +296,21 @@ local function MakeQueueRow(parent)
     row.stale:SetPoint("TOPLEFT", row.line, "BOTTOMLEFT", 0, -2)
     row.stale:SetPoint("RIGHT", row, "RIGHT", -8, 0)
     row.stale:SetText("Open profession to update.")
-    row:SetScript("OnClick", function(self)
+    row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    row:SetScript("OnClick", function(self, button)
+        if button == "RightButton" then OpenQueueMenu(); return end
+        if SearchOutput() then return end
         if self.id then selected = self.id; UI.Redraw() end
     end)
     row.TipEnter = QueueTip
     row.TipLeave = function() if GameTooltip then GameTooltip:Hide() end end
     row.fill = function(self, r)
         local e = r.entry
+        if self.editId and self.editId ~= e.id then StopEdit() end
         self.id, self.entry, self.qrow = e.id, e, r
         self.icon:SetTexture(e.icon or UI.ICON_BLANK)
         self.name:SetText(e.name)
+        UI.ItemQuality(self.name, UI.OutputQuality(e))
         self.line:SetText(QueueLine(r))
         self.count:SetText(Num(e.crafts))
         self.stale:SetShown(r.unresolved)
@@ -244,6 +321,7 @@ local function MakeQueueRow(parent)
     row:Follow(row.iconBtn)   -- last: after the pieces' own tooltips are set
     row:Follow(row.more)
     row:Follow(row.less)
+    row:Follow(row.countButton)
     return row
 end
 
@@ -301,9 +379,10 @@ local function MakeMaterialRow(parent)
     row.TipLeave = function() if GameTooltip then GameTooltip:Hide() end end
     row.fill = function(self, m)
         self.item, self.made, self.madeRange, self.row = m.item, m.made, m.madeRange, m
-        local name, icon = O.ItemFacts(m.item)
+        local name, icon, quality = O.ItemFacts(m.item)
         self.icon:SetTexture(icon or UI.ICON_BLANK)
         self.name:SetText(name or ("Item " .. m.item))
+        UI.ItemQuality(self.name, quality)
         self.name:ClearAllPoints()
         if m.note then
             self.name:SetPoint("TOPLEFT", self.iconFrame, "TOPRIGHT", 9, 1)
@@ -397,6 +476,7 @@ local function RenderDetail(queue, byId, totals)
     d.head:Show()
     d.item=e.outItem
     d.name:SetText(e.name)
+    UI.ItemQuality(d.name, UI.OutputQuality(e))
     d.icon:SetTexture(e.icon or UI.ICON_BLANK)
     d.prof:SetText(e.profName or "")
     d.crafts:SetText(e.crafts == 1 and "1 craft" or (e.crafts .. " crafts"))

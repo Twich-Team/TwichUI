@@ -27,7 +27,7 @@ local hooked = false
 local function Modes()
     local m = {}
     if R.QoL and R.QoL.LeaveAloneOn and R.QoL.LeaveAloneOn() then m[#m + 1] = "leave" end
-    if R.QuietScreen and R.QuietScreen.On() then m[#m + 1] = "quiet" end
+    if R.QuietScreen and (R.QuietScreen.Player or R.QuietScreen.On)() then m[#m + 1] = "quiet" end
     local GL = R.GuildLoc
     if GL then
         local state, why = GL.State()
@@ -61,7 +61,7 @@ local function OnTooltipShow(tip)
     tip:AddLine("Left-click for the menu.", 0.8, 0.7, 0.3)
     tip:AddLine("Right-click to open settings.", 0.8, 0.7, 0.3)
     if R.QuietScreen then
-        tip:AddLine("Quiet screen: " .. (R.QuietScreen.On() and "On" or "Off") .. ".", 0.62, 0.58, 0.51)
+        tip:AddLine("Quiet screen: " .. ((R.QuietScreen.Player or R.QuietScreen.On)() and "On" or "Off") .. ".", 0.62, 0.58, 0.51)
     end
     if R.QoL and R.QoL.LeaveAloneOn then
         tip:AddLine("Leave me alone: " .. (R.QoL.LeaveAloneOn() and "On" or "Off") .. ".", 0.62, 0.58, 0.51)

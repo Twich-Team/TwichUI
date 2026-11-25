@@ -9,7 +9,8 @@
 --     where hundreds would cover it), placed through the game's own world-position conversion as pins are
 --     (pins/Map.lua's Position, which also places them on map exploration's seamless map). At most MAX_DRAWN at once.
 --   Drawing: a map data provider (MapCanvasDataProviderMixin), told when the map, its zoom or its size changes, the list
---     changes or a choice changes. Nothing runs per frame.
+--     changes or a choice changes. Seamless view changes refresh eligibility without waiting for the native host;
+--     newly eligible plaques fade only their opacity for 0.18 seconds. No updater remains once they are visible.
 --   Clicks: a click opens the NPC's actions (Show items for sale, for a merchant; Set waypoint, Pin this place, Navigate
 --     here, Forget this NPC); nothing is
 --     done without one of them being chosen. Alt, Shift and Ctrl clicks are handed to the map's own click handlers, so
@@ -35,6 +36,7 @@ local MAX_PARENTS = 8
 local EDGE = 0.2               -- on the seamless map, markers this far past the map underneath still show
 local NAV_WAIT = 2             -- how long a find waits for the map it asked for
 local PULSE_LIFE, PULSE_FADE = 2.6, 0.5   -- seconds the ring is out, the last of them fading
+local ENTRY_FADE = 0.18
 
 local provider, canvas
 local installed = false
@@ -43,10 +45,54 @@ local reveal, revealMarker                 -- the entry picked out (shown even i
 local token = 0                            -- bumped by every find and clear: an older wait does nothing
 local pending                              -- { token, map, entry }: a find waiting for its map
 local pulse                                -- { frame, rings, t, running }: the ring
-local stats = { layouts = 0, drawn = 0, capped = 0, menus = 0, waypoints = 0, forgotten = 0, finds = 0, pulses = 0, stale = 0 }
+local presence, fading = {}, {}             -- only currently eligible entries / currently fading frames
+local fadeFrame, fadeTick, fadeRunning
+local contextMap, hostMap
+local candidates, candidateHost, candidateStitched, candidateReveal, candidateRevealListed, candidateFaction
+local tracedEligible, tracedFading, tracedHost, tracedContext
+local stats = { layouts = 0, drawn = 0, capped = 0, menus = 0, waypoints = 0, forgotten = 0, finds = 0, pulses = 0, stale = 0,
+    eligible = 0, entries = 0, departures = 0, placementFailures = 0, viewUpdates = 0, projections = 0 }
 
 local function Enabled() return R:Enabled("npcMap") end
 local function MapOpen() return WorldMapFrame and WorldMapFrame:IsShown() end
+local function FadingCount() local n = 0 for _ in pairs(fading) do n = n + 1 end return n end
+local function TraceVisibility()
+    if not R.MapTrace then return end
+    local n = FadingCount()
+    if tracedEligible ~= stats.eligible or tracedFading ~= n or tracedHost ~= hostMap or tracedContext ~= contextMap then
+        tracedEligible, tracedFading, tracedHost, tracedContext = stats.eligible, n, hostMap, contextMap
+        R.MapTrace("npc-markers", stats.eligible, n, used, hostMap or false, contextMap or false)
+    end
+end
+local function StopFade()
+    if fadeRunning then fadeFrame:SetScript("OnUpdate", nil); fadeFrame:Hide(); fadeRunning = false end
+end
+local function FadeTick(_, elapsed)
+    if not (installed and MapOpen()) then
+        for b in pairs(fading) do fading[b] = nil end
+        StopFade()
+        return
+    end
+    for b, state in pairs(fading) do
+        state.age = math.min(ENTRY_FADE, state.age + math.max(0, elapsed or 0))
+        local t = state.age / ENTRY_FADE
+        b:SetAlpha(b.targetAlpha * t * t * (3 - 2 * t))
+        if state.age >= ENTRY_FADE then fading[b] = nil end
+    end
+    if not next(fading) then StopFade(); TraceVisibility() end
+end
+local function StartFade()
+    if not next(fading) then StopFade() return end
+    if not fadeFrame then
+        fadeFrame = CreateFrame("Frame")
+        fadeTick = Perf.Wrap("npcs.map.fade", FadeTick)
+    end
+    if not fadeRunning then
+        fadeFrame:SetScript("OnUpdate", fadeTick)
+        fadeFrame:Show()
+        fadeRunning = true
+    end
+end
 local function Notice(text)
     if UIErrorsFrame and UIErrorsFrame.AddMessage then UIErrorsFrame:AddMessage(text, 1, 0.82, 0) end
 end
@@ -174,32 +220,64 @@ local function Dress(b, e, kind)
     NMAP.Backdrop(b, kind.icon)
     local reported = not e.own
     local alpha = reported and NP.Get("reportAlpha") / 100 or 1
-    if b.reported ~= reported or b.alpha ~= alpha then
-        b.reported, b.alpha = reported, alpha
+    if b.reported ~= reported or b.targetAlpha ~= alpha then
+        b.reported, b.targetAlpha = reported, alpha
         b.icon:SetDesaturated(alpha < 1)   -- at full opacity a report looks like any other NPC
-        b:SetAlpha(alpha)
     end
     if b.name ~= e.n then
         b.name = e.n
         b.label:SetText(e.n)   -- plain text: the store cleaned it
     end
-    b.label:SetShown(NP.Get("labels"))
+    local labels = NP.Get("labels")
+    if b.labels ~= labels then b.labels = labels; b.label:SetShown(labels) end
     local size = SIZE * NP.Get("iconSize") / 100
-    b:SetSize(size, size)
+    if b.size ~= size then b.size = size; b:SetSize(size, size) end
     b.entry = e
 end
 
--- Puts a frame's middle at a place on the viewed map (0..1). On screen it is the same size at the map's widest view and
--- grows with the zoom to ZOOM_GROWTH times that at the closest (the map's own zoom percent, 0 to 1, as Blizzard's pins use).
+local function Finite(value)
+    if issecretvalue and issecretvalue(value) then return false end
+    local VM = R.MapViewMath
+    if VM and VM.Finite then return VM.Finite(value) end
+    return type(value) == "number" and value == value and value ~= math.huge and value ~= -math.huge
+end
+local function OptionalNumber(value, default)
+    if issecretvalue and issecretvalue(value) then return nil end
+    if value == nil then return default end
+    return Finite(value) and value or nil
+end
+
+-- The stitched camera keeps a constant screen-space size across native host handoffs. Outside it, retain the native
+-- map's original zoom growth. Invalid geometry never reaches a frame setter or reveals a stale pooled anchor.
 local function Place(b)
     local scale = WorldMapFrame:GetCanvasScale()
-    if not scale or scale <= 0 then return false end
-    local global = WorldMapFrame.GetGlobalPinScale and WorldMapFrame:GetGlobalPinScale() or 1
-    local zoom = WorldMapFrame.GetCanvasZoomPercent and WorldMapFrame:GetCanvasZoomPercent() or 0
-    local s = global / scale * (1 + (ZOOM_GROWTH - 1) * math.min(1, math.max(0, zoom)))
-    b:SetScale(s)
-    b:ClearAllPoints()
-    b:SetPoint("CENTER", canvas, "TOPLEFT", canvas:GetWidth() * b.mx / s, -canvas:GetHeight() * b.my / s)
+    if not Finite(scale) or scale <= 0 then return false end
+    local global
+    if WorldMapFrame.GetGlobalPinScale then global = WorldMapFrame:GetGlobalPinScale() end
+    global = OptionalNumber(global, 1)
+    if not Finite(global) or global <= 0 then return false end
+    local MV, MW = R.MapView, R.MapWorld
+    local stitched = MV and MV.Ready and MV.Ready() and MW and MW.Stitchable and MW.Stitchable(WorldMapFrame:GetMapID())
+    local growth = 1
+    if not stitched then
+        local zoom
+        if WorldMapFrame.GetCanvasZoomPercent then zoom = WorldMapFrame:GetCanvasZoomPercent() end
+        zoom = OptionalNumber(zoom, 0)
+        if not Finite(zoom) then return false end
+        growth = 1 + (ZOOM_GROWTH - 1) * math.min(1, math.max(0, zoom))
+    end
+    local s = global / scale * growth
+    local w, h = canvas:GetWidth(), canvas:GetHeight()
+    if not Finite(w) or not Finite(h) or w <= 0 or h <= 0 or not Finite(s) or s <= 0
+        or not Finite(b.mx) or not Finite(b.my) then return false end
+    local px, py = w * b.mx / s, -h * b.my / s
+    if not Finite(px) or not Finite(py) then return false end
+    if b.placedScale ~= s or b.placedX ~= b.mx or b.placedY ~= b.my or b.placedW ~= w or b.placedH ~= h then
+        b.placedScale, b.placedX, b.placedY, b.placedW, b.placedH = s, b.mx, b.my, w, h
+        b:SetScale(s)
+        b:ClearAllPoints()
+        b:SetPoint("CENTER", canvas, "TOPLEFT", px, py)
+    end
     return true
 end
 
@@ -207,8 +285,10 @@ local function HideFrom(n)
     for i = n, #pool do
         local b = pool[i]
         if b:IsShown() then b:Hide() end
+        fading[b] = nil
         b.entry = nil
     end
+    if not next(fading) then StopFade() end
 end
 
 local function FrameLevel()
@@ -282,7 +362,69 @@ local function Listed(e)
     return false
 end
 
--- Everything on the map now. Runs when the map, the list or the choices change; never per frame.
+-- The native host intentionally follows only after the camera settles. Eligibility belongs to the camera now;
+-- coordinates still belong to that real host's canvas, so its eventual switch cannot reveal stale pooled anchors.
+local function ViewContext(viewed)
+    local MV, MW = R.MapView, R.MapWorld
+    local stitched = MV and MV.Ready and MV.Ready() and MW and MW.Stitchable and MW.Stitchable(viewed)
+    hostMap = viewed
+    if stitched and MV.View and MV.PickMap and MV.ViewRect and MW.FromWorld then
+        local u, v, zoom = MV.View()
+        contextMap = MV.PickMap(u, v, zoom, contextMap or viewed)
+        local u0, v0, u1, v1 = MV.ViewRect()
+        local x0, y0 = MW.FromWorld(viewed, u0, v0)
+        local x1, y1 = MW.FromWorld(viewed, u1, v1)
+        if x0 and x1 and x1 > x0 and y1 > y0 then
+            local padx, pady = (x1 - x0) * 0.05, (y1 - y0) * 0.05
+            return NS.ValidMap(contextMap), true, x0 - padx, y0 - pady, x1 + padx, y1 + pady
+        end
+        return false, true, 0, 0, 0, 0
+    end
+    contextMap = viewed
+    local low, high = stitched and -EDGE or 0, stitched and 1 + EDGE or 1
+    return viewed and NS.ValidMap(viewed), stitched, low, low, high, high
+end
+
+local function InvalidateCandidates()
+    candidateHost = nil
+end
+
+-- Map geometry and chosen kinds do not change as the camera moves. Resolve them only when their owning data changes;
+-- the bounded camera pass then culls cached host coordinates. No cached coordinate survives a host or mode change.
+local function Candidates(viewed, stitched)
+    local mine = NS.MyFaction()
+    if candidates and candidateHost == viewed and candidateStitched == stitched and candidateReveal == reveal
+        and candidateFaction == mine then
+        return candidates, candidateRevealListed
+    end
+    local list, n = candidates or {}, 0
+    local relevant, listed = Relevant(viewed), false
+    local at = {}
+    for _, e in ipairs(NS.Entries()) do
+        local picked = reveal ~= nil and rawequal(e, reveal)
+        if picked then listed = true end
+        if relevant(e.m) then
+            local kind = ShownKind(e, mine) or (picked and NK.Primary(e.tags) or nil)
+            if kind then
+                at.map, at.x, at.y = e.m, e.x, e.y
+                local mx, my = R.PinsMap.Position(at, viewed)
+                if Finite(mx) and Finite(my) then
+                    n = n + 1
+                    local row = list[n] or {}
+                    row.entry, row.kind, row.mx, row.my = e, kind, mx, my
+                    list[n] = row
+                end
+            end
+        end
+    end
+    for i = #list, n + 1, -1 do list[i] = nil end
+    candidates, candidateHost, candidateStitched, candidateReveal, candidateRevealListed = list, viewed, stitched, reveal, listed
+    candidateFaction = mine
+    stats.projections = stats.projections + 1
+    return list, listed
+end
+
+-- Everything on the map now. Runs only for provider/list/preference or coalesced seamless-view changes.
 function NMAP.Layout()
     if not (installed and MapOpen()) then return end
     local pt = Perf.on and Perf.Start("npcs.map.layout")
@@ -292,49 +434,67 @@ function NMAP.Layout()
     local scanned, revealListed = false, false
     local viewed = WorldMapFrame:GetMapID()
     local PM = R.PinsMap
-    if viewed and NS.ValidMap(viewed) and PM and PM.Position then
-        local relevant, stitched = Relevant(viewed)
+    local eligible, stitched, x0, y0, x1, y1 = ViewContext(viewed)
+    for b in pairs(fading) do fading[b] = nil end
+    if viewed and eligible and PM and PM.Position then
         local level = FrameLevel()
-        local low, high = stitched and -EDGE or 0, stitched and 1 + EDGE or 1
-        local at = {}   -- one place handed to Position (it reads map, x, y)
-        local mine = NS.MyFaction()
         local capped = false
         scanned = true
-        for _, e in ipairs(NS.Entries()) do
+        local rows
+        rows, revealListed = Candidates(viewed, stitched)
+        local revealProcessed = reveal == nil
+        for _, row in ipairs(rows) do
+            local e = row.entry
             local picked = reveal ~= nil and rawequal(e, reveal)
-            if picked then revealListed = true end
-            if (picked or not capped) and relevant(e.m) then
-                -- the picked-out NPC is drawn whatever the chosen kinds say; every other one follows them
-                local kind = ShownKind(e, mine) or (picked and NK.Primary(e.tags) or nil)
-                if kind then
-                    at.map, at.x, at.y = e.m, e.x, e.y
-                    local mx, my = PM.Position(at, viewed)
-                    if mx and mx >= low and mx <= high and my >= low and my <= high then
-                        if used >= MAX_DRAWN and not picked then
-                            stats.capped = stats.capped + 1
-                            capped = true
-                        else
-                            used = used + 1
-                            local b = pool[used]
-                            if not b then
-                                b = NewMarker()
-                                pool[used] = b
+            if picked then revealProcessed = true end
+            if picked or not capped then
+                local kind, mx, my = row.kind, row.mx, row.my
+                if mx and mx >= x0 and mx <= x1 and my >= y0 and my <= y1 then
+                    if used >= MAX_DRAWN and not picked then
+                        stats.capped = stats.capped + 1
+                        capped = true
+                    else
+                        used = used + 1
+                        local b = pool[used]
+                        if not b then
+                            b = NewMarker()
+                            pool[used] = b
+                        end
+                        b.mx, b.my = mx, my
+                        if b.level ~= level then b.level = level; b:SetFrameLevel(level) end
+                        Dress(b, e, kind)
+                        if Place(b) then
+                            local state = presence[e]
+                            if not state then
+                                state = { age = stitched and 0 or ENTRY_FADE }
+                                presence[e] = state
+                                stats.entries = stats.entries + 1
                             end
-                            b.mx, b.my = mx, my
-                            b:SetFrameLevel(level)
-                            Dress(b, e, kind)
-                            Place(b)
+                            state.seen = stats.layouts
+                            local t = state.age / ENTRY_FADE
+                            b:SetAlpha(b.targetAlpha * t * t * (3 - 2 * t))
+                            if state.age < ENTRY_FADE then fading[b] = state end
                             b:Show()
                             if picked then revealMarker = b end
+                        else
+                            stats.placementFailures = stats.placementFailures + 1
+                            b:Hide(); b.entry = nil
+                            used = used - 1
                         end
                     end
                 end
             end
-            if capped and (reveal == nil or revealListed) then break end
+            if capped and revealProcessed then break end
         end
     end
     HideFrom(used + 1)
     stats.drawn = used
+    for e, state in pairs(presence) do
+        if state.seen ~= stats.layouts then presence[e] = nil; stats.departures = stats.departures + 1 end
+    end
+    stats.eligible = used
+    StartFade()
+    TraceVisibility()
     if reveal and not (scanned and revealListed or (not scanned and Listed(reveal))) then
         NMAP.ClearReveal(true)   -- it left the list
     end
@@ -344,7 +504,14 @@ end
 
 local function Rescale()
     if not (installed and MapOpen()) then return end
-    for i = 1, used do Place(pool[i]) end
+    for i = 1, used do
+        local b = pool[i]
+        if not Place(b) then
+            b:Hide()
+            fading[b] = nil
+            stats.placementFailures = stats.placementFailures + 1
+        end
+    end
     PlacePulse()
 end
 
@@ -384,7 +551,7 @@ function NMAP.Locate(e)
     end
     pending = { token = mine, map = e.m, entry = e }
     -- once: the map announces itself (OnMapChanged) and the ring follows; nothing here tries again
-    local ok = pcall(WorldMapFrame.SetMapID, WorldMapFrame, e.m)
+    local ok = pcall(C_Map.OpenWorldMap, e.m)
     if not ok then
         if token == mine then reveal, pending = nil, nil end
         Notice("That map couldn't be opened.")
@@ -587,11 +754,16 @@ local function Build()
     if provider or not WorldMapFrame or not MapCanvasDataProviderMixin then return provider ~= nil end
     canvas = WorldMapFrame:GetCanvas()
     provider = CreateFromMixins(MapCanvasDataProviderMixin)
-    function provider:RemoveAllData() HideFrom(1); used = 0 end
-    function provider:RefreshAllData() NMAP.Layout() end
-    function provider:OnMapChanged() MapChanged(); NMAP.Layout() end
+    function provider:RemoveAllData()
+        HideFrom(1); used = 0; stats.drawn, stats.eligible = 0, 0
+        for e in pairs(presence) do presence[e] = nil end
+        candidates, candidateHost = nil, nil
+        TraceVisibility()
+    end
+    function provider:RefreshAllData() InvalidateCandidates(); NMAP.Layout() end
+    function provider:OnMapChanged() InvalidateCandidates(); MapChanged(); NMAP.Layout() end
     function provider:OnCanvasSizeChanged() NMAP.Layout() end
-    function provider:OnHide() NMAP.ClearReveal(true) end   -- nothing is picked out on a closed map
+    function provider:OnHide() NMAP.ClearReveal(true); self:RemoveAllData() end
     function provider:OnCanvasScaleChanged() Rescale() end
     return true
 end
@@ -610,8 +782,20 @@ function NMAP.Refresh()
     end
 end
 
-NS.OnChange(function() if installed and MapOpen() then NMAP.Layout() end end)
-NP.Subscribe(function() if installed and MapOpen() then NMAP.Layout() end end)
+NS.OnChange(function() InvalidateCandidates(); if installed and MapOpen() then NMAP.Layout() end end)
+NP.Subscribe(function() InvalidateCandidates(); if installed and MapOpen() then NMAP.Layout() end end)
+if R.MapView and R.MapView.Subscribe then
+    R.MapView.Subscribe(function(event)
+        if event == "view" or event == "attach" then
+            if event == "attach" then InvalidateCandidates() end
+            if installed and MapOpen() then stats.viewUpdates = stats.viewUpdates + 1; NMAP.Layout() end
+        elseif event == "hide" then
+            if provider then provider:RemoveAllData() end
+        elseif event == "off" then
+            if installed and MapOpen() then NMAP.Layout() end
+        end
+    end)
+end
 if R.PinsLook and R.PinsLook.OnPrefChange then
     R.PinsLook.OnPrefChange(function()
         for _, b in ipairs(pool) do if R.PinsLook.MapText then R.PinsLook.MapText.Apply(b.label, 140) end end
@@ -627,7 +811,10 @@ function NMAP.Snapshot()
     return { installed = installed, open = MapOpen() and true or false, drawn = stats.drawn, capped = stats.capped,
         layouts = stats.layouts, pool = #pool, menus = stats.menus, waypoints = stats.waypoints, forgotten = stats.forgotten,
         finds = stats.finds, pulses = stats.pulses, stale = stats.stale, picked = reveal ~= nil, waiting = pending ~= nil,
-        ringing = pulse ~= nil and pulse.running == true }
+        ringing = pulse ~= nil and pulse.running == true, fading = FadingCount(), eligible = stats.eligible,
+        entries = stats.entries, departures = stats.departures, placementFailures = stats.placementFailures,
+        viewUpdates = stats.viewUpdates, contextMap = contextMap or false, hostMap = hostMap or false,
+        fadeDurationSeconds = ENTRY_FADE, candidates = candidates and #candidates or 0, projections = stats.projections }
 end
 function NMAP.Marker(i) return pool[i] end
 function NMAP.Used() return used end

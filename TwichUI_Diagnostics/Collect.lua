@@ -29,6 +29,7 @@ local Hist, Ring = DX.Hist, DX.Ring
 local Perf = R.Perf
 local C = {}
 DX.Collect = C
+local CURRENT_CONTAINERS = 8 -- installed Market capability; no Workshop load required
 
 C.FRAME_RING = 120          -- recent frames kept for a spike's neighbours
 C.SPIKE_CONTEXT = 5         -- frames kept before and after a long frame
@@ -133,13 +134,17 @@ local function ReadMemory()
         return okk and DX.Num(v) or nil
     end
     local partitionMemory,partitionCount=0,0
-    -- Fixed 128-name domain, sampled only at the existing expensive-memory interval.
+    -- Fixed name domain, sampled only at the existing expensive-memory interval.
     for _,bank in ipairs({'A','B'}) do for bucket=0,63 do
-        local v=Get('TwichUI_MarketPart'..bank..('%02d'):format(bucket))
-        if v then partitionMemory=partitionMemory+v;partitionCount=partitionCount+1 end
+        for _,prefix in ipairs({'TwichUI_MarketPart','TwichUI_MarketHistoryPart','TwichUI_MarketCurrentPart','TwichUI_MarketCurrentContainer','TwichUI_MarketHistoryContainer'})do
+            if (prefix~='TwichUI_MarketCurrentPart'or bucket<32)and(prefix~='TwichUI_MarketCurrentContainer'or bucket<CURRENT_CONTAINERS)and(prefix~='TwichUI_MarketHistoryContainer'or bucket<4)then
+                local v=Get(prefix..bank..('%02d'):format(bucket))
+                if v then partitionMemory=partitionMemory+v;partitionCount=partitionCount+1 end
+            end
+        end
     end end
     Ring.Push(S.memory, { summaryparts = partitionCount>0 and partitionMemory or nil, t = Now(), core = Get(DX.CORE), settings = Get(DX.SETTINGS), diag = Get(DX.ADDON),
-        navdata = Get(DX.NAVDATA), layouts = Get(DX.LAYOUTS), layoutwizard = Get(DX.LAYOUTWIZARD), workshop = Get(DX.WORKSHOP), marketdata = Get(DX.MARKETDATA), heap = collectgarbage and DX.Num(collectgarbage("count")) or nil, cost = cost })
+        navdata = Get(DX.NAVDATA), layouts = Get(DX.LAYOUTS), layoutwizard = Get(DX.LAYOUTWIZARD), workshop = Get(DX.WORKSHOP), fishing = Get(DX.FISHING), marketdata = Get(DX.MARKETDATA), heap = collectgarbage and DX.Num(collectgarbage("count")) or nil, cost = cost })
 end
 
 local function ProfilerCounts()
@@ -299,8 +304,8 @@ end
 ---------------------------------------------------------------------------
 -- Context events and errors (our frame's own, only while recording)
 ---------------------------------------------------------------------------
-local OURS = { [R.ADDON] = true, TwichUI_Settings = true, TwichUI_NavData = true, TwichUI_Diagnostics = true, TwichUI_Layouts = true, TwichUI_LayoutWizard = true, TwichUI_Workshop = true, TwichUI_MarketData = true }
-for _,bank in ipairs({'A','B'}) do for bucket=0,63 do OURS['TwichUI_MarketPart'..bank..('%02d'):format(bucket)]=true end end
+local OURS = { [R.ADDON] = true, TwichUI_Settings = true, TwichUI_NavData = true, TwichUI_Diagnostics = true, TwichUI_Layouts = true, TwichUI_LayoutWizard = true, TwichUI_Workshop = true, TwichUI_Fishing = true, TwichUI_MarketData = true }
+for _,bank in ipairs({'A','B'}) do for bucket=0,63 do for _,prefix in ipairs({'TwichUI_MarketPart','TwichUI_MarketHistoryPart','TwichUI_MarketCurrentPart','TwichUI_MarketCurrentContainer','TwichUI_MarketHistoryContainer'})do if (prefix~='TwichUI_MarketCurrentPart'or bucket<32)and(prefix~='TwichUI_MarketCurrentContainer'or bucket<CURRENT_CONTAINERS)and(prefix~='TwichUI_MarketHistoryContainer'or bucket<4)then OURS[prefix..bank..('%02d'):format(bucket)]=true end end end end
 C.OURS = OURS
 
 -- Only text from TwichUI's own files is kept (folder-relative, names replaced, capped); anything else is a note.

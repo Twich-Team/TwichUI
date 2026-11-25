@@ -906,6 +906,9 @@ end
 
 -- Why the bar is hidden by its visibility choices right now, or nil.
 function C.HiddenBy() return lastHidden end
+-- The bar's own frame (nil until it is first built, or while the feature is off): read-only, for TwichUI Fishing's fade, which
+-- changes its alpha only while Fishing Mode is on and puts the owner's own value back.
+function C.Frame() return container end
 function C.Entries() return entries end
 
 R:OnInit(C.Refresh)

@@ -37,7 +37,7 @@ button or reference screenshot. Ordinary UI text is always native text, never em
 | Main settings shell | `Material.CalibrateSettings(window, true)`; `FrameLook.Shell` retains geometry and input |
 | Companion shell | `Material.WorkspaceFrame(frame)`; feature owns its lifecycle |
 | Standalone window | `R.CraftLook.Window(window, window.shell, { header, title })` on the window's existing FrameLook shell: dark and quiet leather interior, sculpted frame, painted buttons (later FrameLook buttons inside paint themselves; toggles keep their own state). Core only: never loads this addon |
-| Player-set surface | `FrameLook.CRAFTED_BORDER` offered as one more border id beside `FrameLook.BORDER`; `FrameLook.Frame` draws the sculpted frame only, never an interior over the player's background. Defaults unchanged |
+| Player-set surface | `FrameLook.CRAFTED_BORDER` offered as one more border id beside `FrameLook.BORDER`; `FrameLook.Frame` draws the sculpted frame only, never an interior over the player's background. The restock dialog uses it as its default |
 | Card / inset | `Material.PanelFace(frame, "card" / "editor" / "canvas" / "espresso")` |
 | Shared panel / well | `SettingsWidgets.Panel(frame)` / `.Well(frame)`; returns textures callers may hide |
 | Buttons | `SettingsWidgets.Button(parent, label, width, kind, callback)` |
@@ -134,7 +134,7 @@ Painted components: `assets/craft-{frame,button,selection}-source.png`, prepared
 
 Home reuses the six settings icon sheets, the healer vessel, sleeping bag and reminder artwork. One new source,
 `assets/settings-satchel-source.png`, supplies `media/icons/magicInventory{,-small}.tga` through
-`tools/make_settings_home_art.py`. It was generated once with the built-in image tool: a walnut/chestnut adventurer's
+`tools/make_settings_home_art.py`. It was replaced with the supplied Magic Inventory artwork: a worn leather satchel holding a sealed letter and a gold bar, bronze clasp with a violet gem, two gold transfer arrows; the interface buttons use the same icon. Earlier brief: a walnut/chestnut adventurer's
 satchel, aged bronze clasp, upper-left light, broad silhouette, genuine transparent background, no text or magic glow.
 No reference image was cut into runtime UI. Sources and documentation stay out of packages via `.pkgmeta`.
 

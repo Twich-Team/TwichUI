@@ -33,8 +33,11 @@ Methods = {
   CreateTexture = function(s) local t = Fake("texture"); t.parent = s; return t end,
   CreateFontString = function(s) local t = Fake("font"); t.parent = s; return t end,
   SetTexture = function(s, v) s.texture = v end,
+  SetTexCoord = function(s, ...) s.uv = { ... } end, SetBlendMode = function(s, mode) s.blend = mode end,
+  SetClipsChildren = function(s, value) s.clips = value end,
   SetText = function(s, v) s.text = v end, GetText = function(s) return s.text end,
   GetStringWidth = function(s) return 40 end,
+  SetWordWrap = function(s, v) s.wordWrap = v end, SetMaxLines = function(s, v) s.maxLines = v end,
   SetTextColor = function(s, r, g, b) s.color = { r, g, b } end,
   SetAlpha = function(s, a) s.alpha = a end, GetAlpha = function(s) return s.alpha end,
   EnableMouse = function(s, v) s.mouse = v and true or false end, IsMouseEnabled = function(s) return s.mouse end,
@@ -43,7 +46,8 @@ Methods = {
   ClearAllPoints = function(s) s.points = {} end, SetPoint = function(s, ...) s.points[#s.points + 1] = { ... } end,
   SetScale = function(s, v) s.scale = v end, GetScale = function(s) return s.scale or 1 end,
   SetFont = function(s) return true end, SetDesaturated = function(s, v) s.desat = v end,
-  GetParent = function(s) return s.parent end, GetFrameLevel = function() return 1 end,
+  GetParent = function(s) return s.parent end, GetFrameLevel = function(s) return s.frameLevel or 1 end,
+  SetFrameLevel = function(s, value) s.frameLevel = value end,
 }
 local FRAMES = {}
 c.CreateFrame = function(kind, name, parent) local f = Fake(kind); f.name, f.parent = name, parent; if name then c[name] = f end FRAMES[#FRAMES + 1] = f return f end
@@ -94,7 +98,6 @@ c.LOOT_ROLL_INELIGIBLE_REASON1 = "This item is not for your class."
 c.INVTYPE_HEAD = "Head"
 c.INVTYPE_2HWEAPON = "Two-Hand"
 c.GetItemClassInfo = function(id) return ({ [2] = "Weapon", [4] = "Armor", [9] = "Recipe", [7] = "Trade Goods" })[id] end
-c.GetItemSubClassInfo = function(class, sub) if class == 9 then return ({ [6] = "Alchemy", [8] = "Enchanting" })[sub] end end
 local ITEMS = {
   ["item:100"] = { id = 100, name = "Green Helm", quality = 2, class = 4, sub = 1, loc = "INVTYPE_HEAD", bind = 2, price = 1234, icon = 1001, type = "Armor", subType = "Plate" },
   ["item:101"] = { id = 101, name = "Epic Greatsword", quality = 4, class = 2, sub = 8, loc = "INVTYPE_2HWEAPON", bind = 1, price = 20612, icon = 1002, type = "Weapon", subType = "Two-Handed Swords" },
@@ -118,6 +121,7 @@ c.GetLootRollItemLink = function(id) local r = rolls[id]; if r then return r.lin
 c.GetLootRollTimeLeft = function(id) local r = rolls[id]; if r then return math.max(0, (r.ends - NOW) * 1000) end end
 c.GetActiveLootRollIDs = function() local out = {} for id in pairs(active) do out[#out + 1] = id end table.sort(out) return out end
 c.C_Item = {
+  GetItemSubClassInfo = function(class, sub) if class == 9 then return ({ [6] = "Alchemy", [8] = "Enchanting" })[sub] end end,
   GetItemInfoInstant = function(link) local it = ITEMS[link]; if it then return it.id, it.type, it.subType, it.loc, it.icon, it.class, it.sub end end,
   GetItemInfo = function(link)
     local it = ITEMS[link]
@@ -132,10 +136,10 @@ c.C_TooltipInfo = { GetLootRollItem = function(id)
   local lines = { { leftText = it.name } }
   if it.redLine then lines[#lines + 1] = { leftText = it.redLine, leftColor = { r = 1, g = 0.1, b = 0.1 } } end
   if it.known then lines[#lines + 1] = { leftText = "Already known", leftColor = { r = 1, g = 0.1, b = 0.1 } } end
-  return { lines = lines }
+  return { lines = lines, dataInstanceID = id }
 end }
 c.C_SkillInfo = { GetNumSkillLines = function() return 2 end, GetSkillLineInfo = function(i)
-  return ({ { isHeader = true, skillName = "Professions" }, { isHeader = false, skillName = "Alchemy", rank = 150 } })[i]
+  return ({ { isHeader = true, name = "Professions" }, { isHeader = false, name = "Alchemy", rank = 150 } })[i]
 end }
 local WORLD = { instance = "none", raid = false }
 c.IsInInstance = function() return WORLD.instance ~= "none", WORLD.instance end
@@ -169,8 +173,8 @@ end
 -- things TwichUI's other features provide, as they would answer
 c.TwichUIDB = { modules = {} }
 local JUDGED = {}
-for _, f in ipairs({ "loot/Rules.lua", "loot/Config.lua", "loot/Roll.lua", "loot/Auto.lua",
-  "loot/Blizzard.lua", "loot/Cards.lua", "loot/Main.lua" }) do
+for _, f in ipairs({ "ForeverItemFamilies.lua", "loot/Rules.lua", "loot/Config.lua", "loot/Roll.lua", "loot/Auto.lua",
+  "loot/Blizzard.lua", "loot/Cards.lua", "loot/Victory.lua", "loot/Main.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")
@@ -237,6 +241,25 @@ do
   Check(Ru.EvalCondition({ type = "equip", value = "INVTYPE_HEAD" }, green) == true, "a head slot matches")
   Check(Ru.EvalCondition({ type = "equip", value = "INVTYPE_CHEST" }, { equipLoc = "INVTYPE_ROBE" }) == true, "a robe is a chest piece")
   Check(Ru.EvalCondition({ type = "item", id = 100 }, green) == true and Ru.EvalCondition({ type = "item", id = 101 }, green) == false, "a specific item matches by id")
+  local crate = Ru.NewCondition("family")
+  local writ = { type = "family", value = "craftsmans-writs" }
+  for _, id in ipairs({ 248549, 248682, 248713, 248779 }) do
+    Check(Ru.EvalCondition(crate, { itemID = id }) == true and Ru.EvalCondition(writ, { itemID = id }) == false,
+      "crate forms belong only to the crate rule")
+  end
+  for _, id in ipairs({ 248206, 262887, 262890, 264011, 264160 }) do
+    Check(Ru.EvalCondition(writ, { itemID = id }) == true and Ru.EvalCondition(crate, { itemID = id }) == false,
+      "writ forms belong only to the writ rule")
+  end
+  Check(Ru.EvalCondition(crate, { itemID = 248700, name = "Waylaid Crate" }) == false,
+    "a name or adjacent item ID cannot match the crate family")
+  Check(Ru.EvalCondition(writ, green) == false and Ru.EvalCondition(writ, {}) == nil,
+    "unrelated items miss and missing identity remains unknown")
+  Check(Ru.EvalCondition({ type = "family", value = writ.value, negate = true }, { itemID = 0 }) == nil,
+    "negation cannot make an invalid identity match")
+  Check(Ru.CheckCondition({ type = "family", value = "unknown" }) ~= nil, "unknown families are incomplete")
+  Check(Ru.Summary(Rule({ conditions = { crate } })):find("when the item is a Waylaid crate", 1, true),
+    "the family condition reads naturally in a rule summary")
   Check(Ru.EvalCondition({ type = "bind", value = "equip" }, green) == true, "binds when equipped")
   Check(Ru.EvalCondition({ type = "context", value = "outsideRaid" }, green) == true, "outside a raid")
   Check(Ru.EvalCondition({ type = "context", value = "inRaid" }, { context = { instanceType = "raid" } }) == true, "in a raid")
@@ -292,6 +315,40 @@ do
   Check(Ru.Summary(Rule({ conditions = { q, { type = "class", value = "equipment" } }, delay = 3 })):find("Greed") ~= nil, "a summary names the action")
   Check(Ru.Summary(Rule({ conditions = { q }, delay = 3 })):find("after 3 seconds") ~= nil, "a summary names the delay")
   Check(Ru.Summary(Rule({ conditions = {} })):find("once you add") ~= nil, "an empty rule says it needs a condition")
+end
+
+-- Independent rule channels: No change never blocks the other outcome.
+do
+  local q = { type = "quality", op = "is", value = 4 }
+  local function Rule(id, action, display, conditions)
+    return { id = id, enabled = true, action = action, display = display, conditions = conditions or { q } }
+  end
+  for _, pair in ipairs({ { "need", "collapsed" }, { "greed", "expanded" }, { "pass", "collapsed" },
+    { "none", "collapsed" }, { "none", "expanded" }, { "need", "none" } }) do
+    local rule = Rule("lr1", pair[1], pair[2])
+    Check(not Ru.Incomplete(rule), "valid independent action combination: " .. pair[1] .. "/" .. pair[2])
+    Check(Ru.Decide({ rule }, { quality = 4 }).status == (pair[1] == "none" and "none" or "match"), "roll channel skips No change")
+    Check(Ru.DecideDisplay({ rule }, { quality = 4 }).status == (pair[2] == "none" and "none" or "match"), "display channel skips No change")
+  end
+  local need, mini, full = Rule("lr1", "need"), Rule("lr2", "none", "collapsed"), Rule("lr3", "none", "expanded")
+  local rules = { need, mini, full }
+  Check(Ru.Decide(rules, { quality = 4 }).rule == need and Ru.DecideDisplay(rules, { quality = 4 }).rule == mini,
+    "a high-priority Need and lower display-only match both win their own channels")
+  rules = { mini, need, full }
+  Check(Ru.Decide(rules, { quality = 4 }).rule == need and Ru.DecideDisplay(rules, { quality = 4 }).rule == mini,
+    "a high-priority display-only match cannot suppress lower Need")
+  Check(Ru.DecideDisplay({ full, mini }, { quality = 4 }).rule == full, "explicit Expanded overrides general Collapse by order")
+  Check(Ru.DecideDisplay({ Rule("lr4", "none", "collapsed", { { type = "upgrade", value = true } }), full }, { quality = 4 }).status == "unknown",
+    "unknown display conditions block only display precedence rather than guessing")
+  Check(Ru.Decide({ Rule("lr4", "none", "collapsed", { { type = "upgrade", value = true } }), need }, { quality = 4 }).rule == need,
+    "unknown display-only conditions never block a legitimate roll decision")
+  Check(Ru.Decide({ Rule("lr4", "greed", nil, { { type = "upgrade", value = true } }), need }, { quality = 4 }).status == "unknown",
+    "existing roll unknown/conflict behavior stays conservative")
+  Check(Ru.Incomplete(Rule("lr4", "none", "none")) ~= nil and Ru.Incomplete(Rule("lr4", "need", "bogus")) ~= nil,
+    "no-op and invalid presentation actions are flagged")
+  Check(Ru.Summary(mini):find("Collapse", 1, true) and not Ru.Summary(mini):find("Automatically", 1, true),
+    "display-only summaries never describe an automatic roll")
+  Check(Ru.ActionSummary(Rule("lr4", "greed", "collapsed")) == "Greed · Collapsed", "combined action summary is unambiguous")
 end
 
 ---------------------------------------------------------------------------
@@ -589,6 +646,23 @@ do
   Check(#rolled == 1, "and never again")
   EndRoll(id)
 
+  -- A family condition uses the same countdown and eligibility guards as other rules.
+  Fresh(); LR.Set("auto", true)
+  ITEMS["item:248682"] = { id = 248682, name = "Waylaid Crate: Apprentice Herbs", quality = 1, class = 0,
+    sub = 8, loc = "", bind = 0, price = 0, icon = 1005, type = "Consumable" }
+  local _, crateRule = LR.Create("blank")
+  LR.RemoveCondition(crateRule, 1); LR.AddCondition(crateRule, "family")
+  LR.SetAction(crateRule, "greed"); LR.SetEnabled(crateRule, true)
+  id = StartRoll("item:248682", { canGreed = false }); roll = Ro.Find(id)
+  Advance(4)
+  Check(roll.state == "pending" and #rolled == 0, "a matching crate cannot override roll eligibility")
+  EndRoll(id)
+  id = StartRoll("item:248682"); roll = Ro.Find(id)
+  Check(roll.state == "scheduled" and roll.auto.action == "greed", "a family rule schedules a matching crate")
+  Advance(4)
+  Check(#rolled == 1 and rolled[1].kind == 2, "the eligible crate uses the normal countdown")
+  EndRoll(id)
+
   -- the player stops it
   Fresh(); LR.Set("auto", true); greedId = Rule("greenGear")
   id = StartRoll("item:100"); roll = Ro.Find(id)
@@ -625,6 +699,45 @@ do
   Check(roll.state == "pending" and not roll.auto, "an item no rule matches stays manual")
   EndRoll(id)
 
+  -- The loot roll's quality wins when the item lookup disagrees with the card.
+  Fresh(); LR.Set("auto", true)
+  local weaponRule = Rule("greenGear")
+  LR.SetCondition(weaponRule, 1, { op = "atMost", value = 2 })
+  LR.SetCondition(weaponRule, 2, { value = 2 })
+  LR.SetDelay(weaponRule, 10); LR.SetDisplay(weaponRule, "collapsed")
+  local itemInfo, rollInfo = c.C_Item.GetItemInfo, c.GetLootRollItemInfo
+  local itemQuality, rollQuality = 2, 4
+  c.C_Item.GetItemInfo = function(link)
+    local info = { itemInfo(link) }
+    if link == "item:101" then info[3] = itemQuality end
+    return unpack(info, 1, 14)
+  end
+  c.GetLootRollItemInfo = function(rid)
+    local info = { rollInfo(rid) }
+    if rolls[rid] and rolls[rid].link == "item:101" then info[4] = rollQuality end
+    return unpack(info, 1, 13)
+  end
+  id = StartRoll("item:101"); roll = Ro.Find(id)
+  Check(roll.quality == 4 and roll.obs.quality == 4, "an epic roll stays epic for both the card and conditions despite an uncommon item lookup")
+  Ro.Observe(roll); A.Refresh()
+  Advance(11)
+  Check(roll.state == "pending" and not roll.auto and #rolled == 0, "Weapon and at most Uncommon never submits Greed for the epic roll, even after a refresh")
+  EndRoll(id)
+
+  itemQuality, rollQuality = 4, 2
+  local sentBefore = #rolled
+  id = StartRoll("item:101"); roll = Ro.Find(id)
+  Check(roll.obs.quality == 2 and roll.state == "scheduled", "an uncommon roll still matches when the item lookup says epic")
+  Advance(11)
+  Check(#rolled == sentBefore + 1 and rolled[#rolled].kind == 2, "the uncommon weapon submits Greed through the normal countdown")
+  EndRoll(id)
+
+  itemQuality, rollQuality = 2, nil
+  id = StartRoll("item:101"); roll = Ro.Find(id)
+  Check(roll.obs.quality == 2 and roll.state == "scheduled", "the item lookup remains a fallback when the roll has no quality")
+  EndRoll(id)
+  c.C_Item.GetItemInfo, c.GetLootRollItemInfo = itemInfo, rollInfo
+
   -- unknown: manual, with the reason
   Fresh(); LR.Set("auto", true)
   local rid = Rule("professionRecipes")
@@ -650,6 +763,90 @@ do
   Check(roll.obs.recipe.profession == false and roll.state == "pending", "another profession's recipe is not mine")
   EndRoll(id)
 
+  -- The reported All-of rule on Forever's namespaced item API and skill-line fields.
+  Fresh(); LR.Set("auto", true); LR.Set("autoNeed", true)
+  local recipeNeed = Rule("professionRecipes")
+  LR.SetAction(recipeNeed, "need")
+  local _, quality = LR.AddCondition(recipeNeed, "quality")
+  LR.SetCondition(recipeNeed, quality, { op = "atMost", value = 3 })
+  local _, known = LR.AddCondition(recipeNeed, "recipe")
+  LR.SetCondition(recipeNeed, known, { mode = "known", negate = true })
+  Rule("recipes")
+  id = StartRoll("item:102"); roll = Ro.Find(id)
+  Check(roll.auto and roll.auto.action == "need", "an unlearned recipe for my profession matches the Need rule")
+  Advance(4)
+  Check(#rolled == 1 and rolled[1].kind == 1, "the recipe rule submits Need through the usual countdown")
+  EndRoll(id)
+  id = StartRoll("item:103"); roll = Ro.Find(id)
+  Check(roll.auto and roll.auto.action == "pass", "a known recipe still reaches the lower Pass rule")
+  EndRoll(id)
+  id = StartRoll("item:105"); roll = Ro.Find(id)
+  Check(roll.state == "pending" and not roll.auto, "an unlearned recipe for another profession stays manual")
+  EndRoll(id)
+  id = StartRoll("item:102", { noTooltip = true }); roll = Ro.Find(id)
+  Check(roll.state == "pending" and not roll.auto, "a missing tooltip cannot satisfy not already known")
+  EndRoll(id)
+
+  -- Delayed recipe facts must recover after the basic item has become ready.
+  Fresh(); LR.Set("auto", true); LR.Set("autoNeed", true)
+  local delayedNeed = Rule("professionRecipes")
+  LR.SetAction(delayedNeed, "need"); LR.SetDisplay(delayedNeed, "collapsed")
+  local _, notKnown = LR.AddCondition(delayedNeed, "recipe")
+  LR.SetCondition(delayedNeed, notKnown, { mode = "known", negate = true })
+  local delayedGreed = Rule("blank")
+  LR.RemoveCondition(delayedGreed, 1); LR.AddCondition(delayedGreed, "recipe")
+  LR.SetCondition(delayedGreed, 1, { mode = "any" })
+  LR.SetAction(delayedGreed, "greed"); LR.SetDisplay(delayedGreed, "collapsed")
+  for _, sample in ipairs({ { "item:102", "need", 1, "GET_ITEM_INFO_RECEIVED" },
+      { "item:103", "greed", 2, "TOOLTIP_DATA_UPDATE" }, { "item:105", "greed", 2, "SKILL_LINES_CHANGED" } }) do
+    local before = #rolled
+    id = StartRoll(sample[1], { noTooltip = true }); roll = Ro.Find(id)
+    if sample[1] ~= "item:105" then
+      Check(roll.obs.ready and roll.obs.recipe.known == nil and roll.state == "pending" and roll.displayMode == "expanded",
+        "missing learned status blocks Need and the lower Greed rule even when the basic item is ready")
+      for i = 1, 8 do Fire("GET_ITEM_INFO_RECEIVED", roll.obs.itemID) end
+      Check(roll.state == "pending" and #rolled == before, "repeated missing data never guesses whether a recipe is learned")
+    end
+    rolls[id].noTooltip = false
+    Fire(sample[4], sample[4] == "TOOLTIP_DATA_UPDATE" and id or roll.obs.itemID)
+    Check(roll.auto and roll.auto.action == sample[2] and roll.displayMode == "collapsed", "late recipe data selects the expected roll and collapsed display")
+    Advance(4)
+    Check(#rolled == before + 1 and rolled[#rolled].kind == sample[3], "the recovered recipe sends exactly one expected choice")
+    Fire("TOOLTIP_DATA_UPDATE", id); Fire("SKILL_LINES_CHANGED")
+    Advance(4)
+    Check(#rolled == before + 1, "later tooltip and skill events do not resubmit a chosen roll")
+    EndRoll(id)
+  end
+
+  id = StartRoll("item:102"); roll = Ro.Find(id)
+  Check(roll.state == "scheduled" and roll.auto.action == "need", "an unlearned recipe initially schedules Need")
+  ITEMS["item:102"].known = true
+  Fire("TOOLTIP_DATA_UPDATE", id + 10000)
+  Check(roll.auto and roll.auto.action == "need", "an unrelated tooltip update does not refresh this roll")
+  Fire("TOOLTIP_DATA_UPDATE", id)
+  Check(roll.auto and roll.auto.action == "greed", "a learned-status update rechecks an existing Need countdown")
+  EndRoll(id)
+  ITEMS["item:102"].known = nil
+
+  local tooltipInfo = c.C_TooltipInfo.GetLootRollItem
+  c.C_TooltipInfo.GetLootRollItem = function(rid) return { lines = {}, dataInstanceID = rid } end
+  id = StartRoll("item:102"); roll = Ro.Find(id)
+  Check(roll.obs.recipe.known == nil and roll.state == "pending", "an empty tooltip cannot prove a recipe is unlearned")
+  c.C_TooltipInfo.GetLootRollItem = tooltipInfo
+  Fire("TOOLTIP_DATA_UPDATE", id)
+  Check(roll.auto and roll.auto.action == "need", "an initially empty tooltip recovers on its data update")
+  EndRoll(id)
+
+  local skillCount = c.C_SkillInfo.GetNumSkillLines
+  c.C_SkillInfo.GetNumSkillLines = function() return nil end
+  Ro.ForgetProfessions()
+  id = StartRoll("item:102"); roll = Ro.Find(id)
+  Check(roll.obs.recipe.profession == nil and roll.state == "pending", "missing profession data leaves the recipe manual")
+  c.C_SkillInfo.GetNumSkillLines = skillCount
+  Fire("SKILL_LINES_CHANGED")
+  Check(roll.auto and roll.auto.action == "need", "a skill update resolves the open recipe's profession and starts Need")
+  EndRoll(id)
+
   -- Need is a separate opt-in
   Fresh(); LR.Set("auto", true)
   local needRule = Rule("blank"); LR.SetAction(needRule, "need")
@@ -668,7 +865,7 @@ do
 
   -- an upgrade rule needs its own permission
   Fresh(); LR.Set("auto", true)
-  local up = Rule("blank")
+  local up = Rule("blank"); LR.SetAction(up, "greed")
   LR.RemoveCondition(up, 1); LR.AddCondition(up, "upgrade")
   JUDGED["item:100"] = { up = true }
   id = StartRoll("item:100"); roll = Ro.Find(id)
@@ -696,7 +893,7 @@ do
   local noTip = StartRoll("item:107", { noTooltip = true })
   Check(Ro.Find(noTip).obs.equippable == nil, "without a tooltip it is unknown, not yes")
   EndRoll(noTip)
-  local cloth = Rule("blank")
+  local cloth = Rule("blank"); LR.SetAction(cloth, "greed")
   LR.RemoveCondition(cloth, 1); LR.AddCondition(cloth, "armor"); LR.SetCondition(cloth, 1, { value = 1 })
   id = StartRoll("item:106"); roll = Ro.Find(id)
   Check(roll.state == "scheduled", "a cloth rule takes a cloth robe")
@@ -794,6 +991,473 @@ do
   Fresh()
   Advance(30)
   Check(PendingTimers() <= 2, "no timers pile up (" .. PendingTimers() .. " pending)")
+end
+
+---------------------------------------------------------------------------
+-- 4b. Safety matrix: the ways a rule could roll on something the player wanted, end to end (rules -> model -> countdown -> RollOnLoot)
+---------------------------------------------------------------------------
+do
+  local function Fresh()
+    for _, r in ipairs({ unpack(Ro.Rolls()) }) do Ro.Remove(r) end
+    rolled = {}
+    c.TwichUIDB.ui.lootRolls.rules = {}
+    LR.Set("auto", false); LR.Set("autoNeed", false); LR.Set("autoUpgrade", false); LR.Set("paused", false)
+    LR.Invalidate("rules")
+  end
+  -- a rule built through the same calls the editor makes: conds = { { kind, fields }, ... }
+  local function Make(name, action, conds, over)
+    over = over or {}
+    local ok, rid = LR.Create("blank")
+    LR.RemoveCondition(rid, 1)
+    for _, cd in ipairs(conds) do
+      local _, index = LR.AddCondition(rid, cd[1])
+      if cd[2] then assert(LR.SetCondition(rid, index, cd[2]), "condition " .. cd[1]) end
+    end
+    LR.SetName(rid, name); LR.SetAction(rid, action)
+    if over.display then LR.SetDisplay(rid, over.display) end
+    if over.match then LR.SetMatch(rid, over.match) end
+    if over.delay then LR.SetDelay(rid, over.delay) end
+    if over.enabled ~= false then LR.SetEnabled(rid, true) end
+    return rid
+  end
+  local UNCOMMON = { "quality", { op = "is", value = 2 } }
+  local EPIC = { "quality", { op = "is", value = 4 } }
+  local function Start(link, opts) local id = StartRoll(link, opts); return id, Ro.Find(id) end
+  local function Quiet(roll, seconds) Advance(seconds or 12); return #rolled end
+
+  -- 1. A higher rule that is blocked never hands the item to a lower rule.
+  Fresh(); LR.Set("auto", true)
+  local needId = Make("Need green", "need", { UNCOMMON })
+  Make("Greed green", "greed", { UNCOMMON })
+  local id, roll = Start("item:100")
+  Check(roll.state == "pending" and roll.autoNote and roll.autoNote:find("Need green", 1, true), "Need blocked by the player's own setting names the rule that wanted it")
+  Check(Quiet() == 0, "the lower Greed rule never takes over for a blocked Need rule")
+  LR.Set("autoNeed", true)
+  Check(roll.state == "scheduled" and roll.auto.action == "need" and roll.auto.ruleId == needId, "allowing Need starts the top rule's countdown, not the lower one's")
+  Advance(4)
+  Check(#rolled == 1 and rolled[1].kind == 1, "exactly one Need goes out")
+  EndRoll(id)
+  -- ...and withdrawing the permission after the countdown began stops it before it sends
+  Fresh(); LR.Set("auto", true); LR.Set("autoNeed", true)
+  Make("Need green", "need", { UNCOMMON })
+  id, roll = Start("item:100")
+  Check(roll.state == "scheduled", "a Need countdown is running")
+  c.TwichUIDB.ui.lootRolls.autoNeed = false   -- written behind the model's back: the check at the end of the countdown is its own guard
+  Advance(4)
+  Check(#rolled == 0 and roll.state ~= "submitted", "Need permission withdrawn silently before the countdown ends: nothing is sent")
+  EndRoll(id)
+
+  -- 2. A rule that cannot be judged keeps everything below it quiet.
+  Fresh(); LR.Set("auto", true)
+  Make("Pass known recipes", "pass", { { "recipe", { mode = "known" } } })
+  Make("Greed everything uncommon", "greed", { UNCOMMON })
+  id, roll = Start("item:102", { noTooltip = true })
+  Check(roll.state == "pending" and roll.autoNote and roll.autoNote:find("could not be checked", 1, true), "an unreadable tooltip: the known-recipe rule cannot be judged")
+  Check(Quiet() == 0, "so the Greed rule below it does not take a recipe that may be one the player already knows")
+  EndRoll(id)
+  -- with the tooltip the same two rules sort it out
+  id, roll = Start("item:103")
+  Check(roll.state == "scheduled" and roll.auto.action == "pass", "a known recipe is passed")
+  EndRoll(id)
+  id, roll = Start("item:102")
+  Check(roll.state == "scheduled" and roll.auto.action == "greed", "an unknown recipe falls to the Greed rule")
+  EndRoll(id)
+
+  -- 3. Priority is the order of the list, and moving a rule changes the outcome at once.
+  Fresh(); LR.Set("auto", true)
+  local greedTop = Make("Greed green", "greed", { UNCOMMON })
+  local passBottom = Make("Pass green", "pass", { UNCOMMON })
+  id, roll = Start("item:100")
+  Check(roll.auto and roll.auto.action == "greed", "the upper rule decides")
+  LR.Move(passBottom, -1)
+  Check(roll.state == "scheduled" and roll.auto.action == "pass" and roll.auto.ruleId == passBottom, "moving another rule up replaces the countdown with its action")
+  LR.Move(passBottom, 1)
+  Check(roll.auto and roll.auto.action == "greed" and roll.auto.ruleId == greedTop, "and moving it back restores the first")
+  Advance(4)
+  Check(#rolled == 1 and rolled[1].kind == 2, "only the final decision is ever sent")
+  EndRoll(id)
+
+  -- 4. Editing a rule while it counts down: the roll follows the rule, never the rule as it was.
+  Fresh(); LR.Set("auto", true)
+  local rid = Make("Greed green", "greed", { UNCOMMON })
+  id, roll = Start("item:100")
+  Check(roll.state == "scheduled", "counting down")
+  LR.SetCondition(rid, 1, { value = 3 })   -- now only Rare
+  Check(roll.state == "pending" and not roll.auto, "an edit that stops the rule matching ends the countdown")
+  Check(Quiet() == 0, "and nothing is sent")
+  LR.SetCondition(rid, 1, { value = 2 })
+  Check(roll.state == "scheduled", "editing it back starts a fresh countdown")
+  local firstStart = roll.auto.startedAt
+  Advance(1.5)
+  LR.SetDelay(rid, 6)
+  Check(roll.state == "scheduled" and roll.auto.startedAt == firstStart and math.abs(roll.auto.fireAt - (firstStart + 6)) < 0.01, "a longer delay extends the same countdown from where it started")
+  LR.AddCondition(rid, "bind"); LR.SetCondition(rid, 2, { value = "pickup" })   -- item:100 binds on equip, so this no longer applies
+  Check(roll.state == "pending" and not roll.auto, "adding a condition the item fails ends the countdown")
+  Check(Quiet() == 0, "nothing is sent for the narrower rule")
+  EndRoll(id)
+  -- changing the action to Need while Need is not allowed hands the roll back instead of sending Need
+  Fresh(); LR.Set("auto", true)
+  rid = Make("Greed green", "greed", { UNCOMMON })
+  id, roll = Start("item:100")
+  LR.SetAction(rid, "need")
+  Check(roll.state == "pending" and not roll.auto and roll.autoNote and roll.autoNote:find("Need", 1, true), "turning a Greed rule into Need ends its countdown while Need is not allowed")
+  Check(Quiet() == 0, "and nothing is sent")
+  EndRoll(id)
+
+  -- 5. The saved rule changed under a running countdown (a profile switch, a copy from another character, a hand edit): the end-of-countdown recheck.
+  local function Raw() return c.TwichUIDB.ui.lootRolls.rules end
+  for _, case in ipairs({
+    { "the rule was switched off", function(r) r.enabled = false end },
+    { "the rule's action changed", function(r) r.action = "pass" end },
+    { "the rule's condition changed", function(r) r.conditions[1].value = 3 end },
+    { "the rule was removed", function(r) table.remove(Raw(), 1) end },
+    { "the rule lost its conditions", function(r) r.conditions = {} end },
+    { "the rule's action became junk", function(r) r.action = "roll" end },
+  }) do
+    Fresh(); LR.Set("auto", true)
+    Make("Greed green", "greed", { UNCOMMON })
+    id, roll = Start("item:100")
+    Check(roll.state == "scheduled", case[1] .. ": counting down")
+    case[2](Raw()[1] or {})
+    local before = #rolled
+    Advance(4)
+    local sentGreed = false
+    for i = before + 1, #rolled do if rolled[i].kind == 2 then sentGreed = true end end
+    Check(not sentGreed, case[1] .. " behind the model's back: no Greed is sent")
+    EndRoll(id)
+  end
+  -- a modified action is never sent as the old action either
+  Fresh(); LR.Set("auto", true)
+  Make("Greed green", "greed", { UNCOMMON })
+  id, roll = Start("item:100")
+  Raw()[1].action = "pass"
+  Advance(4)
+  Check(#rolled == 0, "a rule that now says Pass is not sent as the Greed it was scheduled as")
+  EndRoll(id)
+
+  -- 6. Saved rules that are not what the editor shows must not act.
+  Fresh(); LR.Set("auto", true)
+  local raw = Raw()
+  raw[1] = { id = "lr1", name = "Never switched", action = "greed", conditions = { { type = "quality", op = "is", value = 2 } } }   -- no 'enabled'
+  LR.Invalidate("rules")
+  Check(LR.Rule("lr1").enabled == false, "the editor shows a rule that never said it was on as off")
+  id, roll = Start("item:100")
+  Check(roll.state == "pending" and not roll.auto and Quiet() == 0, "and automation agrees: it is not switched on, so it never rolls")
+  EndRoll(id)
+  for _, flag in ipairs({ "true", 1, "yes", {} }) do
+    Fresh(); LR.Set("auto", true)
+    Raw()[1] = { id = "lr1", name = "Odd flag", enabled = flag, action = "greed", conditions = { { type = "quality", op = "is", value = 2 } } }
+    LR.Invalidate("rules")
+    id, roll = Start("item:100")
+    Check(roll.state == "pending" and Quiet() == 0, "enabled = " .. tostring(flag) .. " is not on")
+    EndRoll(id)
+  end
+  -- duplicate ids (a bad import): the rule that decides is the rule the countdown is built from
+  Fresh(); LR.Set("auto", true)
+  Raw()[1] = { id = "lr1", name = "Pass epics", enabled = true, action = "pass", conditions = { { type = "quality", op = "is", value = 4 } } }
+  Raw()[2] = { id = "lr1", name = "Greed greens", enabled = true, action = "greed", conditions = { { type = "quality", op = "is", value = 2 } } }
+  LR.Invalidate("rules")
+  id, roll = Start("item:100")
+  Advance(5)
+  Check(not (rolled[1] and rolled[1].kind == 0), "a green is never passed because a rule above it shares an id with the Greed rule that matched")
+  Check(#rolled == 0 or (rolled[1].kind == 2), "whatever is sent for a duplicated id is the matching rule's own action")
+  EndRoll(id)
+
+  -- 7. Facts the client has not given: no decision until they arrive, then exactly one
+  Fresh(); LR.Set("auto", true)
+  Make("Greed green", "greed", { UNCOMMON })
+  MISSING["item:100"] = true
+  id, roll = Start("item:100")
+  Check(roll.state == "pending" and not roll.auto and not (roll.obs and roll.obs.ready), "an item the client has not loaded makes no countdown")
+  Check(Quiet(roll, 5) == 0, "and sends nothing while it is unknown")
+  MISSING["item:100"] = nil
+  Fire("GET_ITEM_INFO_RECEIVED", 100, true)
+  Check(roll.state == "scheduled", "when the item arrives the rule applies")
+  Advance(4)
+  Check(#rolled == 1, "and one choice is sent")
+  EndRoll(id)
+
+  -- 8. The rest of the roll's own limits always win
+  Fresh(); LR.Set("auto", true)
+  Make("Greed green", "greed", { UNCOMMON })
+  id, roll = Start("item:100", { canGreed = false })
+  Advance(10)
+  Check(#rolled == 0 and roll.state == "pending", "Greed is never sent when the game says the player cannot Greed")
+  EndRoll(id)
+  Fresh(); LR.Set("auto", true); LR.Set("autoNeed", true)
+  Make("Need green", "need", { UNCOMMON })
+  id, roll = Start("item:100", { canNeed = false, reasonNeed = 1 })
+  Advance(10)
+  Check(#rolled == 0 and roll.state == "pending" and roll.autoNote and roll.autoNote:find("not for your class", 1, true), "Need is never sent when it is closed to the player, and the card says why")
+  EndRoll(id)
+  -- stack of three rolls: each gets its own decision; a stopped one does not stop the others; a manual choice on one leaves the rest
+  Fresh(); LR.Set("auto", true)
+  Make("Greed green", "greed", { UNCOMMON })
+  Make("Pass epic gear", "pass", { EPIC, { "class", { value = "equipment" } } })
+  local a, ra = Start("item:100")
+  local b, rb = Start("item:101")
+  local d2, rd = Start("item:104")
+  Check(ra.auto and ra.auto.action == "greed" and rb.auto and rb.auto.action == "pass" and rd.state == "pending", "three rolls, three independent decisions (the third matches no rule)")
+  A.Stop(ra)
+  Advance(4)
+  local kinds = {}
+  for _, r in ipairs(rolled) do kinds[r.id] = r.kind end
+  Check(kinds[b] == 0 and kinds[a] == nil and kinds[d2] == nil, "stopping one leaves the others to count down and the unmatched one untouched")
+  EndRoll(a); EndRoll(b); EndRoll(d2)
+
+  -- 9. Off means off: every switch that disables automation sends nothing, in any order
+  for _, how in ipairs({ "auto off", "paused", "module off" }) do
+    Fresh(); LR.Set("auto", true)
+    Make("Greed green", "greed", { UNCOMMON })
+    id, roll = Start("item:100")
+    Check(roll.state == "scheduled", how .. ": counting down")
+    if how == "auto off" then LR.Set("auto", false) elseif how == "paused" then LR.Set("paused", true) else c.TwichUIDB.modules.lootRolls = false; LR.Refresh() end
+    Advance(5)
+    Check(#rolled == 0, how .. ": nothing is sent")
+    if how == "module off" then c.TwichUIDB.modules.lootRolls = true; LR.Refresh() end
+    EndRoll(id)
+  end
+
+  -- 10. The player's choice is never overridden by a rule, and a rule never sends twice
+  Fresh(); LR.Set("auto", true)
+  Make("Greed green", "greed", { UNCOMMON })
+  id, roll = Start("item:100")
+  Ro.Submit(roll, "need", "player")
+  LR.Set("autoUpgrade", true); LR.Set("autoUpgrade", false); A.Refresh()
+  Advance(10)
+  Check(#rolled == 1 and rolled[1].kind == 1, "a manual Need stays the only choice however the settings change afterwards")
+  EndRoll(id)
+  Fresh()
+  Advance(30)
+  Check(PendingTimers() <= 2, "the safety scenarios leave no timers behind (" .. PendingTimers() .. ")")
+
+  -- 11. What the editor can save is always safe to read back
+  Fresh()
+  Raw()[1] = { id = "lr1", name = "First", enabled = true, action = "pass", conditions = { { type = "quality", op = "is", value = 4 } } }
+  Raw()[2] = { id = "lr1", name = "Second", enabled = true, action = "greed", conditions = { { type = "quality", op = "is", value = 2 } } }
+  Raw()[3] = { id = "lr2", name = "Third", enabled = true, action = "greed", conditions = { { type = "quality", op = "is", value = 2 } } }
+  LR.Invalidate("rules")
+  Check(LR.Count() == 2 and #LR.Active() == 2 and LR.List()[2].id == "lr2" and LR.Rule("lr1").name == "First",
+    "a rule that reuses an earlier rule's id is ignored by both the list and the engine, so they always agree")
+  Check(LR.Active()[1] == Raw()[1] and LR.Active()[2] == Raw()[3], "the engine reads the same saved rules the editor lists")
+  Fresh()
+  for _, template in ipairs(LR.TEMPLATES) do
+    local ok, tid = LR.Create(template.key)
+    local view = LR.Rule(tid)
+    Check(ok and view.enabled == false, "starting point '" .. template.key .. "' is switched off")
+    Check(template.key == "blank" and view.incomplete ~= nil or template.key ~= "blank" and view.incomplete == nil,
+      "starting point '" .. template.key .. "' is finished, except the blank one, which does nothing until the player picks an action")
+    id, roll = Start("item:100")
+    Check(roll.state == "pending" and not roll.auto, "a new '" .. template.key .. "' rule never acts before it is switched on")
+    EndRoll(id)
+  end
+  Fresh()
+  rid = Make("Edits", "greed", { UNCOMMON })
+  for _, bad in ipairs({ "2", 2.5, -1, 6, 0 / 0, math.huge, true, {} }) do
+    Check(not LR.SetCondition(rid, 1, { value = bad }) and LR.Rule(rid).conditions[1].value == 2, "quality value " .. tostring(bad) .. " is refused and changes nothing")
+  end
+  for _, bad in ipairs({ 0 / 0, math.huge, -math.huge, "3", true, 0.99, 15.01 }) do
+    Check(not LR.SetDelay(rid, bad) and LR.Rule(rid).delay == 3, "delay " .. tostring(bad) .. " is refused and changes nothing")
+  end
+  Check(not LR.SetEnabled(rid, "yes") and not LR.SetEnabled(rid, 1) and LR.Rule(rid).enabled == true, "switching a rule needs a real true or false")
+  Check(not LR.SetAction("lr999", "greed") and not LR.SetEnabled("lr999", true) and not LR.SetCondition("lr999", 1, { value = 2 }) and not LR.Delete("lr999"), "editing a rule that is gone does nothing")
+  Check(not LR.SetCondition(rid, 9, { value = 2 }) and not LR.RemoveCondition(rid, 9) and not LR.SetCondition(rid, 1, "value"), "editing a condition that is not there does nothing")
+  Check(LR.SetCondition(rid, 1, { type = "item", id = 5 }) and LR.Rule(rid).conditions[1].type == "quality", "a condition's kind cannot be swapped through an edit")
+  LR.RemoveCondition(rid, 1)
+  Check(LR.Rule(rid).incomplete ~= nil, "a rule left with no conditions is flagged unfinished")
+  id, roll = Start("item:100")
+  Check(roll.state == "pending" and not roll.auto, "and a rule with no conditions matches nothing, not everything")
+  EndRoll(id)
+  Fresh()
+end
+
+---------------------------------------------------------------------------
+-- 4c. Groups: and / or blocks inside a rule, edited and run end to end
+---------------------------------------------------------------------------
+do
+  local function Fresh()
+    for _, r in ipairs({ unpack(Ro.Rolls()) }) do Ro.Remove(r) end
+    rolled = {}
+    c.TwichUIDB.ui.lootRolls.rules = {}
+    LR.Set("auto", false); LR.Set("autoNeed", false); LR.Set("autoUpgrade", false); LR.Set("paused", false)
+    LR.Invalidate("rules")
+  end
+  local function Blank()
+    local _, rid = LR.Create("blank")
+    LR.RemoveCondition(rid, 1)
+    LR.SetAction(rid, "greed")
+    return rid
+  end
+  local function Cond(rid, kind, where, fields)
+    local ok, _, at = LR.AddCondition(rid, kind, where)
+    assert(ok, "add " .. kind)
+    if fields then assert(LR.SetCondition(rid, at, fields), "set " .. kind) end
+    return at
+  end
+  ITEMS["item:109"] = { id = 109, name = "Rare Blade", quality = 3, class = 2, sub = 7, loc = "INVTYPE_WEAPON", bind = 2, price = 9, icon = 1010, type = "Weapon", subType = "Swords" }
+  ITEMS["item:110"] = { id = 110, name = "Rare Potion", quality = 3, class = 0, sub = 1, loc = "", bind = 0, price = 9, icon = 1011, type = "Consumable", subType = "Potion" }
+
+  -- (Rare or Epic) and equipment, built through the calls the editor makes
+  Fresh()
+  local rid = Blank()
+  local ok, gpath = LR.AddGroup(rid)
+  Check(ok and #gpath == 1 and gpath[1] == 1, "a group is added at the end of the rule")
+  Check(LR.Rule(rid).conditions[1].type == "group" and LR.Rule(rid).conditions[1].match == "any", "inside an all-rule a new group starts as any")
+  Check(LR.Rule(rid).incomplete and LR.Rule(rid).incomplete:find("Group 1", 1, true), "an empty group makes the rule unfinished and says which")
+  local at = Cond(rid, "quality", gpath, { value = 3 })
+  Check(#at == 2 and at[1] == 1 and at[2] == 1, "a condition added inside the group reports its path")
+  Cond(rid, "quality", gpath, { value = 4 })
+  Check(LR.Rule(rid).conditions[1].conditions[2].value == 4, "a second one, edited by its path")
+  Cond(rid, "class")
+  Check(LR.Rule(rid).conditions[2].type == "class" and LR.Rule(rid).incomplete == nil, "a condition beside the group, at the top, completes the rule")
+  LR.SetEnabled(rid, true); LR.SetName(rid, "Good gear")
+  Check(LR.Rule(rid).summary == "Automatically choose Greed when the item (is Rare or is Epic) and is equipment, after 3 seconds.", "the summary reads the group")
+  LR.Set("auto", true)
+  local a, b, d, e = StartRoll("item:101"), StartRoll("item:109"), StartRoll("item:100"), StartRoll("item:110")
+  Check(Ro.Find(a).state == "scheduled" and Ro.Find(b).state == "scheduled", "an Epic weapon and a Rare weapon both count down")
+  Check(Ro.Find(d).state == "pending" and Ro.Find(e).state == "pending", "an Uncommon helm and a Rare potion do not")
+  Advance(4)
+  Check(#rolled == 2 and rolled[1].kind == 2 and rolled[2].kind == 2, "exactly the two matching rolls send Greed")
+  EndRoll(a); EndRoll(b); EndRoll(d); EndRoll(e)
+
+  -- flipping a group's operator re-decides a running countdown; flipping the rule's own does the same
+  Fresh(); LR.Set("auto", true)
+  rid = Blank(); Cond(rid, "class", nil, { value = 9 }); LR.AddGroup(rid, nil, "all")
+  Cond(rid, "quality", { 2 }, { value = 2 }); Cond(rid, "bind", { 2 }, { value = "equip" })
+  LR.SetMatch(rid, "any"); LR.SetAction(rid, "greed"); LR.SetEnabled(rid, true)
+  -- any( recipe , all( Uncommon, binds on equip ) ): item:100 is an Uncommon bind-on-equip
+  local id = StartRoll("item:100"); local roll = Ro.Find(id)
+  Check(roll.state == "scheduled", "any( recipe, all( Uncommon, binds when equipped ) ) takes an Uncommon bind-on-equip helm")
+  LR.SetCondition(rid, { 2, 2 }, { value = "pickup" })
+  Check(roll.state == "pending" and not roll.auto, "editing a condition inside the group ends the countdown when it no longer holds")
+  LR.SetMatch(rid, "any", { 2 })
+  Check(roll.state == "scheduled", "making the group 'any' lets Uncommon alone satisfy it again")
+  LR.SetMatch(rid, "all")
+  Check(roll.state == "pending" and not roll.auto, "making the rule itself 'all' needs the recipe too, which a helm is not: the countdown ends")
+  LR.SetMatch(rid, "any")
+  Check(roll.state == "scheduled", "and back to 'any' it counts down again")
+  LR.SetCondition(rid, { 2, 1 }, { value = 3 })
+  Check(roll.state == "pending", "a group that no longer holds ends the countdown")
+  Check(#rolled == 0, "and nothing was sent along the way")
+  EndRoll(id)
+
+  -- unknown inside a group stays unknown for the whole rule
+  Fresh(); LR.Set("auto", true)
+  rid = Blank(); LR.AddGroup(rid, nil, "all")
+  Cond(rid, "recipe", { 1 }, { mode = "known" }); Cond(rid, "quality", { 1 }, { value = 2 })
+  Cond(rid, "class", nil, { value = 9 })
+  LR.SetAction(rid, "pass"); LR.SetEnabled(rid, true)
+  id = StartRoll("item:103", { noTooltip = true }); roll = Ro.Find(id)
+  Check(roll.state == "pending" and roll.autoNote and roll.autoNote:find("could not be checked", 1, true), "a known-recipe check that cannot be read keeps a rule that is 'all(known, Uncommon) and recipe' manual")
+  Advance(10)
+  Check(#rolled == 0, "and sends nothing")
+  EndRoll(id)
+  id = StartRoll("item:104"); roll = Ro.Find(id)
+  Check(roll.state == "pending" and roll.autoNote == nil, "a trade good is a plain no: not a recipe")
+  EndRoll(id)
+
+  -- an upgrade condition inside a group still needs its own permission
+  Fresh(); LR.Set("auto", true)
+  rid = Blank(); LR.AddGroup(rid, nil, "any")
+  Cond(rid, "upgrade", { 1 }, { value = true }); Cond(rid, "quality", { 1 }, { value = 4 })
+  LR.SetAction(rid, "greed"); LR.SetEnabled(rid, true)
+  Check(LR.Rule(rid).usesUpgrade == true, "a rule knows it uses upgrades when the condition is inside a group")
+  JUDGED["item:101"] = { up = true }
+  id = StartRoll("item:101"); roll = Ro.Find(id)
+  Check(roll.state == "pending" and roll.autoNote and roll.autoNote:find("upgrades", 1, true), "an upgrade inside a group does nothing until upgrades are allowed")
+  LR.Set("autoUpgrade", true)
+  Check(roll.state == "scheduled", "then it counts")
+  EndRoll(id)
+  JUDGED["item:101"] = nil
+
+  -- Need inside a group is still gated by the Need switch
+  Fresh(); LR.Set("auto", true)
+  rid = Blank(); LR.AddGroup(rid, nil, "any"); Cond(rid, "quality", { 1 }, { value = 2 })
+  LR.SetAction(rid, "need"); LR.SetEnabled(rid, true)
+  id = StartRoll("item:100"); roll = Ro.Find(id)
+  Check(roll.state == "pending" and roll.autoNote and roll.autoNote:find("Need", 1, true), "a Need rule built from groups is still held back by the Need switch")
+  Advance(10)
+  Check(#rolled == 0, "and sends nothing")
+  EndRoll(id)
+
+  -- editing, limits, copying and removing
+  Fresh()
+  rid = Blank()
+  local _, g1 = LR.AddGroup(rid)
+  local _, g2 = LR.AddGroup(rid, g1)
+  Check(#g2 == 2 and LR.Rule(rid).conditions[1].conditions[1].type == "group" and LR.Rule(rid).conditions[1].conditions[1].match == "all",
+    "a group inside an any-group starts as all")
+  local deepOk, deepWhy = LR.AddGroup(rid, g2)
+  Check(not deepOk and deepWhy:find("levels", 1, true), "a group in a group in a group (past three levels, the top counting as one) is refused with the reason")
+  for i = 1, 4 do LR.AddGroup(rid) end
+  Check(LR.Rule(rid).conditions[#LR.Rule(rid).conditions].type == "group" and not LR.AddGroup(rid), "a rule holds a bounded number of groups")
+  local _, why = LR.AddGroup(rid)
+  Check(why and why:find("groups", 1, true), "and says so")
+  Check(not LR.AddGroup(rid, { 9 }) and not LR.AddGroup(rid, { 1, 1, 1, 9 }) and not LR.AddGroup(rid, "x") and not LR.AddGroup(rid, { 0 }) and not LR.AddGroup(rid, { 1.5 }), "a path that leads nowhere is refused")
+  Check(not LR.AddGroup("lr999") and not LR.AddCondition(rid, "quality", { 9 }) and not LR.AddCondition("lr999", "quality", { 1 }), "adding to a group or rule that is gone does nothing")
+  Check(not LR.AddGroup(rid, nil, "some"), "a group is all or any")
+  -- a quality condition is not a group, so nothing can be added inside it
+  Fresh(); rid = Blank(); Cond(rid, "quality")
+  Check(not LR.AddCondition(rid, "class", { 1 }) and not LR.AddGroup(rid, { 1 }) and not LR.SetMatch(rid, "any", { 1 }), "a condition is not a group: nothing goes inside it, and it has no operator")
+  -- limits across groups
+  Fresh(); rid = Blank(); local _, gp = LR.AddGroup(rid)
+  for i = 1, Ru.MAX_CONDITIONS do Cond(rid, "bind", i % 2 == 0 and gp or nil) end
+  Check(not LR.AddCondition(rid, "bind", gp) and not LR.AddCondition(rid, "bind"), "conditions are counted across the whole rule, groups included")
+  local cs = 0
+  local function Count(list) for _, x in ipairs(list) do if x.type == "group" then Count(x.conditions) else cs = cs + 1 end end end
+  Count(LR.Rule(rid).conditions)
+  Check(cs == Ru.MAX_CONDITIONS, "the rule holds exactly the limit")
+
+  -- paths of one number still work as before, and removal by path
+  Fresh(); rid = Blank(); Cond(rid, "quality"); local _, gq = LR.AddGroup(rid); Cond(rid, "class", gq); Cond(rid, "bind", gq)
+  Check(LR.SetCondition(rid, 1, { value = 3 }) and LR.Rule(rid).conditions[1].value == 3, "a plain index still addresses a top-level condition")
+  Check(not LR.SetCondition(rid, 2, { value = "x" }) and not LR.SetCondition(rid, { 2 }, { match = "any" }), "a group is not edited as a condition")
+  Check(LR.SetCondition(rid, { 2, 2 }, { value = "pickup" }) and LR.Rule(rid).conditions[2].conditions[2].value == "pickup", "a condition in a group")
+  Check(not LR.SetCondition(rid, { 2, 3 }, { value = "pickup" }) and not LR.SetCondition(rid, { 2, 1, 1 }, { value = 2 }) and not LR.SetCondition(rid, {}, { value = 2 }), "paths that lead to no condition do nothing")
+  Check(LR.RemoveCondition(rid, { 2, 1 }) and #LR.Rule(rid).conditions[2].conditions == 1, "a condition is removed from a group by its path")
+  Check(LR.RemoveCondition(rid, { 2 }) and #LR.Rule(rid).conditions == 1, "removing a group removes everything in it")
+  Check(not LR.RemoveCondition(rid, { 2 }) and not LR.RemoveCondition(rid, {}) and not LR.RemoveCondition(rid, { 1, 1 }), "removing what is not there does nothing")
+
+  -- emptying a group leaves the rule unfinished, never matching everything
+  Fresh(); LR.Set("auto", true)
+  rid = Blank(); local _, ge = LR.AddGroup(rid); Cond(rid, "quality", ge, { value = 2 }); LR.SetAction(rid, "greed"); LR.SetEnabled(rid, true)
+  id = StartRoll("item:100"); roll = Ro.Find(id)
+  Check(roll.state == "scheduled", "the rule works")
+  LR.RemoveCondition(rid, { 1, 1 })
+  Check(roll.state == "pending" and LR.Rule(rid).incomplete ~= nil, "emptying its only group ends the countdown and flags the rule")
+  Advance(10)
+  Check(#rolled == 0, "and sends nothing")
+  EndRoll(id)
+
+  -- a copy shares nothing with the original, groups included
+  Fresh(); rid = Blank(); local _, gc = LR.AddGroup(rid); Cond(rid, "quality", gc, { value = 2 }); Cond(rid, "class")
+  LR.SetAction(rid, "greed")
+  local dupOk, dupId = LR.Duplicate(rid)
+  Check(dupOk and #LR.Rule(dupId).conditions == 2 and LR.Rule(dupId).conditions[1].type == "group" and #LR.Rule(dupId).conditions[1].conditions == 1, "a copy has the group and what is in it")
+  LR.SetCondition(dupId, { 1, 1 }, { value = 4 }); LR.SetMatch(dupId, "all", { 1 }); LR.AddCondition(dupId, "bind", { 1 })
+  Check(LR.Rule(rid).conditions[1].conditions[1].value == 2 and LR.Rule(rid).conditions[1].match == "any" and #LR.Rule(rid).conditions[1].conditions == 1,
+    "editing the copy's group changes nothing in the original")
+  -- the editor's view is a copy too: changing it changes nothing saved
+  local view = LR.Rule(rid)
+  view.conditions[1].conditions[1].value = 5
+  Check(LR.Rule(rid).conditions[1].conditions[1].value == 2, "the view of a rule is not the saved rule, groups included")
+
+  -- saved data that goes too deep, or loops, is unfinished and harmless
+  Fresh(); LR.Set("auto", true)
+  local q = { type = "quality", op = "is", value = 2 }
+  c.TwichUIDB.ui.lootRolls.rules[1] = { id = "lr1", name = "Deep", enabled = true, action = "greed", match = "all",
+    conditions = { { type = "group", match = "all", conditions = { { type = "group", match = "all", conditions = { { type = "group", match = "all", conditions = { { type = "group", match = "all", conditions = { q } } } } } } } } } }
+  local loopGroup = { type = "group", match = "all", conditions = {} }
+  loopGroup.conditions[1] = loopGroup
+  c.TwichUIDB.ui.lootRolls.rules[2] = { id = "lr2", name = "Loop", enabled = true, action = "greed", match = "all", conditions = { loopGroup } }
+  LR.Invalidate("rules")
+  Check(LR.Rule("lr1").incomplete ~= nil and LR.Rule("lr2").incomplete ~= nil, "a rule that goes too deep, or that contains itself, is unfinished in the editor")
+  id = StartRoll("item:100"); roll = Ro.Find(id)
+  Check(roll.state == "pending", "and a roll is left alone")
+  Advance(10)
+  Check(#rolled == 0, "nothing is sent")
+  EndRoll(id)
+  Fresh()
 end
 
 ---------------------------------------------------------------------------
@@ -1211,6 +1875,516 @@ do
   C.PreviewStop(true)
   c.GameTooltip = real
   rolled = {}
+end
+
+-- Mini active cards use the same choices and timers; overrides belong to keys.
+do
+  for _, roll in ipairs({ unpack(Ro.Rolls()) }) do Ro.Remove(roll) end
+  for _, rule in ipairs(LR.List()) do LR.Delete(rule.id) end
+  LR.Set("auto", false); LR.Set("animate", false); LR.Set("maxCards", 4)
+  local ok, display = LR.Create("blank")
+  Check(ok and LR.Rule(display).action == "none" and LR.Rule(display).display == "none" and LR.Rule(display).incomplete,
+    "new blank rule offers independent No change outcomes and flags no-op")
+  LR.SetDisplay(display, "collapsed"); LR.SetEnabled(display, true)
+  Check(not LR.Rule(display).incomplete and c.TwichUIDB.ui.lootRolls.rules[1].display == "collapsed",
+    "display-only action saves and reads independently of roll actions")
+  local _, copy = LR.Duplicate(display)
+  Check(LR.Rule(copy).display == "collapsed" and LR.Rule(copy).action == "none", "copy/reload view preserves both action fields")
+  LR.Delete(copy)
+  local id = StartRoll("item:100"); local roll = Ro.Find(id); local card = C.Card(roll.key)
+  local deadline = roll.deadline
+  Check(card.compact and card.h == 82 and roll.state == "pending" and roll.choice == nil and not roll.auto,
+    "display-only rule collapses with automation off, without making a choice")
+  for _, key in ipairs({ "need", "greed", "pass" }) do
+    Check(card.buttons[key].shown and card.buttons[key].w == 70 and card.buttons[key].h == 20, "Mini keeps safe labeled choice targets")
+  end
+  Check(card.timer.h == 7 and card.timer.w >= 350 and card.time.shown and not card.line3.shown and not card.close.shown,
+    "Mini uses a thin authoritative countdown and omits full details")
+  local fullWidth = card.timer.fill.w
+  Advance(2); C.Tick(0.05)
+  Check(card.timer.fill.w < fullWidth and card.name.w >= 250, "Mini timer visibly shrinks while the item has a wide name region")
+  local before = #rolled
+  card.toggle.scripts.OnClick(card.toggle)
+  Check(not card.compact and card.h > 120 and Ro.Find(id) == roll and roll.manualDisplay == "expanded",
+    "manual expansion reuses the same roll and card")
+  card.toggle.scripts.OnClick(card.toggle)
+  Check(card.compact and roll.deadline == deadline and #rolled == before and roll.choice == nil,
+    "collapse changes no deadline, event, choice or rule")
+  Check(LR.Rule(display).display == "collapsed", "manual override never writes saved rules")
+  local id2 = StartRoll("item:101"); local other = Ro.Find(id2); local fullCard = C.Card(other.key)
+  Check(not fullCard.compact and fullCard.baseY == card.h + LR.Get("spacing"), "mixed stack uses actual Mini height")
+  Ro.SetDisplay(roll, "expanded")
+  Check(fullCard.baseY == card.h + LR.Get("spacing"), "instant expansion reflows following cards without duplicate slots")
+  Ro.SetDisplay(roll, "collapsed")
+  local _, auto = LR.Create("greenGear"); LR.SetEnabled(auto, true); LR.Set("auto", true)
+  Check(roll.state == "scheduled" and roll.auto.action == "greed", "lower roll rule acts independently of higher display-only match")
+  local fireAt = roll.auto.fireAt
+  LR.SetDisplay(display, "expanded"); Ro.SetDisplay(roll, "collapsed")
+  Check(roll.auto.fireAt == fireAt and card.compact, "display edits and manual overrides do not restart automatic countdown")
+  Check(card.buttons.now.shown and card.buttons.stop.shown, "Mini preserves auto countdown controls")
+  card.buttons.stop.scripts.OnClick(card.buttons.stop)
+  Check(roll.state == "pending" and card.buttons.need.shown, "Stop restores the normal manual controls in Mini")
+  LR.Set("auto", false)
+  for _, key in ipairs({ "need", "greed", "pass" }) do
+    local rid = StartRoll("item:106"); local rr = Ro.Find(rid); Ro.SetDisplay(rr, "collapsed")
+    local cc = C.Card(rr.key); local n = #rolled
+    cc.buttons[key].scripts.OnClick(cc.buttons[key])
+    Check(#rolled == n + 1 and rr.choice == key and rr.state == "submitted", "compact " .. key .. " uses the existing submission path")
+    EndRoll(rid); Ro.Remove(rr)
+  end
+  local restricted = StartRoll("item:100", { canNeed = false, canGreed = false, reasonNeed = 1 }); local rr = Ro.Find(restricted)
+  Ro.SetDisplay(rr, "collapsed"); local cc = C.Card(rr.key); before = #rolled
+  cc.buttons.need.scripts.OnClick(cc.buttons.need)
+  cc.buttons.greed.scripts.OnClick(cc.buttons.greed)
+  Check(#rolled == before and rr.choice == nil and cc.buttons.need.state == "unavailable" and cc.buttons.greed.state == "unavailable",
+    "Mini cannot bypass restricted Need or Greed")
+  local remaining = Ro.Remaining(rr)
+  Advance(0.5); C.Tick(0.05)
+  Check(C.View(rr).remaining < remaining and cc.time.text == string.format("%ds", math.ceil(Ro.Remaining(rr))),
+    "Mini reads the authoritative time after elapsed ticks")
+  for _, r in ipairs({ unpack(Ro.Rolls()) }) do EndRoll(r.rollID); Ro.Remove(r) end
+  for _, rule in ipairs(LR.List()) do LR.Delete(rule.id) end
+  LR.Set("animate", true); LR.Set("auto", false)
+end
+
+---------------------------------------------------------------------------
+-- Victory: actual relay event over synthetic client frames; no win inference.
+---------------------------------------------------------------------------
+do
+  local V = R.LootVictory
+  active = {}
+  -- Clean the model/automation left by the preceding regression scenarios.
+  c.TwichUIDB.modules.lootRolls = false; LR.Refresh()
+  LR.Set("auto", false); LR.Set("maxCards", 4); LR.Set("afterResult", 8)
+  local native, sounds = {}, {}
+  c.AlertFrame = c.CreateFrame("Frame", "AlertFrame", c.UIParent)
+  function c.AlertFrame:IsProtected() return false end
+  c.AlertFrame:RegisterEvent("LOOT_ITEM_ROLL_WON")
+  c.AlertFrame:RegisterEvent("SHOW_LOOT_TOAST")
+  c.AlertFrame:RegisterEvent("ACHIEVEMENT_EARNED")
+  c.AlertFrame:SetScript("OnEvent", function(_, event, ...) native[#native + 1] = { event, ... } end)
+  c.PlaySoundFile = function(path, channel) sounds[#sounds + 1] = { path, channel } end
+  c.GetCVarBool = function() return true end
+  c.TwichUIDB.modules.lootRolls = true; LR.Refresh()
+  LR.Set("victory", true); LR.Set("victoryIntensity", "subtle"); LR.Set("victorySound", true)
+  Check(V.Listening() and not c.AlertFrame:IsEventRegistered("LOOT_ITEM_ROLL_WON"), "victory owns only the native winning event")
+  Check(c.AlertFrame:IsEventRegistered("SHOW_LOOT_TOAST") and c.AlertFrame:IsEventRegistered("ACHIEVEMENT_EARNED"), "unrelated native alerts stay registered")
+  local function Step(seconds)
+    for _ = 1, math.ceil(seconds / 0.05) do
+      Advance(0.05)
+      for _, f in ipairs(FRAMES) do
+        if f.shown and f.scripts.OnUpdate then f.scripts.OnUpdate(f, 0.05) end
+      end
+    end
+  end
+  local function Win(link, kind, value) Fire("LOOT_ITEM_ROLL_WON", link, 1, kind, value, false) end
+  local function NewRoll(link, choice)
+    local id = 700 + #rolled + #Ro.Rolls()
+    rolls[id] = { link = link, ends = NOW + 30, canNeed = true, canGreed = true }
+    active[id] = true; Fire("START_LOOT_ROLL", id, 30000, 9000 + id)
+    local roll = Ro.Find(id)
+    if choice then Check(Ro.Submit(roll, choice, "player"), "submit test choice") end
+    return roll
+  end
+  local roll = NewRoll("item:100", "need")
+  local same = C.Card(roll.key)
+  Check(V.Count() == 0, "selecting Need never starts a victory")
+  Win("item:100", 1, 87)
+  local e = V.Entries()[1]
+  Check(e and e.key == roll.key and C.Card(roll.key) == same, "confirmed Need reuses the existing card at its stack slot")
+  local f = same.victory
+  Check(not same.body.shown and not same.timer.shown, "old item text and roll controls cannot ghost through the new banner")
+  Check(f and f.entry.value == 87 and f.emblem.texture:find("emblem_need.tga", 1, true), "Need value and approved emblem")
+  Check(not C.Shows(roll) and not C.Has(roll.rollID), "victory cannot authorize another automatic choice or park live controls")
+  Check(f.footer == nil, "victory has no redundant footer message or inventory claim")
+  Fire("LOOT_ITEM_ROLL_WON", "item:100", 1, 1, 87, false)
+  Check(V.Count() == 1, "duplicate native winner event creates no second card")
+  Step(0.25); Check(f.phase == "burst" and f.header.alpha > 0 and f.header.alpha < 1, "resolution advances into a restrained title reveal")
+  Step(0.3); Check(#sounds == 1 and sounds[1][2] == "SFX" and sounds[1][1]:find("loot_won.ogg", 1, true), "one reveal sound on SFX")
+  Step(1.35)
+  Check(f.phase == "static" and not f.scripts.OnUpdate and f.timer, "decorative updates stop at the static hold")
+  Check(f.sweepCore.alpha == 0 and f.arrivalGlint.alpha == 0 and f.particles[1].alpha == 0, "effects end without loops")
+  Step(0.8); Win("item:100", 1, 87)
+  Check(V.Count() == 1 and #sounds == 1, "duplicate after the replay window still matches the completed roll")
+  local started = e.started
+  C.Refresh(); Check(e.started == started, "redraw never restarts the animation or sound")
+  Step(3.6)
+  Check(V.Count() == 0 and not f.shown and not f.timer and not f.scripts.OnUpdate, "timeout recycles all animation work")
+  Check(not C.Card(roll.key), "old resolved roll does not reappear after its victory")
+  Ro.Remove(roll)
+
+  -- Losses and Pass remain ordinary results; history by itself does not race the native event.
+  for _, choice in ipairs({ "need", "greed", "pass" }) do
+    local r = NewRoll("item:101", choice)
+    r.result = { rolls = {}, winner = { name = "Other", self = false, choice = "need", roll = 99 } }
+    Ro.Resolve(r, "history"); Ro.Tell("updated", r)
+    Check(V.Count() == 0, choice .. " loss/pass has no celebration")
+    Ro.Remove(r)
+  end
+  local n = #native
+  Win("item:101", 3, 42)
+  Check(#native == n + 1 and V.Count() == 0, "unsupported roll type falls back to the saved native handler")
+  Fire("ACHIEVEMENT_EARNED", 42); Fire("SHOW_LOOT_TOAST", "item", "item:101", 1)
+  Check(#native == n + 3, "achievement and acquisition alerts pass untouched")
+
+  -- No record and missing metadata: confirmed late result still has its own bounded entry.
+  Win("item:999", 2, nil)
+  e = V.Entries()[1]; f = e and e.card and e.card.victory
+  Check(e and e.name == "Loot" and not e.value and f.method.text == "Greed roll", "late Greed win tolerates missing metadata and roll value")
+  Check(f.emblem.texture:find("emblem_greed.tga", 1, true), "Greed uses its supplied emblem")
+  Step(6.2)
+
+  LR.Set("victoryIntensity", "off"); LR.Set("victorySound", false)
+  local soundCount = #sounds
+  for q = 0, 6 do
+    Check(V.Preview(q % 2 == 0 and "need" or "greed", q), "preview works without real rolls")
+    local pc = V.PreviewCard(); local pf = pc.victory
+    Check(pf.header.alpha == 1 and not pf.scripts.OnUpdate, "animation off is static and readable")
+    Check(q < 2 or q > 5 or pf.halo.texture:find("halo_", 1, true), "rarity art selected safely")
+    Step(4.1)
+    Check(not pf.shown and not pf.timer and not pf.scripts.OnUpdate, "preview playback cleans up")
+  end
+  Check(#sounds == soundCount, "sound off stays silent through repeated previews")
+  Check(V.PoolSize() <= C.PoolSize() + 1, "artwork frames are pooled, including one preview")
+  LR.Set("victoryIntensity", "subtle")
+  LR.Set("victorySound", true)
+  c.GetCVarBool = function() return false end
+  V.Preview("need", 4); Step(0.6)
+  Check(#sounds == soundCount, "global sound switch is respected")
+  V.PreviewStop(); c.GetCVarBool = function() return true end
+  c.PlaySoundFile = function() error("missing sound") end
+  V.Preview("greed", 5); Step(1.9)
+  Check(V.PreviewCard().victory.phase == "static", "unsupported audio cannot interrupt the renderer")
+  V.PreviewStop()
+  c.PlaySoundFile = function(path, channel) sounds[#sounds + 1] = { path, channel } end
+
+  -- Production preview checks: layered lighting, one shared timeline, and resets.
+  local fxNames = { "headerHaze", "iconHaze", "headerBloom", "emblemBurst", "iconBloom", "sweepHaze", "sweepCore", "sweepTail", "radiance", "arrivalGlint" }
+  local function FXClear(pf, ambient)
+    for _, name in ipairs(fxNames) do
+      if (ambient or (name ~= "headerHaze" and name ~= "iconHaze")) and pf[name].alpha ~= 0 then return false end
+    end
+    for _, glint in ipairs(pf.trimGlints) do if glint.alpha ~= 0 then return false end end
+    for _, particle in ipairs(pf.particles) do if particle.alpha ~= 0 then return false end end
+    return true
+  end
+  LR.Set("victoryIntensity", "subtle")
+  local soundBeforeSeek = #sounds
+  Check(V.Preview("need", 2), "lighting preview starts")
+  local pc = V.PreviewCard(); local pf = pc.victory
+  Check(#pf.base.pieces == 15 and pf.h == 218 and pf.title.points[1][5] == -24 and pf.emblem.points[1][5] == -64,
+    "lighting integration preserves approved frame and heading geometry")
+  Check(pf.icon.points[1][3] == -93 and pf.name.points[1][3] == -84 and pf.method.points[1][3] == -134
+    and pf.badge.h == 29 and pf.badge.points[1][4] == 230 and pf.footer == nil,
+    "item and conditional footer composition remain unchanged")
+  Check(pf.laurels[1].points[1][2] == pf.title and pf.laurels[2].points[1][2] == pf.title,
+    "laurels still follow the centered measured title")
+  Check(pf.atmosphere.frameLevel < pf.header.frameLevel and pf.atmosphere.frameLevel < pf.content.frameLevel
+    and pf.railCanvas.frameLevel < pf.header.frameLevel and pf.rail.clips == false
+    and pf.effects.frameLevel < pf.header.frameLevel and pf.effects.frameLevel < pf.content.frameLevel and not pf.effects.mouse,
+    "feathered effects escape without scissoring, intercepting input or covering text")
+  for _, name in ipairs(fxNames) do
+    Check(pf[name].texture:find("victory\\fx\\fx_", 1, true) and pf[name].blend == "ADD" and pf[name].uv,
+      "supplemental texture uses individual runtime file, additive blend and measured UV: " .. name)
+  end
+  for _, t in ipairs({ 0, 0.15, 0.40, 0.70, 1.00, 1.45, 1.85, 3.75, 5.95, 6.15 }) do
+    Check(V.PreviewAt(t), "production celebration pose " .. t)
+    if t == 0 then
+      Check(pf.header.alpha == 0 and FXClear(pf, true), "time zero is intentionally transparent with all lighting reset")
+    elseif t == 0.15 then
+      Check(pf.headerHaze.alpha > 0.20 and pf.headerBloom.alpha == 0, "ignition precedes the title bloom")
+    elseif t == 0.40 then
+      Check(pf.headerBloom.alpha > 0.35 and pf.headerBloom.alpha < 0.40 and pf.radiance.alpha == 0,
+        "Subtle keeps a quiet heading without the Full radiant burst")
+    elseif t == 0.70 then
+      local x = pf.sweepCore.points[1][4]
+      Check(pf.sweepCore.alpha == 0.75 and pf.sweepHaze.alpha == 0.28 and math.abs(x - 230) < 0.0001
+        and pf.sweepTail.points[1][4] == x - 48, "one bright center, soft base and short tail travel together")
+    elseif t == 1.00 then
+      Check(pf.iconBloom.alpha == 0.35 and pf.arrivalGlint.alpha > 0.40 and pf.sweepCore.alpha == 0
+        and pf.halo.alpha > pf.haloRest, "item arrival shifts attention to the icon with its actual rarity accent")
+      local visible = 0
+      for _, particle in ipairs(pf.particles) do if particle.alpha > 0 then visible = visible + 1 end end
+      Check(visible == 4, "Subtle has four controlled sparks/motes")
+    elseif t == 1.45 then
+      Check(pf.headerBloom.alpha == 0 and pf.radiance.alpha == 0 and pf.iconBloom.alpha > 0 and pf.iconBloom.alpha < 0.10,
+        "afterglow decays smoothly rather than disappearing abruptly")
+    elseif t == 1.85 or t == 3.75 then
+      Check(FXClear(pf, false) and pf.headerHaze.alpha == 0.12 and pf.iconHaze.alpha == 0.09
+        and pf.halo.alpha == pf.haloRest and pf.alpha == 1, "completed state retains only restrained static atmosphere")
+    elseif t == 5.95 then
+      Check(pf.phase == "fade" and pf.alpha > 0 and pf.alpha < 1, "configured hold ends with the existing fade")
+    elseif t == 6.15 then
+      Check(pf.alpha == 0, "Normal completes after the 1.85-second reveal and configured hold")
+    end
+  end
+  Check(#sounds == soundBeforeSeek and not pf.scripts.OnUpdate, "paused captures remain silent and idle")
+  Check(V.Preview("need", 2) and FXClear(pf, true) and pf.scripts.OnUpdate, "replay resets all layers at zero")
+  Step(0.35)
+  Check(#sounds == soundBeforeSeek + 1, "one sound at 0.30 seconds accompanies the radiant burst")
+  Step(1.51)
+  Check(not pf.scripts.OnUpdate and pf.timer and pf.phase == "static" and math.abs(pf.entry.total - 6.15) < 0.0001,
+    "clock-driven motion stops after afterglow; idle hold has no updater")
+  V.PreviewStop()
+  LR.Set("victoryIntensity", "full")
+  V.Preview("greed", 5); V.PreviewAt(0.40)
+  Check(pf.headerBloom.alpha > 0.98 and pf.emblemBurst.alpha > 0.78 and pf.radiance.alpha > 0.93,
+    "Full has a distinct synchronized white-gold climax")
+  Check(pf.particles[5].alpha == 1 and pf.particles[6].alpha == 1 and pf.particles[7].alpha == 1,
+    "three prominent stars peak with the radiant burst")
+  Check(pf.particles[5].points[1][5] > 0 or pf.particles[6].points[1][5] > 0,
+    "Full stars extend above the frame without clipping")
+  V.PreviewAt(0.55)
+  local visible = 0
+  for _, particle in ipairs(pf.particles) do if particle.alpha > 0 then visible = visible + 1 end end
+  Check(visible == 8 and #pf.particles == 12, "eight particles overlap the burst within a bounded twelve-slot pool")
+  Check(pf.entry.sampleLines[1] == "Shoulder · Legendary" and pf.entry.sellPrice == nil,
+    "sample metadata stays consistent with its selected item")
+  V.PreviewAt(1.00)
+  Check(pf.iconBloom.alpha == 0.85 and pf.halo.alpha == pf.haloRest + 0.22, "Full arrival reinforces the real rarity ring")
+  V.PreviewStop()
+  LR.Set("victoryIntensity", "off"); V.Preview("need", 2)
+  Check(FXClear(pf, true) and pf.atmosphere.alpha == 0 and not pf.scripts.OnUpdate,
+    "Off hides every supplemental FX texture with no animation updater")
+  V.PreviewAt(3.85); Check(pf.alpha == 1 and FXClear(pf, true), "Off keeps the original clean card and static hold")
+  V.PreviewAt(4); Check(pf.alpha == 0, "Off exits without a decorative fade")
+  V.PreviewStop()
+
+  -- All variants replay the same pooled renderer, including quick interruptions.
+  local longName = "Stormrend Titanblade of the Unbroken Oath of the Eternal Watchers"
+  local poolBefore = V.PoolSize()
+  pf.name.GetStringWidth = function(self) return #self.text * 8 end
+  for _, intensity in ipairs({ "off", "subtle", "full" }) do
+    LR.Set("victoryIntensity", intensity)
+    for _, choice in ipairs({ "need", "greed" }) do
+      for quality = 2, 5 do
+        local upgrade = quality % 2 == 0
+        Check(V.Preview(choice, quality, { name = longName, upgrade = upgrade }) and FXClear(pf, true),
+          "consecutive preview resets every layer before playback")
+        Check(pf.name.text ~= longName and pf.name.text:sub(-3) == "..." and #pf.name.text * 8 <= pf.name.w
+          and not pf.name.wordWrap and pf.name.maxLines == 1, "long names remain bounded with an ellipsis")
+        pf.hit.scripts.OnEnter(pf.hit)
+        Check(c.GameTooltip.text == longName, "hover preserves the complete item name")
+        Check(pf.badge.shown == upgrade and pf.upgrade.shown == upgrade, "upgrade visibility follows sample state on reuse")
+        Check(pf.emblem.texture:find("emblem_" .. choice, 1, true) and pf.entry.quality == quality,
+          "both roll types and all rarities retain their artwork")
+        Step(0.95)
+        if intensity == "off" then Check(FXClear(pf, true), "Off stays free of supplemental effects")
+        else Check(not FXClear(pf, true), "active preview has visible lighting") end
+      end
+    end
+  end
+  Check(V.PoolSize() == poolBefore and V.Count() == 0, "quick previews reuse one pool without real results")
+  V.Preview("greed", 5, { name = string.rep("é", 50) })
+  Check(pf.name.text:sub(-5) == "é...", "localized truncation preserves whole UTF-8 characters")
+  pf.name.GetStringWidth = nil
+  LR.Set("showUpgrade", false); V.Preview("greed", 5, { upgrade = true })
+  Check(not pf.badge.shown and not pf.upgrade.shown, "global upgrade setting still hides the indicator")
+  LR.Set("showUpgrade", true); V.Preview("need", 2)
+  Check(pf.badge.shown and pf.name.text ~= longName, "fresh previews restore sample state")
+  V.PreviewStop()
+
+  -- Serialize excess wins while bounding active frames; each gets its full hold.
+  LR.Set("maxCards", 1); LR.Set("victoryIntensity", "off")
+  local before = V.PoolSize()
+  for i = 1, 7 do Win("item:" .. (800 + i), i % 2 + 1, 40 + i) end
+  Check(V.Count() == 7 and C.CardCount() == 1, "rapid wins queue without overlapping")
+  for i = 1, 7 do Step(4.1) end
+  Check(V.Count() == 0 and V.PoolSize() <= before + 1, "queued wins drain with a bounded pool (one retiring slot)")
+  -- Overflow is delivered natively, never silently dropped.
+  n = #native
+  for i = 1, V.MAX_QUEUE + 1 do Win("item:" .. (900 + i), 1, 50) end
+  Check(V.Count() == V.MAX_QUEUE and #native == n + 1, "bounded queue overflow keeps native result")
+  LR.Set("victory", false)
+  Check(not V.Listening() and V.Count() == 0 and c.AlertFrame:IsEventRegistered("LOOT_ITEM_ROLL_WON"), "disable restores native registration and clears queue")
+  Check(#native == n + 1 + V.MAX_QUEUE, "disable replays every unfinished accepted result to native")
+  n = #native; Win("item:100", 1, 99)
+  Check(#native == n + 1 and V.Count() == 0, "disabled feature leaves original behavior")
+  LR.Set("victory", true)
+  Check(V.Listening(), "re-enable takes ownership once")
+  c.InCombatLockdown = function() return true end
+  Win("item:102", 2, 66); Step(4.1)
+  Check(V.Count() == 0, "unprotected synthetic card completes in combat without protected actions")
+  c.InCombatLockdown = function() return false end
+  LR.Set("victory", false)
+  function c.AlertFrame:IsProtected() return true end
+  LR.Set("victory", true)
+  Check(not V.Listening(), "protected native host is never modified")
+  function c.AlertFrame:IsProtected() return false end
+  c.AlertFrame:UnregisterEvent("LOOT_ITEM_ROLL_WON")
+  V.Sync(); Check(not V.Listening(), "another replacement's event ownership is respected")
+  c.AlertFrame:RegisterEvent("LOOT_ITEM_ROLL_WON"); V.Sync()
+  Check(V.Listening(), "supported native path can resume")
+  LR.Set("victoryIntensity", "subtle")
+  LR.Set("maxCards", 2)
+  Win("item:7101", 1, 77); Win("item:7102", 2, 88)
+  Step(0.5)
+  Check(not C.PlaceStart() and not C.PreviewStart(), "placement and sample rolls cannot cover a real celebration")
+  LR.Set("victoryIntensity", "off")
+  for _, result in ipairs(V.Entries()) do Check(not result.card.victory.scripts.OnUpdate and FXClear(result.card.victory, true), "turning animation off immediately clears lighting and updates") end
+  LR.Set("maxCards", 1)
+  Step(8.5)
+  Check(V.Count() == 0, "reducing max cards suspends and resumes queued animation safely")
+  local a, b = NewRoll("item:108", "need"), NewRoll("item:108", "need")
+  n = #native; Win("item:108", 1, 99)
+  Check(#native == n + 1 and V.Count() == 0, "ambiguous identical drops keep native results instead of guessing")
+  Ro.Remove(a); Ro.Remove(b)
+  n = #native
+  local draw, fault, caught = V.Draw, R.Fault, nil
+  R.Fault = function(_, err) caught = err end
+  V.Draw = function() error("synthetic drawing failure") end
+  Win("item:7199", 1, 70)
+  Check(C.Failed() and not V.Listening() and #native == n + 1 and V.Count() == 0,
+    "drawing failure delivers current result once and restores native registration")
+  Check(caught and caught:find("synthetic drawing failure", 1, true), "render failure is reported")
+  V.Draw, R.Fault = draw, fault
+  c.TwichUIDB.modules.lootRolls = false; LR.Refresh(); active = {}
+  c.TwichUIDB.modules.lootRolls = true; LR.Refresh()
+  LR.Set("victoryIntensity", "off")
+  Check(LR.Get("victory") and LR.Get("victoryIntensity") == "off" and c.TwichUIDB.ui.lootRolls.victoryIntensity == "off", "settings use existing persisted profile values")
+  LR.Set("victoryIntensity", "subtle"); LR.Set("maxCards", 4)
+end
+
+---------------------------------------------------------------------------
+-- Compact victories: per-instance attribution, toggles and pooled FX lifecycle.
+---------------------------------------------------------------------------
+do
+  local V = R.LootVictory
+  local native = 0
+  local function Reset()
+    V.Disable(false)
+    for _, r in ipairs({ unpack(Ro.Rolls()) }) do EndRoll(r.rollID); Ro.Remove(r) end
+    for _, rule in ipairs(LR.List()) do LR.Delete(rule.id) end
+    c.AlertFrame:SetScript("OnEvent", function() native = native + 1 end)
+    LR.Set("auto", false); LR.Set("animate", false); LR.Set("maxCards", 4)
+    LR.Set("victoryIntensity", "full"); LR.Set("victorySound", false)
+    V.Sync()
+  end
+  local function Step(seconds)
+    for _ = 1, math.ceil(seconds / 0.05) do
+      Advance(0.05)
+      for _, f in ipairs(FRAMES) do if f.shown and f.scripts.OnUpdate then f.scripts.OnUpdate(f, 0.05) end end
+    end
+  end
+  local function Win(link, value) Fire("LOOT_ITEM_ROLL_WON", link, 1, 1, value or 87, false) end
+  Reset()
+  local _, rule = LR.Create("blank"); LR.SetDisplay(rule, "collapsed"); LR.SetEnabled(rule, true)
+  local id = StartRoll("item:100"); local roll = Ro.Find(id); local card = C.Card(roll.key)
+  Check(card.compact and roll.choice == nil, "display-only rule leaves a compact manual roll")
+  Ro.SetDisplay(roll, "expanded"); Win("item:100")
+  local e = V.Entries()[1]; local f = e.card.victory
+  Check(e.displayMode == "expanded" and e.manualDisplay == "expanded" and e.card == card and not f.compact,
+    "manual expanded override carries to the same roll's confirmed victory")
+  Step(0.55)
+  local started, total, sounded = e.started, e.total, e.sounded
+  card.toggle.scripts.OnClick(card.toggle)
+  Check(f.compact and math.abs(card.h - 80 * 384 / 460) < 0.001 and e.displayMode == "collapsed",
+    "victory toggle immediately reflows the existing card to Mini")
+  Check(e.started == started and e.total == total and e.sounded == sounded and f.scripts.OnUpdate and V.Count() == 1,
+    "mid-reveal toggle preserves timeline, sound state, result and instance")
+  Step(1.4)
+  local timer = f.timer
+  card.toggle.scripts.OnClick(card.toggle)
+  Check(not f.compact and f.timer == timer and not f.scripts.OnUpdate and e.started == started,
+    "static toggle keeps its original dismissal timer and no idle updater")
+  Step(4.4)
+  Check(V.Count() == 0 and not f.shown and not f.timer and not f.scripts.OnUpdate and (not Ro.ByKey(roll.key) or roll.manualDisplay == nil),
+    "finished victory clears the temporary override and all animation work")
+
+  Reset(); LR.Set("victoryIntensity", "off")
+  local a = Ro.Find(StartRoll("item:100")); Ro.SetDisplay(a, "collapsed")
+  local b = Ro.Find(StartRoll("item:101")); Ro.SetDisplay(b, "expanded")
+  EndRoll(a.rollID); Ro.Remove(a)
+  Check(V.RetainedDisplays() == 1, "departed roll retains one bounded presentation snapshot")
+  Win("item:101", 92); Win("item:100", 81)
+  local modes = {}
+  for _, entry in ipairs(V.Entries()) do modes[entry.link] = entry.displayMode end
+  Check(V.Count() == 2 and modes["item:100"] == "collapsed" and modes["item:101"] == "expanded",
+    "late compact and simultaneous expanded victories cannot exchange presentation")
+  Check(V.RetainedDisplays() == 0, "accepted late winner consumes its matching presentation")
+  local first, second = V.Entries()[1].card, V.Entries()[2].card
+  if first.baseY > second.baseY then first, second = second, first end
+  Check(second.baseY == first.baseY + first.h + LR.Get("spacing"), "mixed victory stack uses actual heights")
+  Step(4.2)
+  Check(V.Count() == 0, "both static victories expire without lingering animation")
+
+  Reset()
+  a = Ro.Find(StartRoll("item:100")); Ro.SetDisplay(a, "collapsed")
+  EndRoll(a.rollID); Ro.Remove(a)
+  b = Ro.Find(StartRoll("item:100")); Ro.SetDisplay(b, "expanded")
+  local n = native; Win("item:100")
+  Check(native == n + 1 and V.Count() == 0, "identical live and departed drops fall back natively rather than borrow a preference")
+  Reset(); LR.Set("victoryIntensity", "off")
+  a = Ro.Find(StartRoll("item:100")); Ro.SetDisplay(a, "collapsed")
+  EndRoll(a.rollID); Ro.Remove(a); Advance(V.DISPLAY_RETENTION + 1)
+  Win("item:100")
+  Check(V.Entries()[1].displayMode == "expanded" and V.RetainedDisplays() == 0,
+    "expired correlation safely falls back to Expanded without rule reevaluation")
+  Reset(); LR.Set("victoryIntensity", "off"); Win("item:998")
+  Check(V.Entries()[1].displayMode == "expanded", "missing roll state defaults to Expanded")
+
+  Reset()
+  for _, intensity in ipairs({ "off", "subtle", "full" }) do
+    LR.Set("victoryIntensity", intensity)
+    for q = 2, 5 do
+      Check(V.Preview(q % 2 == 0 and "need" or "greed", q, { display = "collapsed", upgrade = q % 2 == 0,
+        name = "A very long legendary item name with enough words to require careful fitting" }), "Mini preview starts repeatedly")
+      local pc = V.PreviewCard(); local pf = pc.victory
+      V.PreviewAt(0.7)
+      Check(pf.compact and pf.miniBase.shown and not pf.base.shown and pc.h < 70 and pf.upgradeIcon.shown == (q % 2 == 0),
+        "purpose-built Mini frame, quality and conditional upgrade survive pooling")
+      Check(pf.sweepCore.blend == "ADD" and not pf.rail.clips and pf.halo.texture:find("halo_", 1, true),
+        "compact effects reuse rarity art, proper blend and unclipped painted sweep")
+      if intensity == "off" then Check(pf.sweepCore.alpha == 0, "Off remains static in Mini")
+      else Check(pf.sweepCore.alpha > 0 and pf.headerHaze.alpha > 0, "compact reveal remains visible") end
+      V.SetDisplay(pf.entry, "expanded")
+      Check(not pf.compact and pf.paintTime == 0.7, "paused preview toggle retains its selected animation pose")
+      V.SetDisplay(pf.entry, "collapsed"); V.PreviewAt(1.0)
+      if intensity ~= "off" then Check(pf.iconBloom.alpha > 0, "compact item arrival has a visible bloom") end
+      V.PreviewAt(1.85)
+      Check(not pf.scripts.OnUpdate and pf.particles[1].alpha == 0 and pf.sweepCore.alpha == 0,
+        "Mini settles with no decorative motion")
+      V.PreviewStop()
+      Check(not pf.shown and not pf.timer and not pf.scripts.OnUpdate, "Mini interruption cleans up all owned work")
+    end
+  end
+  Reset()
+  local calls = {}
+  c.GetCVarBool = function() return true end
+  c.PlaySoundFile = function(path, channel) calls[#calls + 1] = { path = path, channel = channel, at = NOW } end
+  LR.Set("victorySound", true)
+  local full = Ro.Find(StartRoll("item:100"))
+  local mini = Ro.Find(StartRoll("item:101"))
+  Ro.SetDisplay(mini, "collapsed")
+  Win(full.link); Win(mini.link); Win(mini.link)
+  Step(0.20)
+  Check(#calls == 0, "sound waits for the golden reveal")
+  Step(0.20)
+  Check(#calls == 1 and calls[1].channel == "SFX" and calls[1].path:find("loot_won.ogg", 1, true),
+    "the first win plays the supplied cue at reveal")
+  V.SetDisplay(V.Entries()[2], "expanded")
+  Step(1.55)
+  Check(#calls == 2 and calls[2].path == calls[1].path and calls[2].at - calls[1].at >= 1.54,
+    "rapid Expanded and Mini wins each play once with room for the full tail")
+  Reset()
+  LR.Set("victorySound", true)
+  for _, display in ipairs({"expanded", "collapsed"}) do
+    V.Preview("greed", 3, { display = display })
+    Step(0.35); Step(1.55)
+  end
+  Check(#calls == 4 and calls[4].path == calls[1].path, "both Preview activations play the same cue")
+  Step(1.60)
+  V.Preview("need", 2); Step(0.40)
+  V.Preview("need", 2); Step(0.40)
+  LR.Set("victorySound", false)
+  Step(2)
+  Check(#calls == 5, "turning Victory Sound off discards a queued preview")
+  V.Preview("need", 2); Step(0.35)
+  Check(#calls == 5, "muted preview stays silent")
+
+  V.Disable(false)
+  Check(V.RetainedDisplays() == 0, "disable releases retained presentation snapshots")
+  LR.Set("animate", true); V.Sync()
 end
 
 ---------------------------------------------------------------------------

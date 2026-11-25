@@ -31,8 +31,8 @@ local pools = { cards = {}, groups = {}, seps = {}, rows = {}, palette = {}, hea
 local function Npc(name) return R.PATH .. [[media\npcs\]] .. name end
 local CONDITIONS = {
     { key = "kind", name = "Item type", category = "Item", art = "leather-backpack",
-        blurb = "Gear, materials, recipes, supplies or other.",
-        tip = "Choose gear, materials, recipes, supplies or other. Quest items and keys are never candidates, whatever the rule says." },
+        blurb = "Gear, materials, recipes, supplies, fish, meat or other.",
+        tip = "Choose gear, materials, recipes, supplies, fish, meat or other. Fish and meat are the raw cooking ingredients (fish is told from meat by its name). Quest items and keys are never candidates, whatever the rule says." },
     { key = "armor", name = "Armor type", category = "Item", art = "tabard",
         blurb = "Cloth, leather, mail, plate, shields.",
         tip = "The armor class of the item: cloth, leather, mail, plate or shields. Anything that is not armor is none of these." },
@@ -90,6 +90,20 @@ local function ApplyArt(texture, key, size)
     elseif c and c.icon and R.Icons and R.Icons.Apply then
         R.Icons.Apply(texture, c.icon, size)
     end
+end
+
+-- A rule's own picked icon, or the automatic coins when it has none or the picked one is unavailable.
+-- Returns true when a picked icon could not be shown.
+local function AutoRuleIcon(texture, size)
+    texture:SetVertexColor(1, 1, 1, 1)
+    texture:SetTexCoord(0, 1, 0, 1)
+    texture:SetSize(size, size)
+    texture:SetTexture(Npc("coins-small.tga"))
+end
+local function PaintRuleIcon(texture, artwork, size)
+    if artwork and R.Artwork and R.Artwork.Draw(texture, artwork, size) then return false end
+    AutoRuleIcon(texture, size)
+    return artwork ~= nil
 end
 
 local OPERATOR = {
@@ -271,8 +285,37 @@ function B.Shown() return root ~= nil and root:IsShown() end
 function B.Frame() return f end
 function B.Root() return root end
 
+local function ClosePicker()
+    local picker = R.SettingsArtworkPicker
+    if f and picker then picker.Close(f, "invalidated") end
+end
+
 local function Reset()
     ui.test, ui.survey = nil, nil
+    ui.generation = (ui.generation or 0) + 1
+    ClosePicker()
+end
+
+-- Choose the icon that stands for this rule in the list. It changes the draft only; Save keeps it.
+function B.ChooseArtwork()
+    local picker = R.SettingsArtworkPicker
+    if not (picker and R.Artwork and f and f:IsVisible() and S().Active()) then return false end
+    local generation, index, new = ui.generation, S().Index(), S().IsNew()
+    local function Current()
+        return ui.generation == generation and S().Active() and S().Index() == index and S().IsNew() == new
+    end
+    return picker.Open(f, {
+        key = "junk" .. generation, selection = S().Artwork(), IsCurrent = Current,
+        subtitle = "Choose an icon for this junk rule.",
+        automatic = { label = "Use automatic icon", name = "Automatic rule icon", Draw = AutoRuleIcon },
+        OnApply = function(ref)
+            if not Current() then return false, "This rule changed. Reopen the icon picker." end
+            local ok, why = S().SetArtwork(ref)
+            if not ok then return false, why end
+            return true
+        end,
+        OnClosed = function(reason) if reason ~= "invalidated" and B.Shown() then B.Refresh() end end,
+    })
 end
 
 local function Discard(after)
@@ -374,7 +417,7 @@ end
 function B.Delete()
     local name = S().Name() or "this rule"
     local current = S().Index()
-    R.Interact.Confirm("TWICHUI_DELETE_JUNK_RULE", ("Delete the rule \"%s\"? Items it marked stay marked; unmark them in EllesmereUI."):format(name), function()
+    R.Interact.Confirm("TWICHUI_DELETE_JUNK_RULE", ("Delete the rule \"%s\"? Workshop removes its own marks from carried items unless another rule matches. Player marks stay unchanged."):format(name), function()
         if S().Index() ~= current then return end
         local ok, why = S().Delete()
         if not ok then Say(why, "warn"); B.Refresh(); return end
@@ -574,7 +617,9 @@ function B.Build()
         row.pill:SetPoint("TOPRIGHT", -10, -9)
         m.ContextTip(row.pill, "Rule on or off", "Switches this saved rule on or off at once. Only an enabled rule can mark items.")
         row:SetScript("OnClick", function(self) if self.index then B.Select(self.index) end end)
-        m.ContextTip(row, "Marking rule", function(self) return self.fullName or "", self.fullBrief end)
+        m.ContextTip(row, "Marking rule", function(self)
+            return self.fullName or "", (self.fullBrief or "") .. (self.artUnavailable and "\nSelected icon unavailable — showing automatic." or "")
+        end)
         pools.rows[i] = row
         stats.rows = #pools.rows
         return row
@@ -757,8 +802,16 @@ function B.Build()
     palette.none:SetText("No matching conditions.")
 
     ---------------------------------------------------------------- the rule pane: header strip
-    rule.name = g.EditBox(rule, 300, 32)
-    rule.name:SetPoint("TOPLEFT", 14, -12)
+    rule.art = CreateFrame("Button", nil, rule, "BackdropTemplate")
+    rule.art:SetSize(32, 32)
+    rule.art:SetPoint("TOPLEFT", 14, -12)
+    m.ReminderControl(rule.art, "action")
+    rule.art.tex = rule.art:CreateTexture(nil, "OVERLAY", nil, 2)
+    rule.art.tex:SetPoint("CENTER")
+    rule.art:SetScript("OnClick", function() B.ChooseArtwork() end)
+    m.ContextTip(rule.art, "Rule icon", "Choose a picture that stands for this rule in your list. It is only for you: marking is not affected. Press Save to keep it.")
+    rule.name = g.EditBox(rule, 256, 32)
+    rule.name:SetPoint("TOPLEFT", 54, -12)
     m.ReminderControl(rule.name, "field")
     Font(rule.name, 14)
     rule.name:SetMaxLetters(60)
@@ -792,7 +845,7 @@ function B.Build()
     rule.delete = Button(rule, "Delete", 80, "danger", function() B.Delete() end)
     rule.delete:SetHeight(32)
     rule.delete:SetPoint("TOPRIGHT", -116, -12)
-    m.ContextTip(rule.delete, "Delete rule", "Deletes this rule after asking. Items it already marked stay marked; unmark them in EllesmereUI.")
+    m.ContextTip(rule.delete, "Delete rule", "Deletes this rule after asking. Workshop removes its own marks from carried items unless another rule matches. Player marks stay unchanged.")
     rule.more:SetHeight(32)
     rule.more:SetPoint("TOPRIGHT", -14, -12)
     rule.more:SetValue(nil, "Rule")
@@ -1356,6 +1409,7 @@ local function Layout()
         local row = B.Row(i)
         row.index = (not r.unsaved) and r.index or nil
         row.fullName, row.fullBrief = r.name, r.brief
+        row.artUnavailable = PaintRuleIcon(row.icon, r.unsaved and S().Artwork() or r.artwork, 28)
         row.name:SetText(Truncate(r.unsaved and (S().Name() or "New rule") or r.name, 20))
         local open = active and not r.unsaved and r.index == S().Index()
         row.brief:SetText(Truncate(r.unsaved and "Not saved yet" or (open and S().Dirty()) and "Unsaved changes" or r.brief, 34))
@@ -1386,7 +1440,7 @@ local function Layout()
     -- the right side
     f.title:SetText(active and ("Junk rule: " .. (S().Name() or "New rule")) or "Junk marking")
     f.rule.blank:SetShown(not active)
-    for _, el in ipairs({ f.rule.name, f.rule.pill, f.rule.onText, f.rule.more, f.rule.delete, f.rule.line, f.rule.heading, f.rule.scroll }) do el:SetShown(active) end
+    for _, el in ipairs({ f.rule.art, f.rule.name, f.rule.pill, f.rule.onText, f.rule.more, f.rule.delete, f.rule.line, f.rule.heading, f.rule.scroll }) do el:SetShown(active) end
     f.strip:SetShown(true)
     f.search:SetEnabled(active)
     left.summary:SetText(active and S().Summary() or "Choose a rule to see what it does.")
@@ -1444,6 +1498,7 @@ local function Layout()
     f.rule.name:SetEnabled(active)
     if active then
         if not f.rule.name:HasFocus() then f.rule.name:SetText(S().Name() or "") end
+        PaintRuleIcon(f.rule.art.tex, S().Artwork(), 24)
         f.rule.pill:SetChecked(S().On() == true)
         f.rule.onText:SetText(S().On() and "On" or "Off")
         g.Color(f.rule.onText, S().On() and pal.sage or pal.stone)

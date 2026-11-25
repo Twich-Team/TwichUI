@@ -47,10 +47,10 @@ local function Str(s)
 end
 J.String = Str
 
-local function Num(v)
+local function Num(v, digits)
     if v ~= v or v == math.huge or v == -math.huge then return "null" end
     if v == math.floor(v) and math.abs(v) < 2 ^ 53 then return format("%d", v) end
-    return format("%.6g", v)
+    return format("%." .. (digits or 6) .. "g", v)
 end
 
 local function IsArray(t)
@@ -77,11 +77,11 @@ local function Keys(t)
     return keys
 end
 
-Encode = function(v, out, depth, seen)
+Encode = function(v, out, depth, seen, digits)
     local t = type(v)
     if v == nil then out[#out + 1] = "null"
     elseif t == "boolean" then out[#out + 1] = v and "true" or "false"
-    elseif t == "number" then out[#out + 1] = Num(v)
+    elseif t == "number" then out[#out + 1] = Num(v, digits)
     elseif t == "string" then out[#out + 1] = Str(v)
     elseif t == "table" then
         if depth > J.MAX_DEPTH then error("json: nested too deep", 0) end
@@ -92,7 +92,7 @@ Encode = function(v, out, depth, seen)
             out[#out + 1] = "["
             for i = 1, #v do
                 if i > 1 then out[#out + 1] = "," end
-                Encode(v[i], out, depth + 1, seen)
+                Encode(v[i], out, depth + 1, seen, digits)
             end
             out[#out + 1] = "]"
         else
@@ -106,7 +106,7 @@ Encode = function(v, out, depth, seen)
                     first = false
                     out[#out + 1] = Str(k)
                     out[#out + 1] = ":"
-                    Encode(val, out, depth + 1, seen)
+                    Encode(val, out, depth + 1, seen, digits)
                 end
             end
             out[#out + 1] = "}"
@@ -117,9 +117,10 @@ Encode = function(v, out, depth, seen)
     end
 end
 
-function J.Encode(v)
+function J.Encode(v, digits)
+    digits = type(digits) == "number" and digits == digits and math.max(6, math.min(17, math.floor(digits))) or 6
     local out = {}
-    Encode(v, out, 1, {})
+    Encode(v, out, 1, {}, digits)
     return concat(out)
 end
 

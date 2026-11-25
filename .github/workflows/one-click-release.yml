@@ -49,12 +49,13 @@ jobs:
             admin|maintain|write) ;;
             *) echo "::error::Release requires repository write access"; exit 1 ;;
           esac
-      - name: Install Lua test dependencies
+      - name: Install offline test dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq lua5.1 lua-bitop
+          sudo apt-get install -y -qq lua5.1 lua-bitop python3-pil python3-numpy python3-scipy
+          /usr/bin/python3 -I -c 'from PIL import Image; import numpy; from scipy import ndimage; print("Map lab image dependencies available")'
       - name: Run all offline regression and package-tool tests
-        run: ./tests/run.sh
+        run: PATH="/usr/bin:$PATH" ./tests/run.sh
       - name: Resolve exact release version
         id: version
         env:

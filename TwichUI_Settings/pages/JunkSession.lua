@@ -14,14 +14,15 @@ local function L() return R.WorkshopLauncher end
 local function T() return L().JunkTree end
 
 -- What a stored rule keeps besides its tree: the pre-tree fields stay untouched so older saved data still reads.
+local function Art(a) return a and { kind = a.kind, id = a.id } or nil end
 local function Snap()
-    return { name = st.draft.name, on = st.draft.on, tree = T().Copy(st.draft.tree) }
+    return { name = st.draft.name, on = st.draft.on, tree = T().Copy(st.draft.tree), artwork = Art(st.draft.artwork) }
 end
 local function Same(a, b)
-    return a.name == b.name and a.on == b.on and T().Equal(a.tree, b.tree)
+    return a.name == b.name and a.on == b.on and T().Equal(a.tree, b.tree) and T().Equal(a.artwork, b.artwork)
 end
 local function Restore(snap)
-    st.draft.name, st.draft.on, st.draft.tree = snap.name, snap.on, T().Copy(snap.tree)
+    st.draft.name, st.draft.on, st.draft.tree, st.draft.artwork = snap.name, snap.on, T().Copy(snap.tree), Art(snap.artwork)
 end
 local function Changed()
     st.revision = st.revision + 1
@@ -52,6 +53,7 @@ function S.Revision() return st and st.revision or 0 end
 function S.Tree() return st and st.draft.tree end
 function S.Name() return st and st.draft.name end
 function S.On() return st and st.draft.on end
+function S.Artwork() return st and Art(st.draft.artwork) or nil end
 
 local function Open(index, rule, new, rows)
     local draft = {}
@@ -93,7 +95,7 @@ function S.BeginCopy()
     rule.name = name
     if not Open(#rows + 1, rule, true, rows) then return false end
     -- The copy has content that exists nowhere yet, so it always counts as unsaved.
-    st.saved = { name = nil, on = false, tree = { type = "group", match = "all", children = { { type = "empty" } } } }
+    st.saved = { name = nil, on = false, artwork = nil, tree = { type = "group", match = "all", children = { { type = "empty" } } } }
     return true
 end
 
@@ -129,7 +131,7 @@ function S.Rows()
     local rows, held = L().JunkRules()
     local out = {}
     for i, r in ipairs(rows) do
-        out[i] = { index = i, name = r.name or (r.kind and r.kind:sub(1, 1):upper() .. r.kind:sub(2)) or "Rule", on = r.on, brief = S.Brief(r) }
+        out[i] = { index = i, name = r.name or (r.kind and r.kind:sub(1, 1):upper() .. r.kind:sub(2)) or "Rule", on = r.on, brief = S.Brief(r), artwork = r.artwork }
     end
     return out, held
 end
@@ -314,7 +316,7 @@ function S.SetMatch(group, match)
 end
 
 local KIND = {}
-for _, k in ipairs({ "gear", "materials", "recipes", "consumables", "other" }) do KIND[k] = true end
+for _, k in ipairs({ "gear", "materials", "recipes", "consumables", "other", "fish", "meat" }) do KIND[k] = true end
 -- field: "value" (an item type, or yes/no as true/false), "min" or "max" for a quality range.
 function S.Set(node, field, value)
     if not st then return false, REFUSE.closed end
@@ -380,6 +382,22 @@ function S.SetName(text)
     if text == "" or text == st.draft.name then return false end
     local before = Snap()
     st.draft.name = text
+    Remember(before)
+    return true
+end
+
+-- A picked icon for the rule list (nil or the automatic choice goes back to the automatic icon). Cosmetic, undoable.
+function S.SetArtwork(ref)
+    if not st then return false, REFUSE.closed end
+    local art
+    if ref ~= nil then
+        art = R.Artwork and R.Artwork.Check(ref)
+        if not art then return false, "That icon isn't valid." end
+        if art.kind == "automatic" then art = nil end
+    end
+    if T().Equal(Art(art), Art(st.draft.artwork)) then return true end
+    local before = Snap()
+    st.draft.artwork = Art(art)
     Remember(before)
     return true
 end

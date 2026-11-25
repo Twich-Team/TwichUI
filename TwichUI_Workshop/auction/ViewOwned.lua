@@ -42,8 +42,7 @@ local function Info(row)
     return info
 end
 local function Quality(text,info)
-    local color=ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[info and info.quality or 1]
-    if color then text:SetTextColor(color.r,color.g,color.b) else UI.Paint(text,UI.K.text) end
+    UI.ItemQuality(text, info and info.quality)
 end
 local function ItemTip(owner,row)
     if not row or not GameTooltip then return end

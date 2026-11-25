@@ -24,9 +24,8 @@ local PROC_ATLAS = "UI-HUD-ActionBar-Proc-Loop-Flipbook"
 local ANTS_ATLAS = "rotationhelper_ants_flipbook"
 local SOFT_TEXTURE = [[Interface\TargetingFrame\UI-TargetingFrame-Stealable]]
 local FLIP_ROWS, FLIP_COLUMNS, FLIP_FRAMES = 6, 5, 30
--- How much bigger than the button each look is drawn at 100%: the spell alert is drawn 1.4 times the button by
--- the game itself (ActionButtonSpellAlerts.lua), the ants 66 on 45 (its template); the soft frame a little outside.
-local SCALE = { proc = 1.4, ants = 66 / 45, soft = 1.2, pixel = 1 }
+-- At 100% every look fits the button. Blizzard enlarges its own alerts, but that spills into
+-- adjacent buttons on compact bars. Only an explicit size choice should enlarge our artwork.
 local BREATH_LOW = 0.35
 local BREATH_SECONDS = 0.7
 
@@ -119,13 +118,17 @@ local function Lines(o)
     return lines
 end
 
--- The first picture of a flipbook atlas, for a glow that stands still.
-local function FirstPicture(tex, atlas)
+-- Reset the atlas bounds on every motion change: a still/breathing look crops to one
+-- picture, and a moving look must start from the whole sheet again.
+local function Picture(tex, atlas, first)
     if not (C_Texture and C_Texture.GetAtlasInfo) then return end
     local info = C_Texture.GetAtlasInfo(atlas)
     if type(info) ~= "table" then return end
     local l, r, t, b = Number(info.leftTexCoord, 0), Number(info.rightTexCoord, 1), Number(info.topTexCoord, 0), Number(info.bottomTexCoord, 1)
-    tex:SetTexCoord(l, l + (r - l) / FLIP_COLUMNS, t, t + (b - t) / FLIP_ROWS)
+    if first then
+        r, b = l + (r - l) / FLIP_COLUMNS, t + (b - t) / FLIP_ROWS
+    end
+    tex:SetTexCoord(l, r, t, b)
 end
 
 local function HideParts(o)
@@ -145,8 +148,15 @@ local function Apply(o, button, s)
     local w = Number(button:GetWidth(), 36)
     local h = Number(button:GetHeight(), 36)
     if w < 8 or h < 8 then w, h = 36, 36 end
-    local grow = (Number(s.size, 100) / 100) * (SCALE[look] or 1)
-    o:SetSize(w * grow, h * grow)
+    local grow = Number(s.size, 100) / 100
+    o:ClearAllPoints()
+    if grow == 1 then
+        -- These anchors also follow bar resizes while the glow is already running.
+        o:SetAllPoints(button)
+    else
+        o:SetPoint("CENTER", button, "CENTER", 0, 0)
+        o:SetSize(w * grow, h * grow)
+    end
     o:SetFrameLevel((Number(button:GetFrameLevel(), 1)) + 6)
     o:SetAlpha(Number(s.opacity, 100) / 100)
     local r, g, b = Rgb(s.color)
@@ -156,14 +166,13 @@ local function Apply(o, button, s)
         local f = Flip(o)
         local atlas = look == "proc" and PROC_ATLAS or ANTS_ATLAS
         f.tex:SetAtlas(atlas)
+        Picture(f.tex, atlas, motion ~= "moving")
         f.tex:SetDesaturated(true)
         f.tex:SetVertexColor(r, g, b, 1)
         f.tex:Show()
         if motion == "moving" then
             f.anim:SetDuration(1 / speed)
             f.group:Play()
-        else
-            FirstPicture(f.tex, atlas)
         end
     elseif look == "soft" then
         local t = Soft(o)

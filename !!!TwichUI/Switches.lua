@@ -268,8 +268,9 @@ Define("lootRolls", { apply = Refresh("LootRolls") })
 -- Action bar glows: off removes every glow, faded bar and event at once; your choices are kept
 Define("barGlows", { apply = Refresh("BarGlowController") })
 
--- Target dragon artwork on EllesmereUI's target frame
+-- Target Portrait Decorations on EllesmereUI's target frame
 Define("targetArt", { apply = Refresh("TargetArtDisplay") })
+Define("executeRange", { apply = Refresh("ExecuteRangeDisplay") })
 
 -- Hazard alerts: aura sounds the game plays; off removes every one TwichUI registered
 Define("hazardAlerts", { apply = Refresh("HazardAlerts") })

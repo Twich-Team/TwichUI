@@ -1,0 +1,401 @@
+{
+  "format": 1,
+  "elapsed_seconds": 7.5,
+  "counts": {
+    "killed": 15,
+    "survived": 0,
+    "invalid": 0,
+    "timeout": 0,
+    "infra": 0
+  },
+  "exit": 0,
+  "baseline": [
+    {
+      "test": "test_workshop_market_consumption.lua",
+      "status": "pass",
+      "seconds": 0.19,
+      "output": ""
+    },
+    {
+      "test": "test_workshop_market_consumption_async.lua",
+      "status": "pass",
+      "seconds": 0.12,
+      "output": ""
+    },
+    {
+      "test": "test_workshop_market_current.lua",
+      "status": "pass",
+      "seconds": 0.31,
+      "output": ""
+    },
+    {
+      "test": "test_workshop_market_pending.lua",
+      "status": "pass",
+      "seconds": 2.52,
+      "output": ""
+    }
+  ],
+  "changed_files": [],
+  "results": [
+    {
+      "id": "market.consumption.base-identity",
+      "status": "killed",
+      "message": "\t[C]: ?",
+      "kind": "assertion",
+      "killed_by": "test_workshop_market_consumption.lua",
+      "tests_run": [
+        {
+          "test": "test_workshop_market_consumption.lua",
+          "seconds": 0.1,
+          "status": "fail"
+        }
+      ],
+      "seconds": 0.14647847099877254,
+      "excerpt": "/workspace/twichui-env/root/usr/bin/lua5.1: test_workshop_market_consumption.lua:41: a native variant cannot inherit the base price\nstack traceback:\n\t[C]: in function 'assert'\n\ttest_workshop_market_consumption.lua:41: in main chunk\n\t[C]: ?",
+      "diff": "--- a/TwichUI_Workshop/Pricing.lua\n+++ b/TwichUI_Workshop/Pricing.lua\n@@ -149,3 +149,3 @@\n     local asked=R.Perf and R.Perf.on and elapsedClock()\n-    if opt and opt.variant then return nil,'variant' end\n+    if false then return nil,'variant' end\n     local status=B and B.Status()",
+      "kept": "",
+      "broad_killed_by": "",
+      "expected": true,
+      "command": "lua5.1 -e require(\"bit\"); ROOT=\"../!!!TwichUI/\"; REPO=\"../\"; TESTS=\"./\" test_workshop_market_consumption.lua",
+      "expect": "killed",
+      "file": "TwichUI_Workshop/Pricing.lua",
+      "why": "a native variant inherits a base-item reference"
+    },
+    {
+      "id": "market.consumption.faction",
+      "status": "killed",
+      "message": "\t[C]: ?",
+      "kind": "assertion",
+      "killed_by": "test_workshop_market_consumption.lua",
+      "tests_run": [
+        {
+          "test": "test_workshop_market_consumption.lua",
+          "seconds": 0.23,
+          "status": "fail"
+        }
+      ],
+      "seconds": 0.2843836840002041,
+      "excerpt": "/workspace/twichui-env/root/usr/bin/lua5.1: test_workshop_market_consumption.lua:132: another faction must not inherit these prices\nstack traceback:\n\t[C]: in function 'assert'\n\ttest_workshop_market_consumption.lua:132: in main chunk\n\t[C]: ?",
+      "diff": "--- a/TwichUI_Workshop/Pricing.lua\n+++ b/TwichUI_Workshop/Pricing.lua\n@@ -136,3 +136,3 @@\n     elseif UnitFactionGroup then side=W.Plain(UnitFactionGroup('player')) end\n-    if side~=h.market.faction then return nil,'market_mismatch' end\n+    if false then return nil,'market_mismatch' end\n     return h,nil,at",
+      "kept": "",
+      "broad_killed_by": "",
+      "expected": true,
+      "command": "lua5.1 -e require(\"bit\"); ROOT=\"../!!!TwichUI/\"; REPO=\"../\"; TESTS=\"./\" test_workshop_market_consumption.lua",
+      "expect": "killed",
+      "file": "TwichUI_Workshop/Pricing.lua",
+      "why": "a character uses another faction's reference prices"
+    },
+    {
+      "id": "market.consumption.quantity",
+      "status": "killed",
+      "message": "\t[C]: ?",
+      "kind": "assertion",
+      "killed_by": "test_workshop_market_consumption.lua",
+      "tests_run": [
+        {
+          "test": "test_workshop_market_consumption.lua",
+          "seconds": 0.08,
+          "status": "fail"
+        }
+      ],
+      "seconds": 0.12364928900024097,
+      "excerpt": "/workspace/twichui-env/root/usr/bin/lua5.1: test_workshop_market_consumption.lua:40: assertion failed!\nstack traceback:\n\t[C]: in function 'assert'\n\ttest_workshop_market_consumption.lua:40: in main chunk\n\t[C]: ?",
+      "diff": "--- a/TwichUI_Workshop/Prices.lua\n+++ b/TwichUI_Workshop/Prices.lua\n@@ -1124,3 +1124,3 @@\n         if p.price > 9007199254740991 / qty then return {state=\"none\",qty=qty,why=\"overflow\"} end\n-        q.state,q.cost,q.reference,q.source=\"estimate\",p.price*qty,true,p.source\n+        q.state,q.cost,q.reference,q.source=\"estimate\",p.price,true,p.source\n         return q",
+      "kept": "",
+      "broad_killed_by": "",
+      "expected": true,
+      "command": "lua5.1 -e require(\"bit\"); ROOT=\"../!!!TwichUI/\"; REPO=\"../\"; TESTS=\"./\" test_workshop_market_consumption.lua",
+      "expect": "killed",
+      "file": "TwichUI_Workshop/Prices.lua",
+      "why": "reference estimates lose the requested quantity"
+    },
+    {
+      "id": "market.consumption.worth-certainty",
+      "status": "killed",
+      "message": "\t[C]: ?",
+      "kind": "assertion",
+      "killed_by": "test_workshop_market_consumption.lua",
+      "tests_run": [
+        {
+          "test": "test_workshop_market_consumption.lua",
+          "seconds": 0.17,
+          "status": "fail"
+        }
+      ],
+      "seconds": 0.20538595799916948,
+      "excerpt": "/workspace/twichui-env/root/usr/bin/lua5.1: test_workshop_market_consumption.lua:89: a price reference is not a proven vendor/auction winner\nstack traceback:\n\t[C]: in function 'assert'\n\ttest_workshop_market_consumption.lua:89: in main chunk\n\t[C]: ?",
+      "diff": "--- a/TwichUI_Workshop/Worth.lua\n+++ b/TwichUI_Workshop/Worth.lua\n@@ -209,3 +209,3 @@\n \n-    if a.reference then return quiet(\"reference\",\"Market reference estimate; check current listings before selling\") end\n+    \n     if d and d.state==\"ok\" and d.outcomeReference then",
+      "kept": "",
+      "broad_killed_by": "",
+      "expected": true,
+      "command": "lua5.1 -e require(\"bit\"); ROOT=\"../!!!TwichUI/\"; REPO=\"../\"; TESTS=\"./\" test_workshop_market_consumption.lua",
+      "expect": "killed",
+      "file": "TwichUI_Workshop/Worth.lua",
+      "why": "a Market reference becomes a proven vendor/auction comparison"
+    },
+    {
+      "id": "market.consumption.pending-refresh",
+      "status": "killed",
+      "message": "\t[C]: ?",
+      "kind": "assertion",
+      "killed_by": "test_workshop_market_consumption_async.lua",
+      "tests_run": [
+        {
+          "test": "test_workshop_market_consumption_async.lua",
+          "seconds": 0.09,
+          "status": "fail"
+        }
+      ],
+      "seconds": 0.12795207499948447,
+      "excerpt": "/workspace/twichui-env/root/usr/bin/lua5.1: test_workshop_market_consumption_async.lua:39: different partitions never settled into one complete price snapshot\nstack traceback:\n\t[C]: in function 'assert'\n\ttest_workshop_market_consumption_async.lua:39: in main chunk\n\t[C]: ?",
+      "diff": "--- a/TwichUI_Workshop/Pricing.lua\n+++ b/TwichUI_Workshop/Pricing.lua\n@@ -170,3 +170,3 @@\n     if r then r={current=J.Copy(r.current),variant_key=r.variant_key} end\n-    if reason=='loading' then\n+    if false then\n         local waits=pending[bucket]",
+      "kept": "",
+      "broad_killed_by": "",
+      "expected": true,
+      "command": "lua5.1 -e require(\"bit\"); ROOT=\"../!!!TwichUI/\"; REPO=\"../\"; TESTS=\"./\" test_workshop_market_consumption_async.lua",
+      "expect": "killed",
+      "file": "TwichUI_Workshop/Pricing.lua",
+      "why": "different partitions never resolve into a complete feature snapshot"
+    },
+    {
+      "id": "market.consumption.cache-decoder-coupling",
+      "status": "killed",
+      "message": "\t[C]: ?",
+      "kind": "assertion",
+      "killed_by": "test_workshop_market_consumption_async.lua",
+      "tests_run": [
+        {
+          "test": "test_workshop_market_consumption_async.lua",
+          "seconds": 0.31,
+          "status": "fail"
+        }
+      ],
+      "seconds": 0.3270143019999523,
+      "excerpt": "/workspace/twichui-env/root/usr/bin/lua5.1: test_workshop_market_consumption_async.lua:39: different partitions never settled into one complete price snapshot\nstack traceback:\n\t[C]: in function 'assert'\n\ttest_workshop_market_consumption_async.lua:39: in main chunk\n\t[C]: ?",
+      "diff": "--- a/TwichUI_Workshop/Pricing.lua\n+++ b/TwichUI_Workshop/Pricing.lua\n@@ -154,3 +154,3 @@\n     item=W.Int(item,1,W.MAX_ID);if not item then return nil,'baditem' end\n-    local current=dataStamp(status)\n+    local current=P.Generation()\n     if stamp~=current then cache,count,stamp={},0,current;pending,pendingCount={},0;chartCache,chartPending=nil,nil end",
+      "kept": "",
+      "broad_killed_by": "",
+      "expected": true,
+      "command": "lua5.1 -e require(\"bit\"); ROOT=\"../!!!TwichUI/\"; REPO=\"../\"; TESTS=\"./\" test_workshop_market_consumption_async.lua",
+      "expect": "killed",
+      "file": "TwichUI_Workshop/Pricing.lua",
+      "why": "decoder progress repeatedly discards completed prices"
+    },
+    {
+      "id": "market.consumption.capacity-loop",
+      "status": "killed",
+      "message": "\t[C]: ?",
+      "kind": "assertion",
+      "killed_by": "test_workshop_market_consumption_async.lua",
+      "tests_run": [
+        {
+          "test": "test_workshop_market_consumption_async.lua",
+          "seconds": 0.12,
+          "status": "fail"
+        }
+      ],
+      "seconds": 0.13511613099944952,
+      "excerpt": "/workspace/twichui-env/root/usr/bin/lua5.1: test_workshop_market_consumption_async.lua:52: capacity overflow must keep bounded local fallback\nstack traceback:\n\t[C]: in function 'assert'\n\ttest_workshop_market_consumption_async.lua:52: in main chunk\n\t[C]: ?",
+      "diff": "--- a/TwichUI_Workshop/Pricing.lua\n+++ b/TwichUI_Workshop/Pricing.lua\n@@ -161,3 +161,3 @@\n     if reserved and not completion then observed('deduplicated');return nil,'loading',h,at end\n-    if not reserved and count+pendingCount>=P.MAX_CACHE then return nil,'lookup_limit',h,at end\n+    if false then return nil,'lookup_limit',h,at end\n     local waits=pending[bucket]",
+      "kept": "",
+      "broad_killed_by": "",
+      "expected": true,
+      "command": "lua5.1 -e require(\"bit\"); ROOT=\"../!!!TwichUI/\"; REPO=\"../\"; TESTS=\"./\" test_workshop_market_consumption_async.lua",
+      "expect": "killed",
+      "file": "TwichUI_Workshop/Pricing.lua",
+      "why": "cache overflow repeatedly restarts decoding instead of falling back"
+    },
+    {
+      "id": "market.pending.guard",
+      "status": "killed",
+      "message": "\t[C]: ?",
+      "kind": "assertion",
+      "killed_by": "test_workshop_market_pending.lua",
+      "tests_run": [
+        {
+          "test": "test_workshop_market_pending.lua",
+          "seconds": 0.17,
+          "status": "fail"
+        }
+      ],
+      "seconds": 0.19299487600073917,
+      "excerpt": "/workspace/twichui-env/root/usr/bin/lua5.1: test_workshop_market_pending.lua:58: assertion failed!\nstack traceback:\n\t[C]: in function 'assert'\n\ttest_workshop_market_pending.lua:58: in main chunk\n\t[C]: ?",
+      "diff": "--- a/TwichUI_Workshop/Pricing.lua\n+++ b/TwichUI_Workshop/Pricing.lua\n@@ -160,3 +160,3 @@\n     local reserved=pending[bucket] and pending[bucket][item]\n-    if reserved and not completion then observed('deduplicated');return nil,'loading',h,at end\n+    if false then observed('deduplicated');return nil,'loading',h,at end\n     if not reserved and count+pendingCount>=P.MAX_CACHE then return nil,'lookup_limit',h,at end",
+      "kept": "",
+      "broad_killed_by": "",
+      "expected": true,
+      "command": "lua5.1 -e require(\"bit\"); ROOT=\"../!!!TwichUI/\"; REPO=\"../\"; TESTS=\"./\" test_workshop_market_pending.lua",
+      "expect": "killed",
+      "file": "TwichUI_Workshop/Pricing.lua",
+      "why": "redraws repeat reader and hash work for an already reserved identity"
+    },
+    {
+      "id": "market.pending.completion",
+      "status": "killed",
+      "message": "\t[C]: ?",
+      "kind": "assertion",
+      "killed_by": "test_workshop_market_pending.lua",
+      "tests_run": [
+        {
+          "test": "test_workshop_market_pending.lua",
+          "seconds": 0.2,
+          "status": "fail"
+        }
+      ],
+      "seconds": 0.21561845900032495,
+      "excerpt": "/workspace/twichui-env/root/usr/bin/lua5.1: test_workshop_market_pending.lua:61: assertion failed!\nstack traceback:\n\t[C]: in function 'assert'\n\ttest_workshop_market_pending.lua:61: in main chunk\n\t[C]: ?",
+      "diff": "--- a/TwichUI_Workshop/Pricing.lua\n+++ b/TwichUI_Workshop/Pricing.lua\n@@ -160,3 +160,3 @@\n     local reserved=pending[bucket] and pending[bucket][item]\n-    if reserved and not completion then observed('deduplicated');return nil,'loading',h,at end\n+    if reserved then observed('deduplicated');return nil,'loading',h,at end\n     if not reserved and count+pendingCount>=P.MAX_CACHE then return nil,'lookup_limit',h,at end",
+      "kept": "",
+      "broad_killed_by": "",
+      "expected": true,
+      "command": "lua5.1 -e require(\"bit\"); ROOT=\"../!!!TwichUI/\"; REPO=\"../\"; TESTS=\"./\" test_workshop_market_pending.lua",
+      "expect": "killed",
+      "file": "TwichUI_Workshop/Pricing.lua",
+      "why": "the pending guard also blocks the only completion writer"
+    },
+    {
+      "id": "market.pending.revision",
+      "status": "killed",
+      "message": "\t[C]: ?",
+      "kind": "assertion",
+      "killed_by": "test_workshop_market_pending.lua",
+      "tests_run": [
+        {
+          "test": "test_workshop_market_pending.lua",
+          "seconds": 2.32,
+          "status": "fail"
+        }
+      ],
+      "seconds": 2.341747858999952,
+      "excerpt": "/workspace/twichui-env/root/usr/bin/lua5.1: test_workshop_market_pending.lua:149: assertion failed!\nstack traceback:\n\t[C]: in function 'assert'\n\ttest_workshop_market_pending.lua:149: in main chunk\n\t[C]: ?",
+      "diff": "--- a/TwichUI_Workshop/Pricing.lua\n+++ b/TwichUI_Workshop/Pricing.lua\n@@ -329,3 +329,3 @@\n     end\n-    if changed then revision=revision+1;P.Notify() end\n+    if changed then P.Notify() end\n     if chartPending==bucket then chartPending=nil;P.Notify(0) end",
+      "kept": "",
+      "broad_killed_by": "",
+      "expected": true,
+      "command": "lua5.1 -e require(\"bit\"); ROOT=\"../!!!TwichUI/\"; REPO=\"../\"; TESTS=\"./\" test_workshop_market_pending.lua",
+      "expect": "killed",
+      "file": "TwichUI_Workshop/Pricing.lua",
+      "why": "completion after checked_parts stabilizes retains memoized fallback answers"
+    },
+    {
+      "id": "market.pending.elapsed-budget",
+      "status": "killed",
+      "message": "\t[C]: ?",
+      "kind": "assertion",
+      "killed_by": "test_workshop_market_pending.lua",
+      "tests_run": [
+        {
+          "test": "test_workshop_market_pending.lua",
+          "seconds": 1.3,
+          "status": "fail"
+        }
+      ],
+      "seconds": 1.3164999060008995,
+      "excerpt": "/workspace/twichui-env/root/usr/bin/lua5.1: test_workshop_market_pending.lua:90: completion exceeded budget plus one indivisible read\nstack traceback:\n\t[C]: in function 'assert'\n\ttest_workshop_market_pending.lua:90: in main chunk\n\t[C]: ?",
+      "diff": "--- a/TwichUI_Workshop/Summary.lua\n+++ b/TwichUI_Workshop/Summary.lua\n@@ -257,3 +257,3 @@\n             end\n-        until n>=limit or clock()-start>=budget\n+        until n>=limit \n         local elapsed=math.max(0,clock()-start)",
+      "kept": "",
+      "broad_killed_by": "",
+      "expected": true,
+      "command": "lua5.1 -e require(\"bit\"); ROOT=\"../!!!TwichUI/\"; REPO=\"../\"; TESTS=\"./\" test_workshop_market_pending.lua",
+      "expect": "killed",
+      "file": "TwichUI_Workshop/Summary.lua",
+      "why": "a completion slice respects only record count instead of elapsed CPU"
+    },
+    {
+      "id": "market.pending.rejected-retry",
+      "status": "killed",
+      "message": "\t[C]: ?",
+      "kind": "assertion",
+      "killed_by": "test_workshop_market_pending.lua",
+      "tests_run": [
+        {
+          "test": "test_workshop_market_pending.lua",
+          "seconds": 1.91,
+          "status": "fail"
+        }
+      ],
+      "seconds": 1.927882239999235,
+      "excerpt": "/workspace/twichui-env/root/usr/bin/lua5.1: test_workshop_market_pending.lua:126: combat retry was not committed by its completion writer\nstack traceback:\n\t[C]: in function 'assert'\n\ttest_workshop_market_pending.lua:126: in main chunk\n\t[C]: ?",
+      "diff": "--- a/TwichUI_Workshop/Pricing.lua\n+++ b/TwichUI_Workshop/Pricing.lua\n@@ -306,3 +306,3 @@\n     -- bucket queue behind this handoff, never to the rejected cursor.\n-    if failure then pending[bucket]=nil end\n+    -- rejected reservations remain in the live bucket\n     if waits then",
+      "kept": "",
+      "broad_killed_by": "",
+      "expected": true,
+      "command": "lua5.1 -e require(\"bit\"); ROOT=\"../!!!TwichUI/\"; REPO=\"../\"; TESTS=\"./\" test_workshop_market_pending.lua",
+      "expect": "killed",
+      "file": "TwichUI_Workshop/Pricing.lua",
+      "why": "a post-combat retry joins the rejected drain and loses its completion"
+    },
+    {
+      "id": "market.current.path",
+      "status": "killed",
+      "message": "\t[C]: ?",
+      "kind": "runtime-error",
+      "killed_by": "test_workshop_market_current.lua",
+      "tests_run": [
+        {
+          "test": "test_workshop_market_current.lua",
+          "seconds": 0.08,
+          "status": "fail"
+        }
+      ],
+      "seconds": 0.09749740199913504,
+      "excerpt": "/workspace/twichui-env/root/usr/bin/lua5.1: test_workshop_market_current.lua:56: attempt to index a nil value\nstack traceback:\n\ttest_workshop_market_current.lua:56: in main chunk\n\t[C]: ?",
+      "diff": "--- a/TwichUI_Workshop/Pricing.lua\n+++ b/TwichUI_Workshop/Pricing.lua\n@@ -5,3 +5,3 @@\n local P={MAX_CACHE=8192,MAX_AGE=86400}\n-local CURRENT_ONLY={current=true}\n+local CURRENT_ONLY={current=false}\n W.Pricing=P",
+      "kept": "",
+      "broad_killed_by": "",
+      "expected": true,
+      "command": "lua5.1 -e require(\"bit\"); ROOT=\"../!!!TwichUI/\"; REPO=\"../\"; TESTS=\"./\" test_workshop_market_current.lua",
+      "expect": "killed",
+      "file": "TwichUI_Workshop/Pricing.lua",
+      "why": "cold pricing requests rich history instead of the verified current projection"
+    },
+    {
+      "id": "market.current.binding",
+      "status": "killed",
+      "message": "\t[C]: ?",
+      "kind": "assertion",
+      "killed_by": "test_workshop_market_current.lua",
+      "tests_run": [
+        {
+          "test": "test_workshop_market_current.lua",
+          "seconds": 0.09,
+          "status": "fail"
+        }
+      ],
+      "seconds": 0.1071101039997302,
+      "excerpt": "/workspace/twichui-env/root/usr/bin/lua5.1: test_workshop_market_current.lua:83: mismatched pair escaped whole-generation rollback\nstack traceback:\n\t[C]: in function 'assert'\n\ttest_workshop_market_current.lua:83: in main chunk\n\t[C]: ?",
+      "diff": "--- a/TwichUI_Workshop/Summary.lua\n+++ b/TwichUI_Workshop/Summary.lua\n@@ -134,3 +134,3 @@\n         for _,current in ipairs(h.partitions)do if current.bucket==p.bucket then paired=current;break end end\n-        need(paired and hash:Finish()==paired.sha256)\n+        need(paired~=nil)\n     end",
+      "kept": "",
+      "broad_killed_by": "",
+      "expected": true,
+      "command": "lua5.1 -e require(\"bit\"); ROOT=\"../!!!TwichUI/\"; REPO=\"../\"; TESTS=\"./\" test_workshop_market_current.lua",
+      "expect": "killed",
+      "file": "TwichUI_Workshop/Summary.lua",
+      "why": "individually rehashed rich data mixes with unrelated current prices"
+    },
+    {
+      "id": "market.current.priority",
+      "status": "killed",
+      "message": "\t[C]: ?",
+      "kind": "assertion",
+      "killed_by": "test_workshop_market_current.lua",
+      "tests_run": [
+        {
+          "test": "test_workshop_market_current.lua",
+          "seconds": 0.22,
+          "status": "fail"
+        }
+      ],
+      "seconds": 0.2429268959986075,
+      "excerpt": "/workspace/twichui-env/root/usr/bin/lua5.1: test_workshop_market_current.lua:113: current request did not preempt the history job\nstack traceback:\n\t[C]: in function 'assert'\n\ttest_workshop_market_current.lua:113: in main chunk\n\t[C]: ?",
+      "diff": "--- a/TwichUI_Workshop/Summary.lua\n+++ b/TwichUI_Workshop/Summary.lua\n@@ -298,3 +298,3 @@\n         if observing()then queuedAt[bucket]={at=clock(),capture=R.Perf.captureID}end\n-        if bucket<64 and active.header.contract_version==3 and job and job.kind=='part' and job.bucket>=64 then\n+        if false then\n             -- One bounded historical coroutine can pause between slices. Current",
+      "kept": "",
+      "broad_killed_by": "",
+      "expected": true,
+      "command": "lua5.1 -e require(\"bit\"); ROOT=\"../!!!TwichUI/\"; REPO=\"../\"; TESTS=\"./\" test_workshop_market_current.lua",
+      "expect": "killed",
+      "file": "TwichUI_Workshop/Summary.lua",
+      "why": "a cold current request waits behind an already-running unrelated chart"
+    }
+  ]
+}

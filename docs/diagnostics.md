@@ -7,6 +7,8 @@ checked in Forever's API documentation (`../wow-ui-source`, branch `forever`, 1.
 and the behaviour was tested offline (Lua 5.1, stand-in frames). See "In-game checks still to do".
 
 The older `/tui diagnostics` (troubleshooting report, temporary tracing, `diag/`) is unchanged and separate.
+For map-specific snapshots, bounded event recording and one-click report preparation,
+use **`/tui mapdiag`**: [player workflow and AI schema](map-diagnostics.md).
 
 ## Packaging and loading
 
@@ -124,11 +126,13 @@ uses an item, sends anything or makes up events. Each states its cost before you
 | `npcs.search` | `npcs/Search.lua` `SR.Run` (not for an empty query) | search |
 | `npcs.knowledge.rebuild` | `npcs/Knowledge.lua` `Build` | rebuild |
 | `npcs.map.layout` | `npcs/Map.lua` `NMAP.Layout` | layout |
+| `npcs.map.fade` | `npcs/Map.lua` `FadeTick`; only during a 0.18-second marker entry | update |
 | `guildloc.tick` (`Perf.Call`, after the throttle and the early exits) | `guildloc/Comm.lua` `TickWork` | update |
 | `guildloc.receive` (`Perf.Call`, after the off test) | `guildloc/Comm.lua` `Receive` | bulk |
 | `guildloc.roster` (`Perf.Call`) | `guildloc/Roster.lua` `Rebuild` | rebuild |
 | `guildloc.map.layout` (`Perf.Start`, only with the map open) | `guildloc/Map.lua` `GM.Layout` | layout |
 | `guildloc.search` (`Perf.Start`) | `guildloc/Map.lua` `GM.Search` | bulk |
+| `guildloc.diagnostic` (`Perf.Call`, diagnostic controls only) | `guildloc/Diagnostics.lua` `Handle`, `Poll`; four polls during an explicit 90-second check, automatic replies at most every 10 seconds | bulk |
 | `npcs.import`, `npcs.cleanup` | `npcs/Store.lua` `NS.MergeReported`, `NS.ForgetMany` | bulk |
 | `pins.map.layout` | `pins/Map.lua` `PM.Layout` | layout |
 | `reminders.refresh` (`Perf.Call`), `reminders.decide` | `reminders/Controller.lua` | rebuild, evaluate |
@@ -141,6 +145,7 @@ uses an item, sends anything or makes up events. Each states its cost before you
 | `qol.groupFinderZones.row` | `qol/GroupFinderZones.lua` `Z.Draw`, hooked on the game's `LFGBrowseSearchEntry_Update` (installed the first time the switch is on; does nothing while it is off). `qol.groupFinderZones.labels` gauges the font strings made, one per row the game showed. | hook |
 | `gathering.evaluate`, `gathering.refresh`, `gathering.animate` | `qol/GatheringSparkles.lua` and `qol/GatheringSparklesDisplay.lua`: one target checked at most every 0.2 seconds plus events, lifecycle changes, and animation only while visible. `gathering.frames`, `.shown`, `.timers`, `.listeners`, `.units` and `.cvars` gauge the bounded retained state. | evaluate, work, update |
 | `buffback.aura`, `buffback.event` (`Perf.Wrap`) | `buffback/Watch.lua`'s two private event frames (your own UNIT_AURA and UNIT_SPELLCAST_SUCCEEDED; zone, resting, combat, target, group and spell changes), only while it is on | event |
+| `loot.victory.event`, `loot.victory.tick` (`Perf.Wrap`) | `loot/Victory.lua`: confirmed win relay and one-shot reveal/fade; bounded queue/pool/listener gauges and `loot.retainedDisplays` (recent presentation snapshots, at most 32, lazily expired after 60 s) in Loot Rolls snapshot | event, update |
 | `loot.event` (`Perf.Wrap`) | `loot/Roll.lua`'s private event frame (group-loot roll events, the roll history, item information), only while Loot Rolls is on | event |
 | `loot.layout`, `loot.tick` (`Perf.Wrap`) | `loot/Cards.lua` `Layout` (a roll started, changed or ended, or a setting changed) and the stack's `OnUpdate` (the countdown bars: about 20 a second, only while a card is counting down or entering) | layout, update |
 | `settings.describe`, `settings.window.build` (`Perf.Call`) | `TwichUI_Settings/Window.lua` `UI.Open` | init |
@@ -152,6 +157,9 @@ uses an item, sends anything or makes up events. Each states its cost before you
 | `nav.load` (`Perf.Call`) | `nav/Data.lua` `ND.Load`, around `C_AddOns.LoadAddOn` of `TwichUI_NavData` | init |
 | `layouts.load` (`Perf.Call`) | `LayoutsLauncher.lua` `L.Load`, around `C_AddOns.LoadAddOn` of `TwichUI_Layouts` | init |
 | `workshop.load` (`Perf.Call`) | `WorkshopLauncher.lua` `L.Load`, around `C_AddOns.LoadAddOn` of `TwichUI_Workshop` | init |
+| `fishing.load` (`Perf.Call`) | `FishingLauncher.lua` `L.Load`, around `C_AddOns.LoadAddOn` of `TwichUI_Fishing` | init |
+| `fishing.decide`, `fishing.loot`, `fishing.bags` (`Perf.Start`, `Perf.Wrap`) | `TwichUI_Fishing/Action.lua` fishing-key `PreClick`; `Loot.lua` loot events; `Main.lua` `BAG_UPDATE_DELAYED`. Gauges `fishing.queue`, `fishing.sessions`, `fishing.listeners` read counts only | evaluate, update |
+| `fishing.castbar`, `fishing.list`, `fishing.fade` (`Perf.Start`) | `TwichUI_Fishing/CastBar.lua` `OnUpdate` (only while a line is out in Fishing Mode, after its 30-a-second throttle); `CatchList.lua` `L.Refresh` (per catch while shown); `Fade.lua` `Tick` (once a second while the interface is faded). Gauge `fishing.toasts` (notices showing or waiting) reads a count only | update |
 | `auction.proof`, `auction.proofWatch` (`Perf.Call`) | `auction/Host.lua` activation/restoration and 0.25 s watchdog, only during the explicit AH-1a diagnostic. Gauges `auction.proofLease` and `auction.proofTimer` are 0 or 1 and never build/load anything. No per-login activation or auction requests | layout, update |
 | `workshop.junkTest` (`Perf.Call`, `Perf.Start`) | `TwichUI_Workshop/Junk.lua` `J.Inspect`, `J.Survey > Step` (visible while the settings window is shown) | Junk rule item test and bag survey: one item per request, 30 slots per slice for a survey; reads and decides like marking and writes nothing | rebuild |
 | `settings.junkBuilder.layout` (`Perf.Call`) | `TwichUI_Settings/pages/JunkBuilder.lua` `Layout` (visible while the settings window is shown) | The rule builder drawn after an edit, click or item test; never per frame. Gauges `junk.builder.cards`, `junk.builder.groups` (pools that grow once to the 32-node rule limit) and `junk.builder.open` | layout |
@@ -179,6 +187,10 @@ uses an item, sends anything or makes up events. Each states its cost before you
 | `layouts.plan`, `layouts.apply`, `layouts.verify`, `layouts.restore` (`Perf.Call`) | `TwichUI_Layouts/Engine.lua` `LY.Plan` (with an update's comparison), `LY.Apply`, `LY.Verify`, `LY.VerifyRestore` and `LY.VerifyUndo` (with the baseline commit), `LY.Restore` and `LY.Undo` (on request; `layouts.verify` also once after the reload that finishes an install, restore or undo) | rebuild, bulk, evaluate, bulk |
 | `classbars.anim`, `pins.ping.tick`, `npcs.map.pulse` (`Perf.Call`) | `classbars/Anim.lua`, `pins/PingMap.lua`, `npcs/Map.lua` | update |
 | `map.view.step`, `map.view.follow`, `map.view.notify` (`Perf.Wrap`) | `map/View.lua` OnUpdate scripts | update |
+| `map.art.update`, `map.detail.update`, `map.cave.update` (`Perf.Wrap`) | Production painting/city, terrain and cave view updates; distinguish these children from inclusive notification cost | layout |
+| `map.cave.fade` (`Perf.Wrap`) | `map/Caves.lua` `FadeStep`; 0.15-second entry only, no idle updater | update |
+| `map.interior.update`, `map.texture.load` (`Perf.Wrap`) | `map/Pictures.lua` visible WMO pictures and bounded texture-readiness fade | layout / update |
+| `map.support.snapshot`, `map.support.export` (`Perf.Wrap`) | `TwichUI_Diagnostics/MapCapture.lua`; support-tool overhead, excluded from map renderer cost findings | support |
 | `partyDeath.event`, `reminders.event`, `healer.event`, `healer.unitEvent`, `targetart.event`, `refreshments.cast` (`Perf.Wrap`) | the private event frames' OnEvent in `reminders/State.lua`, `healer/Watch.lua`, `modules/PartyDeath.lua`, `targetart/Display.lua`, `modules/Refreshments.lua` | event |
 | `rxp.skin.*`, `rxp.timers.*`, `rxp.waypoint.sync` (`Perf.Wrap`; `rxp.skin.currentTick` after its throttle) | the `hooksecurefunc` callbacks on RestedXP's functions and the hover button's OnUpdate in `modules/RestedXPSkin.lua`, `modules/RestedXPTimers.lua`, `qol/GuideWaypoint.lua` | hook, update |
 
@@ -508,3 +520,82 @@ cleanup gauges. The panel's frame time is an FPS-derived estimate; Diagnostics
 captures actual sampled frame times. No permanent panel ticker or auto-query exists.
 
 `workshop.summaryHistory` measures the negotiated history reader’s selected-item daily projection (at most 60 dated observations). It allocates no retained cache. Existing raw-byte/partition/decoded/checked gauges cover both supported summary contracts; contract 2 is negotiated only with a matching installed Companion consumer declaration.
+
+### Market PR1 completion capture
+
+`workshop.pricingComplete` scopes Summary's elapsed-budget handoff (total/worst
+slice), independently of `workshop.summaryValidate` and `.summaryLoad`.
+Opt-in aggregate counters `workshop.pricing.uniquePending`, `.deduplicated`,
+`.readerCalls`, `.baseKeys`, `.settled`, `.notifications`, `.fullLists` and
+`workshop.summary.decodeStarts` / `.decodeRepeats` contain no item-level data.
+Gauge `workshop.pricingPending` complements the existing compact reference cache,
+raw partition and decoder gauges. These reset/count through the existing bounded
+capture infrastructure; reading gauges never starts work. See the
+[PR1 capture definitions and limitations](performance/v2-market-pending-pricing-pr1.md#diagnostics-and-native-check).
+
+
+## Cold Market pricing (PR2)
+
+The opt-in `workshop` preset selects bounded Workshop gauges even when recording
+starts before its load-on-demand addon. General remains the default preset.
+Run `/tui perf start workshop 3`, mark `/tui perf mark opportunities-open`, then
+open Workshop → Opportunities; stop with `/tui perf stop`. Export Quick summary
+and JSON from Diagnostics after combat. See the [PR2 acceptance procedure](performance/v2-market-cold-pricing-pr2.md).
+
+`aggregates.elapsedWaits` is wall elapsed milliseconds, separate from instrumented
+CPU. It contains count/min/max/mean and approximate p50/p95/p99 (existing
+histogram precision, about 19%). No CPU scope spans a coroutine yield. At most 24
+elapsed identifiers are retained; samples above one hour or non-finite samples
+are refused. Captures reset observations and invalidate earlier request timers.
+There is no per-item export. Raw references measure first/ten usable cold
+responses and request wait distributions; terminal settlement includes missing
+prices. Opportunities measures a fixed initial visible cohort (at most 128
+internal recipe IDs), then all known rows; missing prices settle without being
+counted as priced rows. Fewer than ten priced visible rows produces no ten-row
+sample. Filtering, scrolling or changing page mid-capture makes cohort results
+unsuitable for before/after comparison.
+
+Partition queue wait and current/history validation wall time include scheduled
+waiting; validation CPU scopes and worst callback remain separate. Ten passive
+gauges cover raw bytes, completed decoded rows, parked history work, price cache
+and pending counts. A paused historical coroutine can retain temporary parsed
+rows beyond the single completed partition cache; the gauge is not a heap size.
+The prior generation can also retain its existing rollback cache. Whole-UI heap and sampled addon memory remain the available client measures.
+Default-off instrumentation adds no background timers or forced collection.
+
+
+## Incremental Opportunities (PR3)
+
+| Scope / counter | Production owner | Meaning |
+| --- | --- | --- |
+| `workshop.opportunityRow` | `ViewOpportunities.lua`, `MakeOppRow` | First-use viewport pool construction; total/worst per row. No permanent polling. |
+| `workshop.opportunityCallback` | `OpportunityEngine.lua`, scheduled continuation | Whole live worker callback, including validation, cleanup and rescheduling. |
+| `workshop.opportunitySource` | `OpportunityEngine.lua`, source guard | Synchronous source/context validation; included in batch budget. |
+| `workshop.opportunityBatch` | `OpportunityEngine.lua`, `Engine.Step` | Synchronous CPU per cooperative slice; total/worst. Scope stops before every scheduled continuation. |
+| `workshop.opportunityQuestion` | `Estimate.lua`, `Est.Ask` | Indivisible service-question CPU on memo misses; never includes a coroutine suspension. |
+| `workshop.opportunities.*` | `OpportunityEngine.lua`; presentation counters in `ViewOpportunities.lua` | Actual `crafts`, preparation passes (`calculated`), dependency `invalidations`, `catalogBuilds`, `batches`, `sorts`, `fullInvalidations`, `fullPublications`/`partialPublications`, `partialReuses` (stable provisional membership), `cancelled`/`errors`; actual `rowPaints`, `cellUpdates`, `detailUpdates`. `cacheHits` counts compatible catalog reads; `reused` counts estimates preserved during catalog reconciliation. |
+
+The opt-in Workshop preset now selects **24** gauges: its original ten plus
+`workshop.opportunities.known`, `.pending`, `.waiting`, `.settled`, `.retained`.
+They read bounded transient counts and never start work. General remains the
+default preset and the 40-gauge capacity is unchanged. Nine prepared-current passive proxies are included before Workshop loads. No item IDs or imported
+payloads are exported. Catalog state exists for the feature; R.Perf timing/counter
+collection remains capture-only; the engine keeps fixed-size aggregate/status fields.
+
+The initial visible cohort is captured after the first nonempty list publication;
+rows still calculating prevent premature visible/all settlement. Terminal missing
+prices settle honestly. Use `/tui perf start workshop 3` (three minutes), then
+`/tui perf mark opportunities-open`, open Opportunities and leave the initial
+viewport unchanged until settled. Stop with `/tui perf stop`; export Quick summary
+and JSON in Diagnostics. Use separate captures for scrolling/filtering, source
+changes and warm reopening. [Exact native procedure and interpretation](performance/v2-opportunities-incremental-pr3.md#native-forever-check).
+
+Fishing estimates: `fishing.economy` measures deferred batches in `TwichUI_Fishing/Economy.lua:Work` (at most eight pending items); `fishing.prices` reports the bounded item valuation cache. The scope excludes catch and animation work.
+
+Prepared-current capability adds `workshop.preparedLoad` (synchronous physical addon load) and
+`workshop.preparedVerify` (cooperative requested proofs/dense verification). The latter shares
+Summary's existing slice budget with history. Read-only `workshop.prepared.*` gauges expose
+loads, retained bytes, hashes, authenticated leaves, full partitions, flag words, hits,
+pending tasks and cancellations. Partition memory includes both banks of legacy current,
+prepared current (up to 32 per bank), and the unchanged 64 historical partitions.
+No item identities or payloads enter the report.

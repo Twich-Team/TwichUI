@@ -308,7 +308,9 @@ Adoption on other Settings pages can be incremental; standalone windows need a l
 helpers currently load with Settings. Wider rollout and real-client visual acceptance remain pending.
 
 
-### Appearance and the image picker (`pages/RemindersEditor.lua`, `pages/RemindersImagePicker.lua`, `reminders/Gallery.lua`)
+### Appearance and the image picker (`ArtworkPicker.lua`, Reminder editor/adapter, shared catalog)
+
+The shared Settings chooser is described in [the UX02 contract](design/shared-artwork-picker.md). Reminders keeps its display schema and `Gallery.Choose` persistence through the thin `RemindersImagePicker` adapter. No Loot Rules or Magic Inventory overrides are implemented. Valid unavailable selections remain saved, while the chooser shows default artwork with an unavailable message; Cancel never resets them.
 
 The player sees three display modes and one place to choose a picture; the five stored modes and the fields they use do not change.
 
@@ -331,9 +333,8 @@ The player sees three display modes and one place to choose a picture; the five 
 - **Compatibility.** Artwork is stored as `display.art` (an unknown id from a newer version is kept and reported "Artwork unavailable"), a TwichUI icon
   as `iconSource = "bundled"`, `icon = <id>`, an item as `iconSource = "item"`, `item = <id>`: what the old editor wrote.
 
-Cost and diagnostics: the catalog is static (80 entries, built once from `ArtData.lua`), the picker's frames are built the first time it opens and are
-bounded by the catalog (one tile per picture, reused), and a texture loads only while its tile is shown. It registers no event, timer or `OnUpdate`, so it
-has no TwichUI Diagnostics scope or gauge: there is nothing recurring to measure.
+Cost and diagnostics: the catalog is static (99 entries: 79 preserved plus 20 approved existing-file additions, built once by `R.Artwork`), the picker's frames are built the first time it opens and are
+bounded by the catalog (one tile per picture, reused), and a texture loads only while its tile is shown. While open, it listens for metadata for the selected item only; hide removes those listeners. There is no timer or `OnUpdate`. The small static catalog and explicit chooser need no new Diagnostics scope or gauge.
 
 Evidence: **unit-tested** (`tests/test_reminder_gallery.lua`, `tests/test_reminder_gallery.py`, `tests/test_reminders_settings.lua`);
 **simulator-tested** (`bash tools/simlab/reminders.sh appearance appearanceImage appearanceText appearanceLegacy picker pickerSearch pickerGame pickerGameApply pickerNarrow pickerEquipment pickerCharacter pickerRender`; `pickerRender` chooses every catalogued picture and checks the real renderer's live preview draws it:
@@ -442,7 +443,7 @@ is wanted**, coalesced 0.05 s; when the listening starts the buttons are read on
 **Settings (Reminders > a reminder > Action button glow).** A switch; the spell (ID, a pasted link, or a spell dropped from
 the spellbook: `GetCursorInfo`'s fourth answer); the look (spell alert, marching ants, soft frame, pixel border: Action bar
 glows' looks), the motion (moving, breathing, still) and a color, default a warm gold `fff2c14e`. Size, opacity and speed
-are the drawing's defaults. A sample (the spell's icon on a frame of the settings window, never a real button) glows as the
+are the drawing's defaults: every look fits within the button and follows button resizes. A sample (the spell's icon on a frame of the settings window, never a real button) glows as the
 buttons will, and a line says how many buttons hold the spell now. **Show on screen** (the reminder's preview) also shows
 the glow on the bars, whatever the rules say, without turning the reminder on; the preview ends in combat as before.
 

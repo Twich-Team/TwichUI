@@ -105,6 +105,8 @@ Check(page and page.group == "everyday" and page.kind == "hosted" and page.name 
 Check(K.pages.healerWatch.def.icon == "healerWatch" and R.Icons.Get("healerWatch"), "with the flask as its icon")
 local sw = S.variables.TWICHUI_healerWatch
 Check(sw and sw:GetValue() == false and sw:GetDefaultValue() == false, "off by default")
+local mainTip = K.rowsById.healerWatch:GetTooltip()
+Check(mainTip:find("Hover the live panel", 1, true) and mainTip:find("only a chosen message", 1, true), "communication is discoverable and says a choice is required")
 Check(K.pages.healerWatch.def.hostAfter == "Appearance and testing", "the frame follows the last card")
 local cards, primaries = {}, {}
 for _, row in ipairs(K.pages.healerWatch.rows) do

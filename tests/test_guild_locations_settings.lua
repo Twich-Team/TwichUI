@@ -111,4 +111,25 @@ do
   assert(Row(S, "Status").value() == "Not in a guild" and Row(S, "Status").detail():find("kept"))
 end
 
+-- 7. Current readiness explains a blocked send instead of claiming Sending; diagnostics open without changing sharing.
+do
+  local c, S = SettingsClient()
+  local GL = c.TwichUI.GuildLoc
+  local status = Row(S, "Status")
+  c.IsInGuild = function() return true end
+  GL.SendStatus = function() return false, "blocked" end
+  GL.Diagnostics = { Describe = function(code) assert(code == "blocked"); return "Addon messaging is blocked right now." end }
+  assert(status.value() == "Waiting" and status.detail():find("blocked", 1, true), "send block is explained")
+  GL.SendStatus = function() return true end
+  assert(status.value() == "Ready to send" and status.detail():find("does not confirm", 1, true), "readiness does not claim delivery")
+  local opens = 0
+  GL.Window = { Show = function() opens = opens + 1 end }
+  local before = c.TwichUIDB.guildLoc
+  local button = Row(S, "Diagnostics")
+  assert(button and button.kind == "button")
+  button.click()
+  assert(opens == 1 and c.TwichUIDB.guildLoc == before, "settings opens the focused view without changing sharing")
+  assert(button:GetTooltip():find("Opening the window sends nothing", 1, true))
+end
+
 print("GUILD LOCATIONS SETTINGS TESTS PASSED")

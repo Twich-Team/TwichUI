@@ -72,6 +72,7 @@ end
 -- does at most BATCH identity reads; no price evaluation and no data requests.
 function D.Catalog()
     local rows, byID, uses = {}, {}, {}
+    local bagCounts = C_Container and C_Container.GetContainerNumSlots and C_Container.GetContainerItemInfo
     local co = coroutine.create(function()
         local work = 0
         local function Tick()
@@ -90,7 +91,7 @@ function D.Catalog()
         for id in pairs(src.market and src.market.items or {}) do Add(id, "market"); Tick() end
         for id, on in pairs(D.Tracked()) do if on == true then Add(id, "tracked") end Tick() end
         local selected = D.Selected(); if selected then Add(selected, "selected") end
-        if C_Container and C_Container.GetContainerNumSlots and C_Container.GetContainerItemInfo then
+        if bagCounts then
             for bag = 0, (NUM_BAG_SLOTS or 4) do
                 for slot = 1, C_Container.GetContainerNumSlots(bag) do
                     local x = C_Container.GetContainerItemInfo(bag, slot)
@@ -98,7 +99,9 @@ function D.Catalog()
                         local r=Add(W.Plain(x.itemID), "bags")
                         if r then
                             r.slots=true
-                            local n=W.Int(x.stackCount,0,W.MAX_ID) or 0
+                            local count=W.Count(x.stackCount)
+                            if count then r.bagCount=(r.bagCount or 0)+count else r.countUnknown=true end
+                            local n=count or 0
                             local bound=W.Plain(x.isBound)
                             if bound==false then r.unbound=(r.unbound or 0)+n
                             elseif bound==true then r.bound=(r.bound or 0)+n
@@ -158,7 +161,9 @@ function D.Catalog()
         end
         for _, r in ipairs(rows) do
             r.info = D.Info(r.item)
-            r.count = O.BagCount(r.item)
+            -- GetItemCount can include equipped copies; only observed bag slots
+            -- establish this page's carried quantity. Missing counts stay unknown.
+            if bagCounts and not r.countUnknown then r.count = r.bagCount or 0 end
             r.uses = uses[r.item] or {}
             r.search = (r.info.name .. " " .. r.item):lower()
             Tick()
@@ -207,7 +212,9 @@ end
 -- actual allocation. Direct queued demand is kept while a newer plan runs.
 function D.Context(item, full, row)
     local f = row and row.info or D.Info(item)
-    local ctx = { qty = O.BagCount(item), sell = f.sell, bindType = f.bindType, now = time(),
+    local qty
+    if row then qty = row.count else qty = O.BagCount(item) end
+    local ctx = { qty = qty, sell = f.sell, bindType = f.bindType, now = time(),
         minGain = A.Gain(), facts = W.Facts.Of(item, {variant=row and row.variant==true}), disenchant = W.Worth.DisenchantRelevant(f) }
     local reserved, pending = D.Reserved(item)
     ctx.pendingPlan = pending
@@ -237,7 +244,7 @@ end
 function D.Decide(item, full, row) return A.Decide(item, D.Context(item, full, row)) end
 function D.Matches(row, query, source, auctionable, category)
     if query ~= "" and not row.search:find(query:lower(), 1, true) then return false end
-    if source == "bags" and not (row.count and row.count > 0) then return false end
+    if source == "bags" and not row.bags then return false end
     if source == "tracked" and D.Tracked()[row.item] ~= true then return false end
     if category and row.info.category ~= category then return false end
     local b = row.info.bindType

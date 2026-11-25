@@ -18,7 +18,7 @@ local DEFAULTS = {
     unexplored = "dim",      -- the zones' areas you haven't explored: "show", "dim" or "hide"
     -- detail
     detail = true,           -- the game's own minimap pictures over the map when zoomed in close
-    detailStrength = 70,     -- how strongly, in percent
+    detailStrength = 100,    -- maximum at deep zoom; intermediate zoom keeps the painted blend
     -- places
     caves = true, dungeons = true, travel = true,
     labels = true,           -- names beside places when zoomed in (never where they would overlap)
@@ -39,6 +39,7 @@ MXP.GROUPS = {
 }
 
 local function Valid(key, value)
+    if issecretvalue and issecretvalue(value) then return false end
     local d = DEFAULTS[key]
     if d == nil then return false end
     if type(d) == "boolean" then return type(value) == "boolean" end
@@ -50,7 +51,7 @@ MXP.Valid = Valid
 
 local function Saved()
     local ui = TwichUIDB and TwichUIDB.ui
-    local t = ui and ui.mapExplore
+    local t = type(ui) == "table" and ui.mapExplore
     return type(t) == "table" and t or nil
 end
 

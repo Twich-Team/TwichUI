@@ -17,7 +17,7 @@
 -- How it touches the game's map (as OpenMap does, approved for this): a data provider; hooks on the scroll container's
 -- wheel and press and on its zoom-level set-up (panning allowed at every zoom: baseScale); its scroll limits replaced
 -- while installed (the original put back when off), so the view can go anywhere on the world whatever map is underneath;
--- its wheel zoom mode set to none while the stitched map shows; its own InstantPanAndZoom to place the view; SetMapID to
+-- its wheel zoom mode set to none while the stitched map shows; its own InstantPanAndZoom to place the view; C_Map.OpenWorldMap to
 -- follow the view, never in combat (it waits). Maps that aren't part of the world (a battleground, Zephras Isle) are the
 -- game's own, with its own wheel zoom. Off, everything is put back and the map is shown whole.
 -- While OpenMap is loaded this stays off (MV.Blocker); nothing of OpenMap's is called or changed.
@@ -41,13 +41,14 @@ local provider
 local installed, hooked = false, false
 local active = false             -- the map underneath is part of the world, and the stitched painting is on it
 local switching = false
+local switchView                -- authoritative world camera while native map event rebuilds its canvas
 local savedWheel, origExtents
 local anim, driver
 local follower, stillFor = nil, 0
 local notifier
 local frames = {}                -- [mapID] = the map's place in world yards (VM.MapFrame + cont), or false
 local back = {}
-local lastView, resizeRestore
+local lastView, resizeRestore, initialMap
 local listeners = {}
 local stats = { wheel = 0, glides = 0, switches = 0, waits = 0, pressed = 0, dragged = 0, notified = 0, resized = 0, clicks = 0 }
 
@@ -75,7 +76,12 @@ local function Shown() return map ~= nil and map:IsShown() end
 MV.Shown = Shown
 
 -- Ready: the stitched map is up on an open map.
-local function Ready() return installed and active and Shown() end
+local function LayoutReady()
+    if not sc then return false end
+    local w, h = sc:GetWidth(), sc:GetHeight()
+    return VM.Finite(w) and VM.Finite(h) and w > 0 and h > 0
+end
+local function Ready() return installed and active and Shown() and LayoutReady() end
 MV.Ready = Ready
 
 ---------------------------------------------------------------------------
@@ -103,6 +109,7 @@ function MV.ViewSize() return sc:GetWidth(), sc:GetHeight() end
 function MV.CanvasSize() return sc.Child:GetWidth(), sc.Child:GetHeight() end
 
 local function FitPx()
+    if not LayoutReady() then return nil end
     local W, H = MW.Size()
     local vw, vh = MV.ViewSize()
     return math.min(vw / W, vh / H)
@@ -118,13 +125,21 @@ end
 
 -- The view: its middle (world) and zoom.
 function MV.View()
+    if switchView then return switchView.u, switchView.v, switchView.zoom end
+    if not LayoutReady() then
+        return lastView and lastView.u or 0.5, lastView and lastView.v or 0.5, lastView and lastView.zoom or 1
+    end
     local id = MV.MapID()
-    local u, v = MW.ToWorld(id, sc:GetCurrentScrollX() or 0.5, sc:GetCurrentScrollY() or 0.5)
-    return u, v, MV.Scale() * K(id) / FitPx()
+    local x, y, scale = sc:GetCurrentScrollX(), sc:GetCurrentScrollY(), MV.Scale()
+    x, y = VM.Finite(x) and x or 0.5, VM.Finite(y) and y or 0.5
+    local u, v = MW.ToWorld(id, x, y)
+    local zoom = VM.Finite(scale) and scale > 0 and scale * K(id) / FitPx() or 1
+    return u, v, zoom
 end
 
 -- The zoom at which map `id` just fits the view.
 function MV.FitZoom(id)
+    if not LayoutReady() then return nil end
     local l, r, t, b = MW.Rect(id)
     if not l then return nil end
     local W, H = MW.Size()
@@ -134,6 +149,8 @@ end
 
 -- The zoom at which a world rectangle just fits the view.
 function MV.RectZoom(u0, v0, u1, v1)
+    if not LayoutReady() or not (VM.Finite(u0) and VM.Finite(v0) and VM.Finite(u1) and VM.Finite(v1))
+        or u1 <= u0 or v1 <= v0 then return nil end
     local W, H = MW.Size()
     local vw, vh = MV.ViewSize()
     return math.min(vw / ((u1 - u0) * W), vh / ((v1 - v0) * H)) / FitPx()
@@ -159,7 +176,7 @@ local function CursorOffset()
     local x, y = sc:GetCursorPosition()
     local vw, vh = MV.ViewSize()
     local left, top = sc:GetLeft(), sc:GetTop()
-    if not (x and left) then return 0, 0 end
+    if not (VM.Finite(x) and VM.Finite(y) and VM.Finite(left) and VM.Finite(top)) then return 0, 0 end
     return x - (left + vw / 2), (top - vh / 2) - y
 end
 
@@ -172,9 +189,15 @@ function MV.CursorWorld()
 end
 
 local function ShowWorld(u, v, zoom)
+    if not Ready() or InCombat() or not (VM.Finite(u) and VM.Finite(v) and VM.Finite(zoom)) or zoom < 1 then return false end
     local id = MV.MapID()
     local x, y = MW.FromWorld(id, u, v)
     sc:InstantPanAndZoom(zoom * FitPx() / K(id), x, y, true)
+    -- Keep the actual rendered frame, including boundary clamping. Notifications may run
+    -- before the animation driver in the same frame, so their snapshot can be a frame old.
+    local actualU, actualV, actualZoom = MV.View()
+    lastView = { map = id, u = actualU, v = actualV, zoom = actualZoom }
+    return true
 end
 
 -- The deepest zoom at a world point: the choice, more over a city, and over a cave as far as its map needs.
@@ -184,7 +207,16 @@ function MV.MaxZoomAt(u, v)
     if u and MA and MA.CityAt(u, v) then most = most * CITY_DEEPER end
     local caves = R.MapCaves
     local cave = u and caves and caves.FillZoomAt(u, v)
-    if cave then most = math.max(most, cave) end
+    if cave then most = math.max(most, math.min(cave, MXP.Get("maxZoom") * 6, MXP.LIMITS.maxZoom[2] * CITY_DEEPER)) end
+    if u and not cave then
+        local detail = R.MapDetail
+        if not (MXP.Get("detail") and detail and detail.HasAt(u, v)) then
+            local city = MA and MA.CityAt(u, v)
+            local id = city or MW.Deepest(u, v)
+            local fit = MV.FitZoom(id)
+            if fit then most = math.min(most, math.max(1, fit * 4)) end
+        end
+    end
     return most
 end
 
@@ -219,6 +251,7 @@ function MV.Enlarged()
     local fit = MV.FitZoom(id)
     local MD = R.MapDetail
     return fit ~= nil and zoom > fit * 2.5 and not (MD and MD.Showing())
+        and not (R.MapCaves and R.MapCaves.Surfaced())
 end
 
 -- The canvas's frame level plus offset: what is drawn over the map's art and under its pins (detail 6, caves 7).
@@ -231,6 +264,7 @@ end
 -- Moving
 ---------------------------------------------------------------------------
 local function StopAnim()
+    if anim and R.MapTrace then R.MapTrace("animation-stop", anim.mode, anim.z1) end
     anim = nil
     if driver then driver:SetScript("OnUpdate", nil) end
 end
@@ -251,11 +285,28 @@ local Follow
 
 local function Step(_, elapsed)
     local a = anim
-    if not a or not Ready() or MV.MapID() ~= a.map then StopAnim() return end
+    if not a or not Ready() or InCombat() or MV.MapID() ~= a.map then StopAnim() return end
     a.t = a.t + math.min(elapsed or 0, 0.1)
     local done = a.t >= a.dur
-    ShowWorld(Frame(a, done and 1 or VM.Ease(a.t / a.dur)))
+    local wantU, wantV, wantZ = Frame(a, done and 1 or VM.Ease(a.t / a.dur))
+    ShowWorld(wantU, wantV, wantZ)
+    if R.MapTrace and a.mode == "anchor" then
+        local u, v, z = MV.View()
+        local clamped = math.abs(u - wantU) > 1e-8 or math.abs(v - wantV) > 1e-8
+        if clamped and not a.reportedClamp then
+            a.reportedClamp = true
+            R.MapTrace("boundary-clamp", z)
+        elseif not clamped then
+            local pu, pv = PerPx(z)
+            local errorPx = math.max(math.abs((a.au - u) / pu - a.sx), math.abs((a.av - v) / pv - a.sy))
+            if errorPx > 1 and not a.reportedAnchor then
+                a.reportedAnchor = true
+                R.MapTrace("anchor-error", errorPx, z)
+            end
+        end
+    end
     if done then
+        if R.MapTrace then R.MapTrace("animation-end", a.mode, a.z1) end
         StopAnim()
         if a.done then a.done() end
     end
@@ -263,6 +314,7 @@ end
 
 local function Start(a)
     a.map = MV.MapID()
+    if R.MapTrace then R.MapTrace("animation-start", a.mode, a.z0, a.z1) end
     if not MXP.Get("smooth") or not a.dur or a.dur <= 0 then
         StopAnim()
         ShowWorld(Frame(a, 1))
@@ -279,15 +331,20 @@ function MV.Animating() return anim ~= nil end
 
 -- Zoom by wheel notches about a screen point (sx, sy: from the view's middle; the pointer's by default).
 function MV.ZoomBy(notches, sx, sy)
-    if not Ready() or notches == 0 then return false end
+    if not Ready() or InCombat() or not VM.Finite(notches) or notches == 0 then
+        if R.MapTrace then R.MapTrace("motion-rejected", InCombat() and "combat" or "unready-or-invalid") end
+        return false
+    end
     local u, v, zoom = MV.View()
     if not sx then sx, sy = CursorOffset() end
+    if not (VM.Finite(sx) and VM.Finite(sy)) then return false end
     local pu, pv = PerPx(zoom)
     local au, av = u + sx * pu, v + sy * pv
     local from = (anim and anim.mode == "anchor") and anim.z1 or zoom
     local most = MV.MaxZoomAt(au, av)
-    if notches > 0 then most = math.max(most, math.min(from, zoom)) end   -- zooming in never pushes you out
+    most = math.max(most, from)   -- leaving a deeper context never reverses inward zoom or accelerates outward zoom
     local target = VM.Clamp(from * (1 + MXP.Get("wheelStep") / 100) ^ notches, 1, math.max(most, 1))
+    if R.MapTrace then R.MapTrace("wheel", notches, from, target, most) end
     if math.abs(target - zoom) < 1e-9 and not anim then return false end
     stats.wheel = stats.wheel + 1
     Start({ mode = "anchor", au = au, av = av, sx = sx, sy = sy, z0 = zoom, z1 = target, dur = WHEEL_SECONDS })
@@ -298,7 +355,7 @@ function MV.ZoomStep(notches) return MV.ZoomBy(notches, 0, 0) end
 
 -- A glide to a world point at `zoom` (within the limits there). done: once there.
 function MV.GlideTo(u, v, zoom, done)
-    if not Ready() then return false end
+    if not Ready() or InCombat() or not (VM.Finite(u) and VM.Finite(v) and VM.Finite(zoom)) or zoom <= 0 then return false end
     local u0, v0, z0 = MV.View()
     stats.glides = stats.glides + 1
     Start({ mode = "glide", u0 = u0, v0 = v0, z0 = z0, u1 = u, v1 = v,
@@ -309,7 +366,9 @@ end
 -- The view on a world rectangle, filling `fill` of it.
 function MV.FrameWorldRect(u0, v0, u1, v1, fill, done)
     if not Ready() then return false end
-    return MV.GlideTo((u0 + u1) / 2, (v0 + v1) / 2, MV.RectZoom(u0, v0, u1, v1) * (fill or 0.9), done)
+    local z = MV.RectZoom(u0, v0, u1, v1)
+    if not z or not VM.Finite(fill or 0.9) then return false end
+    return MV.GlideTo((u0 + u1) / 2, (v0 + v1) / 2, z * (fill or 0.9), done)
 end
 
 -- A map, whole, as the game shows it.
@@ -370,7 +429,8 @@ function MV.ShowMap(id)
     if not (installed and Shown()) then return false, "closed" end
     if InCombat() then return false, "combat" end
     if Ready() then MV.Remember("map") end
-    local ok = pcall(map.SetMapID, map, id)
+    local ok = pcall(C_Map.OpenWorldMap, id)
+    ok = ok and map:GetMapID() == id
     return ok, not ok and "failed" or nil
 end
 
@@ -391,7 +451,7 @@ function MV.ResolveClick(cx, cy)
     local u, v, zoom = MV.CursorWorld()
     local id, x, y = MW.Deepest(u, v)
     local MA = R.MapArt
-    local city = MA and MA.CityAt(u, v)
+    local city = MA and MA.CityAt(u, v, true)
     if city and zoom >= (MV.FitZoom(city) or math.huge) * 0.5 then
         id = city
         x, y = MW.FromWorld(city, u, v)
@@ -426,7 +486,7 @@ function MV.PickMap(u, v, zoom, current)
         end
     end
     local MA = R.MapArt
-    local city = MA and MA.CityAt(u, v)
+    local city = MA and MA.CityAt(u, v, true)
     if city then
         local need = (city == current) and LEAVE or ENTER
         if zoom >= MV.FitZoom(city) * need then pick = city end
@@ -436,15 +496,24 @@ end
 
 local function Switch(target)
     local u, v, zoom = MV.View()
+    switchView = { u = u, v = v, zoom = zoom }
     switching = true
-    local ok, err = pcall(map.SetMapID, map, target)
-    switching = false
-    if not ok then
-        if R.Fault then R.Fault("map switch", err) end
+    -- Let Blizzard set its map ID from WORLD_MAP_OPEN. A direct SetMapID call
+    -- taints the ID later returned to the native quest-pin refresh.
+    local ok, err = pcall(C_Map.OpenWorldMap, target)
+    if not ok or map:GetMapID() ~= target then
+        switching, switchView = false, nil
+        if not ok and R.Fault then R.Fault("map switch", err) end
         return false
     end
-    stats.switches = stats.switches + 1
+    -- WORLD_MAP_OPEN synchronously notifies providers before the new canvas has our
+    -- world camera. Keep their geometry stable, then publish one restored view.
+    switching = false
     if active then ShowWorld(u, v, zoom) end
+    switchView = nil
+    stats.switches = stats.switches + 1
+    Emit("attach")
+    if R.MapTrace then R.MapTrace("host-change", target, zoom) end
     return true
 end
 
@@ -528,19 +597,21 @@ local function Attach()
     local want = installed and id and MW.Stitchable(id) and MA.Build()
     active = (want and MA.Layout(id)) and true or false
     MA.SetShown(active)
-    if installed then
+    MA.SyncNative(active)
+    if installed and not InCombat() then
         if active then
             sc:SetMouseWheelZoomMode(MAP_CANVAS_MOUSE_WHEEL_ZOOM_BEHAVIOR_NONE)
             sc.baseScale = 0                          -- the game pans only past this scale: everywhere, on the world
         elseif savedWheel then
             sc:SetMouseWheelZoomMode(savedWheel)
+            sc:CreateZoomLevels()
         end
     end
-    Emit("attach")
+    if not (switching and active) then Emit("attach") end
 end
 
 local function RecordView()
-    if not Ready() then lastView = nil return end
+    if not Ready() then return end
     local u, v, zoom = MV.View()
     lastView = { map = MV.MapID(), u = u, v = v, zoom = zoom }
 end
@@ -548,14 +619,21 @@ end
 local function Notified()
     notifier:Hide()
     if not installed then return end
+    if not LayoutReady() then return end
     stats.notified = stats.notified + 1
     local restore = resizeRestore
     resizeRestore = nil
+    if initialMap and Ready() then
+        local id = initialMap
+        initialMap = nil
+        MV.FrameMap(id)
+    end
     if restore and Ready() and restore.map == MV.MapID() and not anim then
         stats.resized = stats.resized + 1
         ShowWorld(restore.u, restore.v, restore.zoom)
     end
     RecordView()
+    if R.MapArt then R.MapArt.SyncNative(active and Shown()) end
     Emit("view")
     Follow()
 end
@@ -575,7 +653,7 @@ local function Explored() if R.MapArt then R.MapArt.RefreshExplored() end Dirty(
 
 local function OnWheel(_, delta)
     if not Ready() then return end
-    MV.ZoomBy(delta > 0 and 1 or -1)
+    MV.ZoomBy(delta)
 end
 
 local function OnPress()
@@ -589,7 +667,7 @@ local function OnMapClick(_, button)
     local u, v, zoom = MV.CursorWorld()
     local chain = MW.ChainAt(u, v)
     local MA = R.MapArt
-    local city = MA and MA.CityAt(u, v)
+    local city = MA and MA.CityAt(u, v, true)
     if city then chain[#chain + 1] = city end
     if button == "LeftButton" then
         for _, id in ipairs(chain) do
@@ -625,7 +703,7 @@ local function Extents(self, scale)
 end
 
 local function OnZoomLevels(self)
-    if installed and active then self.baseScale = 0 end
+    if installed and active and not InCombat() then self.baseScale = 0 end
 end
 
 local function Build()
@@ -647,7 +725,8 @@ local function Build()
             if R.MapArt then R.MapArt.RefreshExplored() end
             local id = MV.MapID()
             local l, r, t, b = MW.Rect(id)
-            ShowWorld((l + r) / 2, (t + b) / 2, MV.FitZoom(id))   -- the map the game opened on, whole
+            if Ready() then ShowWorld((l + r) / 2, (t + b) / 2, MV.FitZoom(id))
+            else initialMap = id end
         end
         Emit("show")
         Dirty()
@@ -657,7 +736,9 @@ local function Build()
         if follower then follower:Hide() end
         R:Off("MAP_EXPLORATION_UPDATED", Explored)
         R:Off("PLAYER_REGEN_ENABLED", WaitForCombat)
-        lastView, resizeRestore = nil, nil
+        lastView, resizeRestore, initialMap = nil, nil, nil
+        if R.MapArt then R.MapArt.SyncNative(false) end
+        if R.MapArt then R.MapArt.SetShown(false) end
         MV.ForgetBack()
         Emit("hide")
     end
@@ -665,19 +746,26 @@ local function Build()
         StopAnim()
         Attach()
         if not switching then
+            initialMap = nil
             lastView = nil
             if Ready() then
                 -- a map the game (or you, through its dropdown) put up: shown whole, as the game shows it
                 local id = MV.MapID()
                 local l, r, t, b = MW.Rect(id)
                 ShowWorld((l + r) / 2, (t + b) / 2, MV.FitZoom(id))
+            elseif active then
+                initialMap = MV.MapID()
             end
         end
         Emit("map")
         Dirty()
     end
     function provider:OnCanvasSizeChanged()
-        if lastView and Shown() and lastView.map == MV.MapID() and not switching then resizeRestore = lastView end
+        if R.MapTrace then R.MapTrace("viewport", MV.ViewSize()) end
+        if lastView and Shown() and lastView.map == MV.MapID() and not switching then
+            StopAnim()
+            resizeRestore = lastView
+        end
         Dirty()
     end
     function provider:OnCanvasScaleChanged()
@@ -699,6 +787,13 @@ local function Install()
         sc:HookScript("OnMouseWheel", OnWheel)
         sc:HookScript("OnMouseDown", OnPress)
         hooksecurefunc(sc, "CreateZoomLevels", OnZoomLevels)
+        for _, name in ipairs({ "RefreshDetailLayers", "RefreshAllDataProviders" }) do
+            if type(map[name]) == "function" then
+                hooksecurefunc(map, name, function()
+                    if installed and R.MapArt then R.MapArt.SyncNative(active and Shown()) end
+                end)
+            end
+        end
         hooked = true
     end
     savedWheel = savedWheel or sc.mouseWheelZoomMode or MAP_CANVAS_MOUSE_WHEEL_ZOOM_BEHAVIOR_FULL
@@ -711,11 +806,12 @@ local function Uninstall()
     StopAnim()
     if follower then follower:Hide() end
     installed, active = false, false
-    lastView, resizeRestore = nil, nil
+    lastView, resizeRestore, initialMap = nil, nil, nil
     MV.ForgetBack()
     R:Off("MAP_EXPLORATION_UPDATED", Explored)
     R:Off("PLAYER_REGEN_ENABLED", WaitForCombat)
     if R.MapArt then R.MapArt.SetShown(false) end
+    if R.MapArt then R.MapArt.SyncNative(false) end
     WorldMapFrame:RemoveCanvasClickHandler(OnMapClick, CLICK_PRIORITY)
     WorldMapFrame:RemoveDataProvider(provider)
     sc.CalculateScrollExtentsAtScale = origExtents
@@ -731,16 +827,30 @@ end
 
 function MV.Refresh()
     if not Build() then return end
+    if InCombat() then R:On("PLAYER_REGEN_ENABLED", MV.Refresh) return end
+    R:Off("PLAYER_REGEN_ENABLED", MV.Refresh)
     local want = MV.Wanted()
     if want and not installed then Install()
     elseif not want and installed then Uninstall() end
 end
 
-MXP.Subscribe(function()
+MXP.Subscribe(function(key)
     if not Ready() then return end
     local u, v, zoom = MV.View()
     local most = math.max(MV.MaxZoomAt(u, v), 1)
-    if zoom > most * 1.001 then
+    local limitsChanged = key == "maxZoom" or key == "caves" or key == "detail"
+        or key == "behavior" or key == "places" or key == "all"
+    if limitsChanged and anim then
+        local a = anim
+        local targetMost = MV.MaxZoomAt(a.mode == "anchor" and a.au or a.u1, a.mode == "anchor" and a.av or a.v1)
+        if a.z1 > targetMost then
+            -- A new preference applies to the pending destination too. Rebase at the
+            -- rendered frame so changing a limit cannot jump backward in the old curve.
+            a.z0, a.z1, a.t = zoom, math.max(1, targetMost), 0
+            if a.mode == "glide" then a.u0, a.v0 = u, v end
+        end
+    end
+    if limitsChanged and zoom > most * 1.001 then
         StopAnim()
         ShowWorld(u, v, most)
     end
@@ -755,12 +865,40 @@ end)
 -- Read only, for /tui diagnostics and the tests.
 function MV.Snapshot()
     local out = { installed = installed, active = active, hooked = hooked, blocker = MV.Blocker(), back = #back,
-        animating = anim ~= nil, following = MV.Following(), frames = 0 }
+        animating = anim ~= nil, following = MV.Following(), switching = switching, frames = 0 }
     for _ in pairs(frames) do out.frames = out.frames + 1 end
     for k, v in pairs(stats) do out[k] = v end
     if Ready() then
         local u, v, zoom = MV.View()
         out.zoom, out.max, out.map = zoom, MV.MaxZoomAt(u, v), MV.MapID()
     end
+    return out
+end
+
+-- Explicit support capture, not called in ordinary rendering. No player position is read.
+function MV.Diagnostic(coordinates)
+    local out = MV.Snapshot()
+    out.enabled, out.shown, out.ready, out.nativeMap = MV.Wanted(), Shown(), Ready(), MV.MapID()
+    out.minimumZoom, out.combat, out.deferred = 1, InCombat() and true or false, follower ~= nil and follower:IsShown()
+    out.pendingZoom = anim and anim.z1 or false
+    out.zoom, out.max = out.zoom or "unavailable", out.max or "unavailable"
+    out.nativeMap = out.nativeMap or "unavailable"
+    out.viewportWidth, out.viewportHeight, out.uiScale = "unavailable", "unavailable", "unavailable"
+    out.center = { available = false, reason = coordinates and "map not ready" or "withheld" }
+    out.animationMode = anim and anim.mode or "none"
+    if sc then
+        out.viewportWidth, out.viewportHeight = MV.ViewSize()
+        local ok, scale = pcall(sc.GetEffectiveScale, sc)
+        out.uiScale = ok and VM.Finite(scale) and scale or "unavailable"
+        if Ready() and coordinates then
+            local u, v, z = MV.View()
+            out.center = { u = u, v = v, zoom = z, source = "native canvas converted by MapWorld" }
+            local x, y = MW.FromWorld(MV.MapID(), u, v)
+            out.hostPosition = { x = x, y = y }
+            out.viewRect = { MV.ViewRect() }
+            if anim and anim.mode == "anchor" then out.anchor = { u = anim.au, v = anim.av, offsetX = anim.sx, offsetY = anim.sy } end
+        end
+    end
+    out.coordinates = coordinates and "view and cursor only; player position never queried" or "withheld"
     return out
 end

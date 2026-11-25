@@ -1844,15 +1844,15 @@ local function Define()
         note = "Whether your action bar buttons glow at all. Which spells glow and how each looks stay yours: they are chosen per class and per character." })
     Switches(g, { "barGlows" })
 
-    g = Group("targetArt", "Target dragon artwork", { page = "targetArt",
-        note = "Whether the dragon on EllesmereUI's target frame is on, which artwork each kind of enemy gets, and how it is placed and drawn. It only decorates; it needs EllesmereUI on the receiving side to show." })
+    g = Group("targetArt", "Target Portrait Decorations", { page = "targetArt",
+        note = "Decorate the target portrait by enemy classification with automatic modern frames or customizable legacy dragons. It only decorates; it needs EllesmereUI on the receiving side to show." })
     Switches(g, { "targetArt" })
     do
         local TA = R.TargetArt
         local keys = {}
         if TA then
             for _, k in ipairs(TA.KINDS) do keys[#keys + 1] = TA.MapKey(k[1]) end
-            for _, key in ipairs({ "opacity", "scale", "framePoint", "artPoint", "x", "y", "mirror", "layer", "hideEllesmere" }) do keys[#keys + 1] = key end
+            for _, key in ipairs({ "style", "opacity", "scale", "framePoint", "artPoint", "x", "y", "mirror", "layer", "hideEllesmere" }) do keys[#keys + 1] = key end
             for _, id in ipairs(TA.ART_ORDER) do
                 for _, part in ipairs({ "X", "Y", "Scale" }) do keys[#keys + 1] = TA.TuneKey(id, part) end
             end
@@ -1860,9 +1860,14 @@ local function Define()
         Table(g, { "ui", "targetArt" }, TA, keys, TA and TA.ENUM)
     end
 
+    g = Group("executeRange", "Execute Range", { page = "executeRange",
+        note = "A personal health threshold on compatible EllesmereUI target and enemy nameplate health bars. Active highlighting is hidden when health is restricted; the marker remains available." })
+    Switches(g, { "executeRange" })
+    Table(g, { "ui", "executeRange" }, R.ExecuteRange, { "threshold", "target", "nameplates", "appearance", "color", "opacity", "texture" }, R.ExecuteRange and R.ExecuteRange.ENUM)
+
     g = Group("classPortrait", "Class Portrait Decorations", { page = "classPortrait",
         note = "Class artwork around the EllesmereUI player portrait, with automatic fit and relative size and position adjustments. Needs a compatible EllesmereUI player portrait on the receiving side." })
-    Table(g, { "ui", "classPortrait" }, R.ClassPortrait, { "enabled", "automatic", "size", "x", "y", "above", "strata" }, R.ClassPortrait and R.ClassPortrait.ENUM)
+    Table(g, { "ui", "classPortrait" }, R.ClassPortrait, { "enabled", "automatic", "size", "x", "y", "above", "strata", "artwork" }, R.ClassPortrait and R.ClassPortrait.ENUM)
 
     g = Group("hazard", "Hazard alerts", { page = "hazard",
         note = "Whether the alerts are on, which categories play and the sound each uses. The game plays the sounds when an aura you list is put on you. No combat log is read." })

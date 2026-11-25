@@ -1,0 +1,56 @@
+{
+  "baseline": "docs/evidence/v2-market-pr1/simulator-baseline-comparison.json",
+  "current": {
+    "craft": {
+      "count": 40,
+      "baseline40_present": true,
+      "additional": [],
+      "missing": [],
+      "stderr_sha256": "44f430ef2058770cb28c48367c0dd6d3a012df3afdab473429ae641d0a8566c5"
+    },
+    "opps": {
+      "count": 40,
+      "baseline40_present": true,
+      "additional": [],
+      "missing": [],
+      "stderr_sha256": "448e699ee02c969f1af8b6a3d99f7c953533b9ad50ac746eae62d2ec30b56779"
+    },
+    "shop": {
+      "count": 40,
+      "baseline40_present": true,
+      "additional": [],
+      "missing": [],
+      "stderr_sha256": "c9cb8d0de660797118c02c7f664dfca63d6645b208b467e2c4bbb1ef4648e2e0"
+    },
+    "history": {
+      "count": 40,
+      "baseline40_present": true,
+      "additional": [],
+      "missing": [],
+      "stderr_sha256": "9699bcea3696ff17f0599d5924ce9aa6a7597e1e1943f08980d1892d8f2ec64a"
+    },
+    "shopcollect": {
+      "count": 40,
+      "baseline40_present": true,
+      "additional": [],
+      "missing": [],
+      "stderr_sha256": "33484d69647646603cf48651307c4f0eefd607a8d954964aa1dbf193a5ab5ce2"
+    },
+    "strategy": {
+      "count": 40,
+      "baseline40_present": true,
+      "additional": [],
+      "missing": [],
+      "stderr_sha256": "1f6a1d4020a731323f0b206b1f6a84c780e8aff145132bfd5428f731dd87ec49"
+    },
+    "wrong": {
+      "count": 41,
+      "baseline40_present": true,
+      "additional": [
+        "SIMLAB check FAIL [display] Peacebloom shared by two recipes: need/in bags/still needed | expected=7/4/3 (deliberately wrong) | actual=7/4/3"
+      ],
+      "missing": [],
+      "stderr_sha256": "813a48b9946b0fcbd91f9faf900b5bec53c94d49e059d303f4b9cde6543516fd"
+    }
+  }
+}

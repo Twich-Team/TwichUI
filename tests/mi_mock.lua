@@ -321,7 +321,9 @@ function MIClient(name, opts)
 
   if opts.beforeFiles then opts.beforeFiles(c) end
   local files = opts.files or { "inventory/Rules.lua", "inventory/Items.lua", "inventory/Plan.lua", "inventory/Design.lua", "inventory/GuildBank.lua", "inventory/GuildPlan.lua", "inventory/Run.lua", "inventory/GuildRun.lua", "inventory/GuildPrep.lua" }
-  for _, f in ipairs(files) do
+  local toLoad = { "ForeverItemFamilies.lua" }
+  for _, f in ipairs(files) do toLoad[#toLoad + 1] = f end
+  for _, f in ipairs(toLoad) do
     local chunk = assert(loadfile(ROOT .. f))
     setfenv(chunk, c)
     chunk("!!!TwichUI", {})
@@ -379,6 +381,8 @@ function MIFake(kind, parent)
     GetEffectiveScale = function() return 1 end, GetScale = function() return 1 end,
     GetOwner = function(s) return s.owner end, SetOwner = function(s, o) s.owner = o end,
     GetFont = function() return "Fonts\\FRIZQT__.TTF", 12, "" end, SetFont = function() return true end,
+    SetParent = function(s, p) s.parent = p end, GetParent = function(s) return s.parent end,
+    GetFrameStrata = function(s) return s.strata or "MEDIUM" end,
     GetFrameLevel = function(s) return s.level or 1 end, SetFrameLevel = function(s, v) s.level = v end,
     SetAlpha = function(s, a) s.alpha = a end, GetAlpha = function(s) return s.alpha or 1 end,
     SetTexture = function(s, t) s.texture = t end,

@@ -448,6 +448,17 @@ Lab.Step("disclosures and navigation", function()
                 page.QueueRefresh(); Lab.Settle(.2)
             end
             local draft, mi = page.Editing(), R.MagicInventory
+            local actions = UI.View(key).hostFooter
+            Lab.Check("construct", "rule actions are outside the scrolling form", false, actions:GetParent() == view.frame)
+            Lab.Check("construct", "the page reset is absent", nil, view.reset)
+            local footerBottom = actions:GetBottom()
+            local beforeScroll = scroll:GetVerticalScroll()
+            scroll:SetVerticalScroll(scroll:GetVerticalScrollRange()); Lab.Settle(.1)
+            Lab.Check("state", "the rule form scrolls", true, scroll:GetVerticalScroll() > 0)
+            Lab.Check("state", "rule footer stays in place", footerBottom, actions:GetBottom())
+            Lab.Check("construct", "the form stops above the footer", true, scroll:GetBottom() >= actions:GetTop())
+            Lab.Check("state", "Save stays visible while scrolling", true, page.Control("eSave"):IsVisible())
+            scroll:SetVerticalScroll(beforeScroll); Lab.Settle(.1)
             local saved = RuleDigest(mi.Rules())
             local kind, flow, dest, keep = draft.kind, draft.flow, draft.dest, draft.keep
             for _, choice in ipairs(mi.KIND_ORDER) do
@@ -538,6 +549,7 @@ Lab.Step("disclosures and navigation", function()
             page.OpenItemFilters("filters"); Lab.Settle(.1)
             page.Control("filterSaveRule"):Click(); Lab.Settle(.2)
             Lab.Check("interact", "filter Save delegates to rule Save", nil, page.Editing())
+            Lab.Check("state", "the rule footer hides on the list", false, actions:IsShown())
             local savedRule = oldId and mi.Rule(oldId) or mi.Rules()[#mi.Rules()]
             local index
             for i, rule in ipairs(mi.Rules()) do if rule.id == savedRule.id then index = i end end
@@ -935,6 +947,43 @@ if key=="junkMarking" and params.editor then
         end
         B.Refresh()
         Lab.Settle(.2)
+    end)
+end
+if key == "guildLocations" then
+    Lab.Step("Guild Locations diagnostic panel", function()
+        local GL = R.GuildLoc
+        local before, record = GL.Snapshot(), TwichUIDB.guildLoc
+        Lab.Check("init", "diagnostic panel opens", true, GL.Window.Show())
+        Lab.Check("state", "panel visible", true, GL.Window.IsShown())
+        Lab.Check("privacy", "opening sends no diagnostic requests", 0, GL.Diagnostics.Snapshot().requests)
+        Lab.Check("privacy", "opening preserves saved record", record, TwichUIDB.guildLoc)
+        local frame = _G.TwichUIGuildLocationsDiagnostics
+        frame.member:SetText("Synthetic Member")
+        frame.member:GetScript("OnEnterPressed")(frame.member)
+        Lab.Check("interact", "explicit inspection watches the selected member", true, GL.Diagnostics.Snapshot().watching)
+        Lab.Check("state", "inspection identifies the selected member", true, GL.Window.Text():find("Member: Synthetic Member", 1, true) ~= nil)
+        local result = GL.Diagnostics.SelfTest()
+        Lab.Check("state", "synthetic protocol checks pass", false, result:find("FAIL:", 1, true) ~= nil)
+        Lab.Check("privacy", "self-test preserves real records", before.records, GL.Snapshot().records)
+        Lab.Check("privacy", "self-test sends no diagnostic requests", 0, GL.Diagnostics.Snapshot().requests)
+        GL.Window.Hide()
+        Lab.Check("cleanup", "closing cancels inspection", false, GL.Diagnostics.Snapshot().watching)
+        Lab.Check("cleanup", "closing removes synthetic preview", false, GL.Map.Snapshot().synthetic)
+        Lab.Check("init", "reopening reuses panel", true, GL.Window.Show())
+        Lab.Check("state", "local report readable", true, GL.Window.Text():find("Guild Locations diagnostics", 1, true) ~= nil)
+        local clicked = false
+        for _, child in ipairs({ frame:GetChildren() }) do
+            if child.text and child.text.GetText and child.text:GetText() == "Local self-test" then
+                child:Click(); clicked = true break
+            end
+        end
+        Lab.Check("interact", "actual self-test button runs", true, clicked)
+        Lab.Check("state", "self-test results appear in the report", true, GL.Window.Text():find("PASS: Decode", 1, true) ~= nil)
+        Lab.Check("construct", "report has visible height", true, frame.edit:GetHeight() > 0)
+        Lab.Say("guild diagnostic geometry", "report-height=" .. frame.edit:GetHeight(), "report-width=" .. frame.edit:GetWidth(),
+            "report-lines=" .. frame.edit:GetNumLines(), "report-shown=" .. tostring(frame.edit:IsShown()))
+        if params.task ~= "diagnostics" then GL.Window.Hide() end
+        Lab.Settle(.3)
     end)
 end
 Lab.Finish()

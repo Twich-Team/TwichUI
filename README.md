@@ -1,15 +1,18 @@
-> **NOTICE** In preparation for the official launch of WoW: Forever, the addon will be refactoring its release versioning, which may require a manual reinstall. The first official non-beta release of the addon will be v1.0.0, and is expected to launch on the final day of the beta.**
+# TwichUI
 
-**Countdown to v1.0.0**
--
-This addon is under heavy development in perparation for the official launch of the game on November 4th. In order to ensure users are prepared for the launch, I am targeting the October 22 as the release date for the first non-beta version of the addon.
+A carefully crafted interface companion for World of Warcraft: Forever.
+Find current versions, installation packages, and release notes under
+[GitHub Releases](https://github.com/Twich-Team/TwichUI/releases).
 
-# TwichUI: What is it?
+## What is TwichUI?
 This addon was developed to consolidate several common tweaks, and provide several small, thoughtful touches that should help players read the game and make their own decisions while preserving the atmosphere, discovery and sense of place that make Forever compelling. Offering elegant, unobtrusive features familiar to RPGs, such as zone arrival messages, friend notifications, available training, and journey chronicling.
 
 In addition, several features exist to dive deep into your addon settings and configurations, create backup snapshots, export and import, as well as share your configuration with your friends through in-game addon channels.
 
 The addon is intended to work alongside EllesmereUI.
+
+For proposed improvements and future ideas (not release commitments), see the
+[product roadmap and idea bank](docs/product-roadmap.md).
 
 ## Features
 

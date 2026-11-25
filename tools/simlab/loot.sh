@@ -11,7 +11,7 @@
 # (addon fonts fall back). The screenshots are for comparing layout with the approved mockups.
 set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
-RUN="$LAB/artifacts/loot-$(date +%Y%m%d-%H%M%S)"
+RUN="${SIMLAB_RUN:-$LAB/artifacts/loot-$(date +%Y%m%d-%H%M%S)}"
 mkdir -p "$RUN"
 export SIMLAB_ASSETS="${SIMLAB_ASSETS:-1}"
 export SIMLAB_FORWARD="WOW_SIM_SOFTWARE_RENDER=1 WOW_SIM_NO_PARTY=1"

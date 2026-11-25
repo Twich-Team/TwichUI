@@ -402,6 +402,11 @@ SL.TWICHUI("diag clear"); assert(#D.Records() == 0, "a unique prefix works, and 
 out = {}; SL.TWICHUI("diagnostics bogus"); assert(Has(table.concat(out, "\n"), "usage: /tui diagnostics"))
 out = {}; SL.TWICHUI("troubleshoot status"); assert(Has(table.concat(out, "\n"), "tracing is off"), "the alias goes through the same parser")
 out = {}; SL.TWICHUI("diagnostics probe"); assert(Has(table.concat(out, "\n"), "probe"), "the probe is still reachable")
+out = {}; SL.TWICHUI("diagnostics guild"); assert(Has(table.concat(out, "\n"), "Guild Locations diagnostics are unavailable"))
+local inspected
+R.GuildLoc = { Window = { Show = function(name) inspected = name end } }
+SL.TWICHUI("diagnostics guild Bob Reeve")
+assert(inspected == "Bob Reeve", "the diagnostic launcher preserves a full first-and-last name")
 -- (the window itself is exercised in test_friend_diagnostics.lua, which has frame fakes)
 
 print("DIAGNOSTICS TEST PASSED")

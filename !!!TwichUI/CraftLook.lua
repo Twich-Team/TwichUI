@@ -146,7 +146,8 @@ function CL.Control(control, kind, when)
     end
     local bg = control.GetBackdropColor and { control:GetBackdropColor() } or {}
     local edge = control.GetBackdropBorderColor and { control:GetBackdropBorderColor() } or {}
-    local originalInk = kind == "field" and { control:GetTextColor() } or {}
+    -- a Button has no GetTextColor (only edit boxes and font strings do): the original ink is read only where it exists
+    local originalInk = kind == "field" and control.GetTextColor and { control:GetTextColor() } or {}
     local over, down, wasActive = false, false, false
     local function Paint()
         if when and not when() then
@@ -160,7 +161,7 @@ function CL.Control(control, kind, when)
                     control:SetBackdropBorderColor(unpack(edge[1] and edge or { pal.control[1], pal.control[2], pal.control[3], 1 }))
                 end
                 if control.PaintEdge then control:PaintEdge() end
-                if originalInk[1] then control:SetTextColor(unpack(originalInk)) end
+                if originalInk[1] and control.SetTextColor then control:SetTextColor(unpack(originalInk)) end
                 if control.twichLook then control.twichLook.State() end
             end
             wasActive = false
@@ -173,7 +174,7 @@ function CL.Control(control, kind, when)
         control:SetBackdropColor(0, 0, 0, 0)
         control:SetBackdropBorderColor(0, 0, 0, 0)
         local enabled = control:IsEnabled()
-        local focus = kind == "field" and control:HasFocus()
+        local focus = kind == "field" and control.HasFocus and control:HasFocus()
         local base = kind == "chip" and "chip" or field and "field" or danger and "danger" or primary and "primary" or "button"
         if selectedFamily then
             -- Inactive segments keep quiet leather; UVs remain those of the selected-source family.
@@ -212,7 +213,7 @@ function CL.Control(control, kind, when)
     control:HookScript("OnMouseUp", function() down = false; Paint() end)
     control:HookScript("OnHide", function() over, down = false, false; Paint() end)
     control:HookScript("OnSizeChanged", Paint)
-    if kind == "field" then
+    if kind == "field" and control.IsObjectType and control:IsObjectType("EditBox") then
         control:HookScript("OnEditFocusGained", Paint)
         control:HookScript("OnEditFocusLost", Paint)
     end

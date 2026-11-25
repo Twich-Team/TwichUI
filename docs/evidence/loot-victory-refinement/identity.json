@@ -1,0 +1,24 @@
+{
+  "capture_source_sha256": {
+    "!!!TwichUI/loot/Victory.lua": "12d4b32f85ac3759e7b6fbd608e9a91ea843081979cf19af4a3af431d37e2a31",
+    "TwichUI_Settings/pages/LootRolls.lua": "6f0971880de73d3e8d82811e968e072d8ae7205a66f258fb29013e68988637b3"
+  },
+  "scenario_sha256": "2a69b560b349b49a23e09cefd3a93a54d208049f15274755caca287a8c50a374",
+  "before_commit": "9617b5ca9971fd2e3e7f2f332e7c3997537ae311",
+  "sampling_ms": 50,
+  "crop": [
+    596,
+    258,
+    1004,
+    470
+  ],
+  "provenance": "Actual unretouched simulator card crops; no generated or interpolated frames. Paused synthetic preview uses production painter; clock-driven lifecycle verified separately.",
+  "shared_renderer_sha256": "9f5e89dfc37b2261b3f29038cbb5514324ed4c1aa3baf70787234106de51b4e1",
+  "post_capture_fixes": "Preview tooltip sample metadata; Off-mode seek matches instant exit; old live roll text hides before the material crossfade. Shared renderer/layout/painter is byte-identical; targeted lifecycle/settings/off captures rerun.",
+  "retained_sha256": {
+    "settings-preview.png": "3905338413a53065a255a118ff72566cf14e6f4d8e3c45ba8ebd9957acb2d4a0",
+    "motion-stages.png": "abc2d7d9cbbf58c9284a20c96220d7cdf237a92605693cd6db5c99e99ce0bb82",
+    "victory-motion.gif": "89e386d9cb302d7f9c15e8b10a4c194e83bb6e925e24e5519cb80a269f764199",
+    "before-after.png": "9aae32b591c2a6513e3d89a9bd6c6d31d26285aa743033ab1a02822f2e97155a"
+  }
+}

@@ -49,7 +49,8 @@ for key, default in pairs(defaults) do
   n = n + 1
   assert(default == R.DEFAULT_MODULES[key], key .. " default matches a new install")
 end
-assert(n == 87, "every module has a toggle: " .. n)
+assert(n == 88, "every module has a toggle: " .. n)
+assert(defaults.executeRange == false, "execute range is opt-in")
 assert(defaults.barGlows == true, "action bar glows are on by default (each spell can be turned off)")
 assert(defaults.hazardAlerts == false, "hazard alerts are opt-in")
 assert(defaults.reminders == true, "reminders are on (none exist until made, and each starts turned off)")
@@ -97,11 +98,14 @@ assert(not proxies.TWICHUI_showAdvanced, "there is no 'Show advanced options' se
 local IMAGE_ONLY = { ["Background tiling"] = true, ["Background tile size"] = true, ["Background inset"] = true,
   -- only while a card (not the shared look) is being edited in the notification appearance page
   ["Give this card its own look"] = true, ["Reset this card"] = true }
+assert(R.TargetArt.Get("style") == "modern", "modern portrait frames are the default")
+R.TargetArt.Set("style", "legacy") -- these checks include the preserved legacy customization controls
 for _, i in ipairs(initializers) do
   local name = i:GetName()
   -- (a status line of the troubleshooting page is shown or folded away by whether its addon is there: test_status.lua)
   if name and i.kind ~= "header" and i.kind ~= "status" then assert(IMAGE_ONLY[name] or i:Shown(), name .. " is drawn") end
 end
+R.TargetArt.Set("style", "modern")
 for _, name in ipairs({"Upgrade hints in item tooltips", "Mark upgrades in my bags", "Weigh gear for", "Stat weights",
   "Configuration sharing", "Let friends send me addon configurations", "Hide addon welcome messages",
   "How big a gain counts", "Show the reasoning", "Show possible upgrades too", "Hint at gear for higher levels",
@@ -249,6 +253,8 @@ assert(type(attune:GetTooltip()) == "string" and attune:GetTooltip():find("Statu
 c.TwichUIDB.modules.attuneSkin = false
 attune.setting.changed()
 assert(attune:GetTooltip():find("after reload"), "toggle change shows it needs a reload")
+
+assert(K.pages.executeRange.def.host and K.rowsById.executeRangeThreshold, "Execute Range remains reachable with its inline preview")
 
 -- The overview links to one page per feature, in this order; every setting
 -- is on exactly one page (registration above refuses a repeat).
@@ -587,7 +593,12 @@ c.TwichUIDB.modules.qolSummons = false; summonToggle.setting.changed(); assert(n
 local qolRow = assert(rows["Quality of life"], "the Quality of life page has a status")
 assert(qolRow.status():find("Off"), qolRow.status())
 c.TwichUIDB.modules.qolDuels, c.TwichUIDB.modules.qolReleasePvP = true, true; summonToggle.setting.changed()
-assert(qolRow.status():find("2 of 11 on"), qolRow.status())
+assert(qolRow.status():find("2 of 13 on"), qolRow.status())
+local oldHide, oldSpeech, oldCombat = c.TwichUIDB.modules.qolHideErrors, c.TwichUIDB.modules.qolHideErrorSpeech, c.TwichUIDB.modules.qolResurrectCombat
+c.TwichUIDB.modules.qolHideErrors, c.TwichUIDB.modules.qolHideErrorSpeech, c.TwichUIDB.modules.qolResurrectCombat = true, true, true
+assert(qolRow.status():find("4 of 13 on"), "both independent error switches count; dependent combat resurrection does not: " .. qolRow.status())
+c.TwichUIDB.modules.qolHideErrors, c.TwichUIDB.modules.qolHideErrorSpeech, c.TwichUIDB.modules.qolResurrectCombat = oldHide, oldSpeech, oldCombat
+
 -- The RestedXP destination row (on the RestedXP page now): off, visible, and its tooltip says what it is doing right now.
 do
   local guideRow; for _, i in ipairs(initializers) do if i.setting and i.setting.name == "Mark RestedXP's destination" then guideRow = i end end

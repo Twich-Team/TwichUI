@@ -19,7 +19,12 @@ c.C_AddOns.IsAddOnLoaded=function()return true end
 c.EllesmereUIDB={bagItemAssignments=assignments}
 c.EUI_CategoryManager={JUNK_KEY='junk',IsJunkMarkerEnabled=function()return true end,
  IsJunk=function(_,id)return assignments[id]=='junk' end,
- AssignItem=function(_,id,key)calls=calls+1;assignments[id]=key end}
+ AssignItem=function(_,id,key)calls=calls+1;assignments[id]=key end,
+ UnassignItem=function(_,id)assignments[id]=nil end}
+c.hooksecurefunc=function(object,key,hook)
+ local original=object[key]
+ object[key]=function(...) local result=original(...);hook(...);return result end
+end
 c.EUI_Bags={RefreshInventory=function()repaints=repaints+1 end,SellJunk=function()error('must not sell')end}
 local function Load(path)local f=assert(loadfile(path));setfenv(f,c);f()end
 Load(ROOT..'modules/EllesmereJunk.lua')

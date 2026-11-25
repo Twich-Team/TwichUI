@@ -70,7 +70,8 @@ local DEFAULT_MODULES = {
     magicInventory = false,  -- Magic Inventory: rules that prepare items to mail or deposit; moves them only when you review and click at a mailbox, bank or guild bank (opt-in, explicit true only; inventory/)
     chatClean = false,       -- Chat cleaning: hide unwanted messages in the public channels you choose (opt-in, explicit true only)
     classBars = false,       -- Class resource bars: your class's resources as bars (opt-in; nothing else's bars are hidden or moved)
-    targetArt = false,       -- Target dragon artwork: a dragon on EllesmereUI's target frame by the target's classification (opt-in; needs EllesmereUI's target frame; decoration only)
+    targetArt = false,       -- Target Portrait Decorations: a dragon on EllesmereUI's target frame by the target's classification (opt-in; needs EllesmereUI's target frame; decoration only)
+    executeRange = false,    -- Personal health threshold on verified EllesmereUI target and enemy nameplate health bars (visual only)
     hazardAlerts = false,    -- Hazard alerts: the game plays a sound when an aura you list lands on you, grows or fades (opt-in; no combat log is read, nothing is automated)
     reminders = true,        -- Reminders: artwork, an icon or text when conditions you set are true (none exist until you make one, and each starts turned off; reminders/)
     barGlows = true,         -- Action bar glows: your bar buttons glow for a missing buff, weapon buff, seal or tracking, a low reagent or item, a ready cooldown, a proc or an old rank (each spell can be turned off; reads only, never casts; glows/)
@@ -146,10 +147,12 @@ end
 -- core never times anything itself. Ids are stable "area.operation" names; Describe and Gauge only
 -- note a description or a reader (a function returning a number) for the diagnostics window.
 ---------------------------------------------------------------------------
-local Perf = { on = false, ops = {}, gauges = {} }
+local Perf = { on = false, captureID = 0, ops = {}, gauges = {} }
 R.Perf = Perf
 local function Nothing() end
 Perf.Start, Perf.Stop, Perf.Count, Perf.Fault, Perf.Received, Perf.Callback = Nothing, Nothing, Nothing, Nothing, Nothing, Nothing
+-- Elapsed waits/milestones are distributions, never synchronous CPU scopes.
+Perf.Observe = Nothing
 function Perf.Finish(_, ...) return ... end
 function Perf.Call(id, fn, ...)
     if not Perf.on then return fn(...) end
@@ -175,6 +178,7 @@ end
 -- An error caught in one of our own handlers: noted for the troubleshooting report (if loaded), then
 -- handed to the game's error handler exactly as before. Nothing is hidden or replaced.
 local function Fault(source, err)
+    if R.MapTrace and type(source) == "string" and source:match("^map ") then R.MapTrace("map-error") end
     if R.Diag then R.Diag.Error(source, err) end
     if Perf.on then Perf.Fault(source, err) end
     geterrorhandler()(err)
@@ -506,6 +510,9 @@ COMMANDS = {
     { name = "perf", usage = "perf [start [preset]|stop|cancel|mark [note]|status|arm]", desc = "TwichUI Diagnostics: record and inspect TwichUI's performance, and export a report (loads only when used; listed on the Troubleshooting page)", hidden = true, fn = function(arg)
         if R.DiagnosticsLauncher then R.DiagnosticsLauncher.Command(arg) else Unavailable("TwichUI Diagnostics") end
     end },
+    { name = "mapdiag", usage = "mapdiag", desc = "capture a map issue and copy an AI-readable report", fn = function()
+        if R.DiagnosticsLauncher then R.DiagnosticsLauncher.OpenMap() else Unavailable("Map Diagnostics") end
+    end },
     { name = "layout", usage = "layout", desc = "the interface layout setup: review, apply with a way back, check, restore (listed on the Home page and Troubleshooting; loads only when used; /tui layout help lists the developer commands)", hidden = true, fn = function(arg)
         if R.LayoutsLauncher then R.LayoutsLauncher.Command(arg) else Unavailable("Layout setup") end
     end },
@@ -520,6 +527,9 @@ COMMANDS = {
     end },
     { name = "workshop", usage = "workshop", desc = "the Workshop: your professions' recipes, a craft queue and the materials still needed (listed on the Workshop page and the TwichUI menu; loads only when opened)", hidden = true, fn = function(arg)
         if R.WorkshopLauncher then R.WorkshopLauncher.Command(arg) else Unavailable("The Workshop") end
+    end },
+    { name = "fish", usage = "fish [help]", desc = "TwichUI Fishing: status, sessions and options for the fishing key (Key Bindings > TwichUI; loads it when first used)", hidden = true, fn = function(arg)
+        if R.FishingLauncher then R.FishingLauncher.Command(arg) else Unavailable("TwichUI Fishing") end
     end },
     { name = "hidden", usage = "hidden", desc = "welcome messages hidden at login", fn = function()
         if R.Quiet then R.Quiet:ShowHidden() else Unavailable("Quiet login") end
@@ -547,6 +557,7 @@ COMMANDS = {
     { name = "settings", alias = "options", hidden = true },
     { name = "config", alias = "options", hidden = true },
     { name = "journal", alias = "chronicle", hidden = true },
+    { name = "fishing", alias = "fish", hidden = true },
     { name = "notes", alias = "chronicle", hidden = true },
     { name = "?", alias = "help", hidden = true },
 }

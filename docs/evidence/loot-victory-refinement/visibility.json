@@ -1,0 +1,24 @@
+{
+  "rail_at_060": {
+    "5": 776,
+    "24": 539,
+    "80": 191
+  },
+  "burst_outside_rail_at_090": {
+    "5": 838,
+    "24": 508,
+    "80": 182
+  },
+  "reserved_title_at_090": {
+    "5": 0,
+    "24": 0,
+    "80": 0
+  },
+  "item_text_at_090": {
+    "5": 0,
+    "24": 0,
+    "80": 0
+  },
+  "hold_matches_static": true,
+  "exit_matches_empty_start": true
+}

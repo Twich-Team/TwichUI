@@ -98,21 +98,24 @@ function DE.ForItem(f,opt)
     local row=data.Find(input.classID,input.quality,level)
     if not row or row.unconfirmed then unavailable.why="No supported yield estimate exists for this item bracket.";return unavailable end
     local snapshot={reference=REFERENCE,item=input.item,source="DisenchantForever / Classic yield reference",eligible=true,outcomes={},values={}}
-    local materials,words,sources,yields={},{},{},{}
+    local materials,words,sources,yields,dependencies={},{},{},{},{}
     local missing,pending
     local now=opt.now or f.now or time()
     local pricing=W.Pricing or W.Market
     for i=3,#row do
         local chance,low,high,item=unpack(row[i])
+        dependencies[item]=true
         yields[#yields+1]={item=item,chance=chance,min=low,max=high}
         snapshot.outcomes[#snapshot.outcomes+1]={p=chance/100,materials={{item=item,qty=(low+high)/2}}}
         local quote,why=pricing.Price(item,{market=opt.market,now=now})
+        -- Price can return a usable local fallback while the prepared Market
+        -- quote is loading. That fallback is provisional for the comparison.
+        pending=pending or why=="loading" or pricing.PendingKey and pricing.PendingKey(item)~=nil
         -- a material is valued at its competing price, not one cheap listing (Estimate.AtCompeting; a reference keeps its Recent Price)
         if W.Estimate and quote then quote=W.Estimate.AtCompeting(quote,item,{market=opt.market,now=now}) end
         local at=quote and W.Plain(quote.at)
         if not (quote and W.Int(quote.price,1,W.Prices.MAX_COPPER) and W.Finite(at) and at<=now and now-at<=W.Prices.OLD_AFTER) then
             missing=missing or ("A current price is missing for "..(data.names[item] or ("item "..item))..".")
-            pending=pending or why=="loading"
         else
             local source=quote.reference and "market_server" or "local"
             snapshot.values[item]={value=quote.price,quality="limited",source=source}
@@ -121,13 +124,14 @@ function DE.ForItem(f,opt)
         end
         words[#words+1]=chance.."% × "..low..(low~=high and ("–"..high) or "").." "..(data.names[item] or ("item "..item))
     end
-    if missing then
+    if missing or pending then
         unavailable.why=pending and "Loading disenchant material prices." or missing
         unavailable.pending=pending;unavailable.outcomeReference=true;unavailable.outcomes=table.concat(words,"; ")
-        unavailable.yields=yields
+        unavailable.yields,unavailable.dependencies=yields,dependencies
         return unavailable
     end
     local result=DE.Evaluate(input,snapshot)
+    result.dependencies=dependencies
     if result.state=="ok" then
         result.materials,result.outcomes=materials,table.concat(words,"; ")
         result.yields=yields

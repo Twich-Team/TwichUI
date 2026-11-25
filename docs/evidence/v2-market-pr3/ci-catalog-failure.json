@@ -1,0 +1,10 @@
+{
+  "source": "b677c9d89140f714288aa4aee91bac3e9f512791",
+  "run": 44995825297,
+  "job": 137126518471,
+  "passed_modules": 317,
+  "failed_modules": 1,
+  "failed_module": "test_mutate.py",
+  "failure": "test_real_catalog_matches_the_source: five stale Opportunities patterns after comparator extraction; 569/574 catalog entries valid",
+  "resolution": "Updated only the five transform patterns, retaining each defect and original reference-model assertions. Catalog now 574/574 valid; all 24 selected Opportunities/pricing mutations killed. Added existing independent crafting reference and mutation-harness tests to fast Market group (12 modules; 8.012 s). Runtime unchanged."
+}

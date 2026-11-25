@@ -464,7 +464,17 @@ local function MakeRow(parent)
         end
         self.note:SetPoint("LEFT", self, "LEFT", x, 0)
         self.note:SetPoint("RIGHT", self.amount, "LEFT", -8, 0)
-        self.note:SetText(filter.scope == "all" and d.char and (d.text .. " \194\183 " .. d.char) or d.text)
+        local note = d.text
+        if d.item then
+            local quality = select(3, W.Observe.ItemFacts(d.item))
+            -- LQ.Note appends only this quantity suffix to identified item names.
+            local times = d.code == "vendorBuy" or d.code == "vendorSell" or d.code == "ahDeposit" or d.code == "ahCancelFee"
+            local suffix = d.qty and d.qty > 1 and (times and (" \195\151%d"):format(d.qty) or (" (%d)"):format(d.qty)) or ""
+            if suffix == "" or note:sub(-#suffix) == suffix then
+                note = UI.QualityText(note:sub(1, #note - #suffix), quality) .. suffix
+            end
+        end
+        self.note:SetText(filter.scope == "all" and d.char and (note .. " \194\183 " .. d.char) or note)
         Co.Set(self.amount, d.a, { signed = true, size = 13 })
         UI.Paint(self.amount, d.a > 0 and K.sage or K.ember)
     end
@@ -516,7 +526,9 @@ local function MakeResultRow(parent)
     row.fill = function(self, d)
         self.data = d
         if d.item then self.itemIcon:SetTexture(LQ.ItemIcon(d.item) or UI.ICON_BLANK); self.itemIcon:Show() else self.itemIcon:Hide() end
-        self.name:SetText(d.qty > 1 and ("%s \195\151%d"):format(d.name, d.qty) or d.name)
+        local quality = d.item and select(3, W.Observe.ItemFacts(d.item))
+        local name = UI.QualityText(d.name, quality)
+        self.name:SetText(d.qty > 1 and ("%s \195\151%d"):format(name, d.qty) or name)
         Co.Fit(self.collected, d.collected, { size = 12, min = 11, width = 124 })
         if d.vsales > 0 then
             Co.Fit(self.cost, d.vcost, { size = 12, min = 11, width = 124 }); UI.Paint(self.cost, K.text)

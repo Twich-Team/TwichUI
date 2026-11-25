@@ -1,5 +1,9 @@
 # Loot Rolls: implementation tracker
 
+In **Loot Roll Rules → Add condition → Item family**, choose **Waylaid crate** or **Craftsman's Writ**.
+The choices use the same Forever item IDs as Magic Inventory, including the sealed forms. An unknown item ID
+keeps the condition unresolved. The existing auto-roll settings and eligibility checks still apply.
+
 Branch `feature/loot-rolls`. This is the working record of the feature: what exists, what the client is known (and not known) to do,
 how it is tested, and what has to be checked in the real Forever client before anything here is called working. Evidence labels as in
 `CLAUDE.md`: **unit-tested**, **simulator-tested**, **screenshot-reviewed**, **real-client-tested**, **not tested**.
@@ -9,6 +13,9 @@ Nothing in this feature has been **real-client-tested**. Every statement below a
 
 ## What it is
 
+Expanded/Collapsed presentations and independent roll/display actions are now
+implemented; see [compact cards and precise precedence](loot-roll-compact.md).
+
 Two parts, both off until the player turns them on.
 
 1. **Loot cards** (`loot/Cards.lua`, switch `modules.lootRolls`): a card for each group-loot roll in the settings window's look (`R.CraftLook`:
@@ -16,9 +23,9 @@ Two parts, both off until the player turns them on.
    fallback when the core's look is missing) with painted Need, Greed and Pass icons, the item, its quality, an optional vendor price shown as
    gold, silver and copper with the game's coin pictures, a "Potential upgrade" mark from the
    existing upgrade judge, a countdown, and, when the game gives it, the other players' rolls and the winner.
-2. **Loot rules** (`loot/Rules.lua`, `loot/Config.lua`, `loot/Auto.lua`): "when an item matches these conditions, choose Need, Greed or
-   Pass", with a visible countdown on the card that the player can stop, roll early, or override by choosing. Automation has its own master
-   switch, a separate permission for Need, and a separate permission for rules that ask about upgrades.
+2. **Loot rules** (`loot/Rules.lua`, `loot/Config.lua`, `loot/Auto.lua`): independently choose Need/Greed/Pass and/or Expanded/Collapsed
+   display. Display-only rules leave the choice manual. Automatic choices use a visible countdown that the player can stop, roll early, or
+   override by choosing. Automation has its own master switch and separate permissions for Need and upgrade-based choices.
 
 ## Files
 
@@ -32,7 +39,9 @@ Two parts, both off until the player turns them on.
 | `loot/Cards.lua` | The cards, their stack, the renderer shared with the settings preview. |
 | `loot/Main.lua` | The switch (`LootRolls.Refresh`), the diagnostics snapshot. |
 | `media/loot/*.tga` | Icons cut from the approved mockup by `tools/make_loot_roll_art.py` (sources: `assets/LOOT_ROLLS_*_MOCKUP.png`). |
-| `tests/test_loot_rolls.lua` | Unit tests (fake world). |
+| `tests/test_loot_rolls.lua` | Unit tests (fake world), including the end-to-end rule-safety matrix (section 4b) and and / or blocks (4c). |
+| `tests/test_loot_rule_groups_page.lua` | The Loot rules page with and / or blocks: real page over stand-in frames, clicks through each control's own handler. |
+| `tests/test_loot_rules_engine.lua` | The pure rule engine's safety contract: condition truth tables, all/any against an independent model, and a seeded sweep of the invariants (unknown never matches, forgetting a fact never creates or changes a decision, first non-"no" rule decides). |
 | `tools/simlab/loot.sh`, `scenarios/loot.lua` | Simulator scenarios and screenshots. |
 
 ## Client API capability matrix
@@ -70,18 +79,28 @@ frame), never passes.
 
 ## Rule model
 
-A rule: `{ id, name, enabled, action = need | greed | pass, match = all | any, delay (1..15 s), result (show it afterward), conditions }`.
-Rules are read top to bottom: the **first enabled, complete rule that is not a definite "no" decides**. A rule that cannot be answered
-("unknown": the fact is missing or the client does not say) **stops the search**: nothing decides and the roll stays manual (a rule above
-might have matched, so a rule below must not speak for it). Actions of two rules are never combined. A rule with no condition, or with an
-invalid one, is incomplete: skipped and explained in the editor. Negating an unknown condition leaves it unknown.
+A rule: `{ id, name, enabled, action = none | need | greed | pass, display = none | expanded | collapsed, match = all | any, delay (1..15 s), result (show it afterward), conditions }`.
+Roll and display use **independent top-to-bottom searches**. Each skips No change for its own channel. The first enabled, complete rule
+that is not a definite "no" decides that channel: a match chooses its explicit action; an unknown stops that search without guessing.
+A roll-channel unknown leaves the roll manual; a display-channel unknown uses Expanded unless manually overridden. Neither blocks the
+other channel. A rule with no conditions, invalid conditions, or both actions set to No change is incomplete, skipped and explained in
+the editor. Negating an unknown condition leaves it unknown. Missing display in old saved rules means No change without migration.
 
 Conditions: item quality (is / at least / at most), item type (equipment, weapon, armor, recipe, consumable, ...), equipment slot (by the
 game's `INVTYPE_*` and its own words), profession recipe (for one of my professions / one I can learn / one I already know / any), specific
 item, armor type (cloth / leather / mail / plate / shield, from the item's class and sub-class), can I equip it, binding (when picked up / when equipped), potential upgrade (informational; only counts when upgrade-based rules are allowed), where
 you are (outside raids, in raids, in dungeons, outside dungeons).
 
-Recipe facts: the profession comes from `GetItemSubClassInfo(9, subclass)` compared with the player's skill lines (both the game's own words);
+**And / or blocks.** A rule's conditions are combined by its own *All of / Any of* choice. A condition of type `group`
+(`{ type = "group", match = "all" | "any", conditions = { ... } }`) is a block with an operator of its own, so "(Rare or Epic) and equipment" is
+an *all* rule holding an *any* block and an equipment condition. A block answers like a rule does (three-valued: an unknown inside stays unknown
+unless another branch settles it), is not negated (negate a condition inside it), and is made in the editor with **+ Add and / or block**
+or the **+ Block** button of another block (`LR.AddGroup`; conditions and blocks are addressed by path, `{ 2, 1 }` = first item of the second
+item). Limits: 8 conditions in all (blocks not counted), 4 blocks, 3 levels counting the rule itself as the first. An empty or over-deep block
+makes the rule unfinished (skipped, flagged in the editor). No migration: old rules read exactly as before, and a build from before blocks sees
+a block as a condition of an unknown kind, so that rule is unfinished there and never acts.
+
+Recipe facts: the profession comes from `C_Item.GetItemSubClassInfo(9, subclass)` compared with the localized `name` fields returned by `C_SkillInfo.GetSkillLineInfo`;
 "already known" is the tooltip line equal to the game's `ITEM_SPELL_KNOWN`; "can learn" additionally needs the item to have no red
 requirement line (`GearData.RedLines`). Without the tooltip those facts are unknown, not guessed.
 
@@ -191,3 +210,9 @@ window, as it does for the other pages.
 * Rolls beyond the player's card limit keep the game's own frame (no card, so no automation for them).
 * Disenchant and transmog rolls are not offered.
 * Results depend entirely on `C_LootHistory` behaving in Forever as its API says.
+
+## Custom winning result
+
+The confirmed-win presentation, selective native event relay, supplied assets,
+verification limits and in-game checklist are in [Loot Victory](loot-victory.md).
+The existing roll observation/rule/choice lifecycle is preserved.

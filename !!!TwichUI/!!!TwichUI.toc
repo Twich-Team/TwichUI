@@ -39,6 +39,9 @@ LayoutsLauncher.lua
 WorkshopLauncher.lua
 # The Auction House visit that may update the Workshop's prices: a light detector, one timer chain per visit, loads the Workshop only when due (docs/workshop/market-data-foundation-v2.md, section 8)
 WorkshopAuto.lua
+# TwichUI Fishing (one key for the next fishing step, and a record of your catches) is an addon of its own, loaded by /tui fish or when
+# one of its keys is bound (docs/fishing.md)
+FishingLauncher.lua
 # First-install setup: offers the layout setup on a new installation and coordinates EllesmereUI's own first run (docs/onboarding.md)
 Onboarding.lua
 # The welcome shown while that setup gets ready (presentation only; Onboarding.lua calls it)
@@ -216,8 +219,9 @@ modules\RestedXPTimers.lua
 modules\RestedXPBrokerMenu.lua
 modules\RestedXPBroker.lua
 
-# The TwichUI data bar entry's menu (SettingsBroker.lua): open settings, Leave me alone, Guild Locations; drawn like the
+# The TwichUI data bar entry's menu (SettingsBroker.lua): open settings, Leave me alone, Narrate quests (only with the Spoken addon), Guild Locations; drawn like the
 # menus above (modules\SpellMenu.lua and modules\MenuStyle.lua)
+modules\SpokenReading.lua
 modules\SettingsBrokerMenu.lua
 
 # Party pins: named map pins of your own, and ones shared with party members who have TwichUI (on by default,
@@ -269,8 +273,10 @@ nav\MinimapTrail.lua
 # frames; View.lua owns the view and is the only part moving it; Art.lua draws the stitched painting.
 map\Prefs.lua
 map\Data.lua
+map\LocalData.lua
 map\ViewMath.lua
 map\World.lua
+map\Pictures.lua
 map\View.lua
 map\Art.lua
 map\Detail.lua
@@ -306,6 +312,8 @@ guildloc\State.lua
 guildloc\Roster.lua
 guildloc\Comm.lua
 guildloc\Map.lua
+guildloc\Diagnostics.lua
+guildloc\Window.lua
 
 # Cozy Sleeping Bag guide: a small window that follows the hidden quest chain behind the bag, from the character's own quest
 # history (nothing saved but where the window sits), with optional map pins made through pins\Pins.lua. Never opens by itself;
@@ -339,6 +347,7 @@ hazard\Alerts.lua
 # the three display modes) by tools/make_reminder_gallery.py.
 reminders\AmmoItems.lua
 reminders\ArtData.lua
+artwork\Catalog.lua
 reminders\Config.lua
 reminders\Gallery.lua
 reminders\Conditions.lua
@@ -366,6 +375,7 @@ healer\Drinks.lua
 healer\Particles.lua
 healer\Display.lua
 healer\Picker.lua
+healer\Communication.lua
 healer\Watch.lua
 
 # Return the Favor: a short list of the players who just buffed you; click one to buff them back (off until turned on).
@@ -382,12 +392,14 @@ buffback\Unlock.lua
 # Rules.lua is the rule engine (pure), Config.lua what is stored, Roll.lua watches the game's rolls and is the only place a choice is sent
 # from, Auto.lua turns a rule's decision into a visible countdown, Blizzard.lua lets the game's frames step aside, Cards.lua draws, Main.lua
 # is the switch. The settings are in TwichUI_Settings. Artwork: media\loot (tools/make_loot_roll_art.py).
+ForeverItemFamilies.lua
 loot\Rules.lua
 loot\Config.lua
 loot\Roll.lua
 loot\Auto.lua
 loot\Blizzard.lua
 loot\Cards.lua
+loot\Victory.lua
 loot\Main.lua
 
 # Action bar glows: your action bar buttons glow when a buff of yours is missing (on you, or on group members out of
@@ -406,7 +418,7 @@ glows\Draw.lua
 glows\Notice.lua
 glows\Controller.lua
 
-# Target dragon artwork: a dragon of your choosing on EllesmereUI's target frame for bosses, world bosses, rare elites,
+# Target Portrait Decorations: a dragon of your choosing on EllesmereUI's target frame for bosses, world bosses, rare elites,
 # elites and rares, by the game's own classification (off until turned on; needs EllesmereUI's unit frames with its
 # own target frame; nothing of EllesmereUI's is changed). Config.lua is what it stores and decides (no frames),
 # Ellesmere.lua finds the frame, Display.lua draws. The art is made by tools/make_target_art.py.
@@ -416,6 +428,12 @@ targetart\Display.lua
 classportrait\Config.lua
 classportrait\Art.lua
 classportrait\Display.lua
+
+# Execute Range: a personal threshold marker and optional active edge on verified EllesmereUI health bars.
+# Texture-only display; restricted health hides the active edge. No gameplay actions or provider settings writes.
+execute\Config.lua
+execute\Ellesmere.lua
+execute\Display.lua
 
 # Sell from Bags: Auction House posting tab (uses the Chronicle palette)
 auction\Price.lua

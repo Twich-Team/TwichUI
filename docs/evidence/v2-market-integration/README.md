@@ -1,0 +1,5 @@
+# Main integration verification
+
+`combined-verification.json` records the actual clean combined PR3/main source b677c9d, including concurrent portrait/roadmap changes. All 76 offline modules and the selected Auction preview suite pass. The strict integration verdict is FAIL: `simulator-comparison.json` proves the identical baseline 40 tooltip assertions for each normal Workshop pose and the additional intentional wrong-pose assertion. No limits or assertions changed. Voice/UTF-8 client boundaries remain explicit in the existing PR3 report.
+
+Required GitHub verification separately found five stale sort/filter mutation patterns after comparator extraction. The correction retains their defects and independent reference-model assertions; 574/574 entries validate, 24/24 selected mutations are killed, and the expanded 12-module fast group passes in 8.012 seconds. No measured runtime changed. See `../v2-market-pr3/ci-catalog-failure.json` and the PR3 report. The final merge handoff records required CI and actual main identities. No deployment, signing, publication or production operation occurred.

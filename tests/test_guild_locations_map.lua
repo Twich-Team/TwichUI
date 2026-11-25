@@ -65,9 +65,11 @@ local function Obj()
 end
 local realCreate = c.CreateFrame
 local frames = 0
+local made = {}
 c.CreateFrame = function(kind, name)
   frames = frames + 1
   local o = Obj()
+  made[#made + 1] = o
   local base = realCreate()
   for k, v in pairs(base) do
     if k ~= "Show" and k ~= "Hide" and k ~= "IsShown" then rawset(o, k, v) end
@@ -108,13 +110,13 @@ local function TipHas(s)
   return false
 end
 
--- Stormwind City inside Elwynn Forest, both inside Eastern Kingdoms; Westfall beside Elwynn
+-- Forever lists cities as continent children, alongside their surrounding zones.
 local MAPS = {
   [947] = { name = "Azeroth", parent = 0, type = 1 },
   [1415] = { name = "Eastern Kingdoms", parent = 947, type = 2, ox = 0, oy = 0, size = 4000 },
   [1429] = { name = "Elwynn Forest", parent = 1415, type = 3, ox = 1000, oy = 2000, size = 400 },
   [1436] = { name = "Westfall", parent = 1415, type = 3, ox = 600, oy = 2200, size = 400 },
-  [1453] = { name = "Stormwind City", parent = 1429, type = 3, ox = 1100, oy = 2050, size = 100 },
+  [1453] = { name = "Stormwind City", parent = 1415, type = 3, ox = 1100, oy = 2050, size = 100 },
 }
 c.CreateVector2D = function(x, y) return { x = x, y = y, GetXY = function(s) return s.x, s.y end } end
 local waypoints = {}
@@ -181,6 +183,20 @@ c.C_GuildInfo = { GuildRoster = function() end }
 c.UnitExists = function(u) return c.GetUnitName(u) ~= nil and u ~= "player" end
 local CAN, invited = true, {}
 c.C_PartyInfo = { CanInvite = function() return CAN end, InviteUnit = function(n) invited[#invited + 1] = n end }
+
+local stitched, viewListeners = false, {}
+c.TwichUI.MapView = {
+  Ready = function() return stitched end,
+  WireButton = function() end,
+  WasDrag = function() return false end,
+  Subscribe = function(fn) viewListeners[#viewListeners + 1] = fn end,
+}
+c.TwichUI.MapWorld = {
+  Stitchable = function(id) return MAPS[id] and MAPS[id].size ~= nil end,
+  ToWorld = function(id, x, y) local m = MAPS[id]; return m.ox + x * m.size, m.oy + y * m.size end,
+  FromWorld = function(id, x, y) local m = MAPS[id]; return (x - m.ox) / m.size, (y - m.oy) / m.size end,
+}
+local function View(event) for _, fn in ipairs(viewListeners) do fn(event) end end
 
 for _, f in ipairs({ "chronicle/Style.lua", "FrameLook.lua", "modules/Interact.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua",
   "modules/Media.lua", "pins/Pins.lua", "pins/Sync.lua", "pins/Look.lua", "pins/Sound.lua", "pins/Map.lua", "pins/Minimap.lua",
@@ -261,7 +277,7 @@ do
   Send(A, 1429, 5000, 5000); Send(B, 1453, 5000, 5000); Send(C, 1436, 2000, 3000); Settle()
   local ma, mb = Mk(A), Mk(B)
   Check(ma and math.abs(ma.mx - 0.5) < 1e-9 and math.abs(ma.my - 0.5) < 1e-9, "on its own map at the sent place")
-  Check(mb and math.abs(mb.mx - 0.375) < 1e-9 and math.abs(mb.my - 0.25) < 1e-9, "a city inside the viewed zone is placed through the world")
+  Check(mb == nil and GM.Explain(B:lower()) == "different-map", "the city's real parent is the continent, so the native zone view excludes it")
   Check(Mk(C) == nil, "a sibling zone is not drawn on this one")
   Check(ma.shown ~= false and ma.size == 20, "shown at the base size")
   SetMap(1415)
@@ -274,7 +290,13 @@ do
   Settle()
   Check(Mk(C) and Mk(A) == nil and Mk(B) == nil, "viewing Westfall shows only Westfall's")
   SetMap(1429); Settle()
-  Check(Mk(A) and Mk(B) and Mk(C) == nil, "back")
+  Check(Mk(A) and Mk(B) == nil and Mk(C) == nil, "back")
+  stitched = true; View("attach"); Settle()
+  Check(Mk(B) and math.abs(Mk(B).mx - 0.375) < 1e-9 and math.abs(Mk(B).my - 0.25) < 1e-9,
+    "seamless attach redraws the nearby city through world geometry without a message")
+  stitched = false; View("off"); Settle()
+  Check(Mk(B) == nil and GM.Explain(B:lower()) == "different-map", "seamless detach restores native map eligibility")
+  Send(B); Settle()
   -- the zoom
   WMF.GetCanvasZoomPercent = function() return 1 end
   GM.Layout()
@@ -289,10 +311,12 @@ do
   GL.OnMessage("TwichUIGuild", P(1, 1429, 100, 100), "GUILD", ME)
   Settle()
   Check(GL.Peek(ME) == nil and not drawn()[ME:lower()], "our own message is ignored before anything is held")
+  Check(GM.Explain(ME:lower()) == "self", "diagnosis explains self without requiring a received self record")
   -- Alice joins the party: her marker goes, her record stays
   GROUP = { [ME] = true, [A] = true }
   c.FireEvent("GROUP_ROSTER_UPDATE"); Settle()
   Check(Mk(A) == nil and Mk(B), "a group member gets no marker")
+  Check(GM.Explain(A:lower()) == "group", "a held grouped record has an explicit suppression reason")
   Check(GL.Peek(A) ~= nil and GL.Snapshot().records >= 2, "...but the record is still held")
   Send(A, 1429, 6000, 6000); Settle()
   Check(Mk(A) == nil and GL.Peek(A).x == 6000, "...and keeps updating")
@@ -510,6 +534,7 @@ do
   Check(GL.Snapshot().records == 160, "all 160 are held")
   Check(s.drawn == 150 and count(drawn()) == 150, "150 are drawn")
   Check(drawn()[names[1]:lower()] and drawn()[names[150]:lower()] and not drawn()[names[151]:lower()], "the first held are the ones drawn")
+  Check(GM.Explain(names[150]:lower()) == "drawn" and GM.Explain(names[151]:lower()) == "cap", "diagnosis uses the same final drawing selection")
   Check(s.capped >= 1, "the cap is counted")
   local pool0 = s.pool
   Check(pool0 == 150, "the pool is as large as the most drawn")
@@ -612,6 +637,78 @@ do
   Check(diag:find("guildloc.map.layout", 1, true), "docs/diagnostics.md lists the scope")
   local src = Read("!!!TwichUI/guildloc/Map.lua")
   Check(not src:find("SendAddonMessage") and not src:find("SendCommMessage") and not src:find("SavedVariables") and not src:find("TwichUIDB"), "the map module sends and saves nothing")
+end
+
+---------------------------------------------------------------------------
+Section("12 on-demand rendering diagnosis and isolated synthetic badge")
+do
+  GL.SetState("off"); GL.SetState("invisible")
+  SetMap(1429); SetOpen(true); Join(A)
+  E = E + 100; seq[A] = 0
+  Check(GM.Explain(A:lower()) == "no-position", "a listed member without a received position is distinguishable")
+  Send(A)
+  Check(GM.Explain(A:lower()) == "pending", "a new record waits for its deferred layout")
+  Settle()
+  Check(GM.Explain(A:lower()) == "drawn", "the same record becomes drawn")
+  Send(A, 1429, 6500, 6500)
+  Check(GM.Explain(A:lower()) == "pending", "a drawn marker awaiting a move is still pending")
+  Settle()
+  local pinsMap = R.PinsMap
+  R.PinsMap = nil
+  Check(GM.Explain(A:lower()) == "map-unavailable", "a missing positioning dependency is explained")
+  R.PinsMap = pinsMap
+  local position = R.PinsMap.Position
+  R.PinsMap.Position = function() return nil end
+  Check(GM.Explain(A:lower()) == "projection", "a failed map conversion is explained")
+  R.PinsMap.Position = function() return 2, 2 end
+  Check(GM.Explain(A:lower()) == "bounds", "an off-map projected point is explained")
+  R.PinsMap.Position = position
+  SetOpen(false)
+  Check(GM.Explain(A:lower()) == "map-closed", "closing the map is distinct from missing data")
+  local ok, why = GM.SelfTest()
+  Check(not ok and why == "map-closed", "the local test does not open a closed map")
+  SetOpen(true); Settle()
+  GL.SetState("off")
+  Check(GM.Explain(A:lower()) == "off", "Off is explicit")
+  local before, providerCount = GL.Snapshot(), count(WMF.providers)
+  sc.GetCurrentScrollX = function() return 0.8 end
+  sc.GetCurrentScrollY = function() return 0.2 end
+  ok, why = GM.SelfTest()
+  local badge = made[#made]
+  Check(ok and why == "shown" and GM.Snapshot().synthetic, "the user may preview a local badge while Off")
+  Check(badge.label.text == "SYNTHETIC" and badge.label.shown and badge.shown and badge:GetScript("OnClick") == nil,
+    "the synthetic badge is clearly labeled and has no gameplay click action")
+  Check(badge.mx == 0.8 and badge.my == 0.2, "the synthetic badge appears in the visible view's middle, not the map center")
+  Check(GM.Used() == 0 and GL.Snapshot().records == 0 and GL.State() == "off", "the preview has no live record or sharing effect")
+  local frameCount = frames
+  GM.SelfTest()
+  Check(frames == frameCount and count(WMF.providers) == providerCount + 1, "repeated previews reuse one badge and provider")
+  Advance(9); Check(GM.Snapshot().synthetic, "preview remains for its promised interval")
+  Advance(1); Check(not GM.Snapshot().synthetic and not badge.shown and count(WMF.providers) == providerCount,
+    "timeout hides the badge and removes the temporary provider")
+  GM.SelfTest(); GM.StopSelfTest()
+  Check(not GM.Snapshot().synthetic and not badge.shown and count(WMF.providers) == providerCount,
+    "the diagnostic window can explicitly remove the preview through its public cleanup API")
+  GM.SelfTest(); SetMap(1436)
+  Check(not GM.Snapshot().synthetic and not badge.shown, "changing maps cleans up the preview")
+  GM.SelfTest(); SetOpen(false)
+  Check(not GM.Snapshot().synthetic and count(WMF.providers) == providerCount, "closing the map cleans up the preview")
+  SetOpen(true); GM.SelfTest(); GL.SetState("invisible")
+  Check(not GM.Snapshot().synthetic, "changing the feature state cleans up the preview")
+  local after = GL.Snapshot()
+  Check(after.stats.sent == before.stats.sent and after.stats.wSent == before.stats.wSent,
+    "synthetic testing and cleanup send neither positions nor withdrawals")
+  local layouts = GM.Snapshot().layouts
+  for i = 1, 20 do View("view") end
+  Check(GM.Snapshot().layouts == layouts, "seamless notifications coalesce instead of drawing inside callbacks")
+  Settle(); Check(GM.Snapshot().layouts == layouts + 1, "one layout follows a burst of view notifications")
+  SetOpen(false); layouts = GM.Snapshot().layouts
+  View("attach"); View("view"); Settle()
+  Check(GM.Snapshot().layouts == layouts and GM.Snapshot().armed == 0, "view notifications do no work for a hidden map")
+  SetOpen(true); GL.SetState("off"); layouts = GM.Snapshot().layouts
+  View("attach"); View("view"); Settle()
+  Check(GM.Snapshot().layouts == layouts and GM.Snapshot().armed == 0, "view notifications do no work while Off")
+  sc.GetCurrentScrollX, sc.GetCurrentScrollY = nil, nil
 end
 
 print(("guild locations map: %d checks PASSED"):format(checks))

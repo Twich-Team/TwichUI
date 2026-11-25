@@ -22,7 +22,7 @@ local TILE_H, TILE_GAP = 88, 12
 local GRID_H, GRID_GAP = 76, 12
 local GRID_MIN_COLS, GRID_MAX_COLS, GRID_CELL = 2, 3, 240
 local FEATURED = { "notifications", "reminders", "healerWatch", "qol", "magicInventory", "auction",
-    "chronicle", "navigation", "cozyBag", "food", "hazard", "workshop" }
+    "chronicle", "navigation", "cozyBag", "food", "hazard", "workshop", "fishing" }
 local featured = {}
 for i, key in ipairs(FEATURED) do featured[key] = i end
 

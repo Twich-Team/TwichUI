@@ -26,6 +26,7 @@ local c = MIClient("Rich", {
       fr.SetFontObject = function() end
       fr.SetMaxLetters = function() end
       fr.SetAutoFocus = function() end
+      fr.HighlightText = function() end
       fr.SetTextInsets = function() end
       fr.SetJustifyV = function() end
       fr.SetWordWrap = function() end
@@ -38,7 +39,7 @@ local c = MIClient("Rich", {
       fr.SetFrameStrata = function() end
       fr.SetMotionScriptsWhileDisabled = function() end
       fr.CreateTexture = function(s) local t = MIFake("Texture", s); t.SetColorTexture = function() end t.SetVertexColor = function() end t.SetTexCoord = function() end t.SetTexture = function(x, v) x.texture = v end return t end
-      fr.CreateFontString = function(s) local t = MIFake("FontString", s); t.SetFont = function() return true end t.SetJustifyV = function() end t.SetWordWrap = function() end t.SetTextColor = function() end return t end
+      fr.CreateFontString = function(s) local t = MIFake("FontString", s); t.SetFont = function() return true end t.SetJustifyV = function() end t.SetWordWrap = function() end t.SetTextColor = function(self, r, g, b) self.qualityColor = { r, g, b } end return t end
       Press.Instrument(fr, name)   -- last, so it replaces the no-op EnableMouse above with one that records
       if name then cl[name] = fr end
       return fr
@@ -71,7 +72,7 @@ c.Enum = { CraftingReagentType = { Modifying = 0, Basic = 1, Finishing = 2, Auto
 c.C_Item = {
   GetItemCount = function(id) return g.bags[id] end,
   GetItemInfoInstant = function(id) return id, "a", "b", "", 5000 + id end,
-  GetItemInfo = function(id) return g.names[id] end,
+  GetItemInfo = function(id) return g.names[id], nil, g.quality and g.quality[id] end,
   RequestLoadItemDataByID = function() end,
 }
 c.InCombatLockdown = function() return false end
@@ -139,10 +140,63 @@ end
 local qrow = Win.Lists().queue.rows[1]
 Check(qrow:IsShown() and qrow.name:GetText() == "Healing Potion")
 local detail = Win.Craft().detail
+-- Source-grounded quality enum values from Forever ItemQualitiesDocumentation.
+-- Actual row fill, delayed metadata event, narrow width and recycled item reset.
+do
+  local oldAfter = c.C_Timer.After
+  c.C_Timer.After = function(_, fn) fn() end
+  c.C_Item.GetItemQualityColor = function(q) return q / 16, .5, .75 end
+  local mat = Win.Lists().mats.rows[1]
+  local need = mat.need:GetText()
+  for _, width in ipairs({ 480, 180 }) do
+    mat:SetWidth(width)
+    for q = 0, 8 do
+      g.quality = { [10] = q }
+      Fire("GET_ITEM_INFO_RECEIVED", 10, true)
+      Same(mat.name.qualityColor[1], q/16, "delayed quality updates material name")
+      Same(mat.need:GetText(), need, "quality cannot change quantity")
+      Same(qrow.name:GetText(), "Healing Potion", "recipe label stays unchanged")
+    end
+    local fill = mat.fill
+    g.quality = {}
+    fill(mat, { item = 11, need = 1 })
+    Same(mat.name.qualityColor[1], W.UI.K.text[1], "recycled unknown item resets color")
+    g.quality = { [10] = 4 }
+    Fire("ITEM_DATA_LOAD_RESULT", 10, true)
+    Same(mat.name.qualityColor[1], .25, "alternate metadata event refreshes names")
+  end
+  g.quality = nil
+  c.C_Item.GetItemQualityColor = nil
+  Fire("GET_ITEM_INFO_RECEIVED", 10, true)
+  c.C_Timer.After = oldAfter
+end
 Same(detail.name:GetText(), "Healing Potion", "the first queued craft's details are shown")
 Same(detail.prof:GetText(), "Alchemy", "with its profession")
 Check(qrow.line:GetText() == "1 craft - makes 1-2", qrow.line:GetText())
 Check(not qrow.stale:IsShown(), "known materials: no update line")
+do
+  local edit = qrow.countEdit
+  local function begin() qrow.countButton:GetScript("OnClick")(qrow.countButton) end
+  local function enter(value)
+    begin(); edit:SetText(value); edit:GetScript("OnEnterPressed")(edit)
+  end
+  begin()
+  Same(edit:GetText(), "1", "editor starts with the queued count")
+  edit:SetText("20"); edit:GetScript("OnEnterPressed")(edit)
+  Same(Q.Find(1).crafts, 20); Same(qrow.count:GetText(), "20")
+  Same(Win.Craft().bar.sub:GetText(), "20 crafts to make", "queue total follows the saved count")
+  Same(Win.Lists().mats.rows[1].need:GetText(), "40", "materials follow the saved count")
+  Q.Unload(); Q.Load(); Same(Q.Find(1).crafts, 20, "quantity persisted")
+  for _, value in ipairs({ "", "0", "1000", "2.5", "-1", "1e2", "abc" }) do
+    enter(value); Same(Q.Find(1).crafts, 20, "invalid entry leaves the queue unchanged: " .. value)
+  end
+  begin(); edit:SetText("7"); edit:GetScript("OnEscapePressed")(edit)
+  Same(Q.Find(1).crafts, 20, "Escape cancels")
+  begin(); edit:SetText("7"); edit:ClearFocus()
+  Same(Q.Find(1).crafts, 20, "losing focus cancels")
+  enter(tostring(W.MAX_CRAFTS)); Same(Q.Find(1).crafts, W.MAX_CRAFTS)
+  enter("1"); Same(Q.Find(1).crafts, 1, "both bounds are accepted")
+end
 qrow.more:GetScript("OnClick")(qrow.more); qrow.more:GetScript("OnClick")(qrow.more)
 Same(Q.Entries()[1].crafts, 3)
 Check(qrow.line:GetText() == "3 crafts - makes 1-2 each, 3-6 in all", qrow.line:GetText())
@@ -521,7 +575,8 @@ do
   Same(sd.name:GetText(), "Peacebloom")
   Check(sd.explain:GetText():find("Craft 2 x Peacebloom Bundle", 1, true), sd.explain:GetText())
   Check(sd.explain:GetText():find("Making this looks cheaper than buying at the auction house", 1, true), sd.explain:GetText())
-  Same(sd.act.text:GetText(), "Add optimized plan")   -- P2: the multilevel plan adds its crafts through a confirmation; Check(sd.act:IsShown())
+  Same(sd.act.text:GetText(), "Add to plan", "split footer retains the existing plan action")
+  Check(sd.act:IsShown() and sd.openRecipe:IsShown(), "plan action and recipe navigation are both available")
   -- the suggestion and the player's own choice are told apart, in words: Make is suggested (the lowest cost), nothing is overridden yet
   Same(sd.tags.make:GetText(), "Suggested"); Same(sd.tags.auction:GetText(), ""); Same(sd.tags.vendor:GetText(), "")
   Check(not sd.useSuggestion:IsShown(), "no override: no Use suggestion")
@@ -936,6 +991,25 @@ do
   tip = {}
   Check(mat.scripts.OnEnter ~= nil and mat.scripts.OnClick ~= nil, "it has an item tooltip and a chat link on Shift-click")
 
+  -- Follow-up: real Opportunities output/material fonts, then queue and Shopping.
+  -- Metadata source uses source-grounded quality enums with synthetic RGB values.
+  do
+    local oldNames, oldQuality, oldGetter = g.names, g.quality, c.C_Item.GetItemQualityColor
+    g.names = { [10]="Peacebloom",[11]="Silverleaf",[501]="Healing Potion",[502]="Mana Potion" }
+    g.quality = { [10]=2,[11]=1,[501]=3,[502]=4 }
+    c.C_Item.GetItemQualityColor = function(q) return q/16,.5,.75 end
+    Fire("GET_ITEM_INFO_RECEIVED",501,true); Flush(); Win.Render()
+    local row = Win.Lists().opps.rows[1]
+    Same(row.name.qualityColor[1], g.quality[row.rec.outItem]/16, "Opportunities output name is colored")
+    Same(opps.detail.name.qualityColor[1], 3/16, "selected output name is rare")
+    Same(opps.detail.mats[1].name.qualityColor[1], 2/16, "Opportunities material name is uncommon")
+    Same(opps.detail.mats[1].qty:GetText(), "\195\1512", "material quantity stays separate")
+    g.names,g.quality,c.C_Item.GetItemQualityColor=oldNames,oldQuality,oldGetter
+    Fire("GET_ITEM_INFO_RECEIVED",501,true); Flush()
+    Win.SetMode("opps"); Win.Render()
+    Same(opps.detail.name.qualityColor[1],W.UI.K.text[1],"unknown selected output resets its previous color")
+  end
+
   -- Crafting: the left card's two lists, the plan's estimates and totals
   Win.SetMode("craft"); Win.Render()
   local cr = Win.Craft()
@@ -948,6 +1022,36 @@ do
   S.Add(rec[1]); S.Add(rec[2])
   S.SetCrafts(1, 2)
   Win.Render()
+  do
+    local oldNames, oldQuality, oldGetter = g.names, g.quality, c.C_Item.GetItemQualityColor
+    local wasRecipes = cr.segRecipes.on
+    g.names = { [10]="Peacebloom",[11]="Silverleaf",[501]="Healing Potion",[502]="Mana Potion" }
+    g.quality = { [10]=2,[11]=1,[501]=3,[502]=4 }
+    c.C_Item.GetItemQualityColor = function(q) return q/16,.5,.75 end
+    cr.segQueue:GetScript("OnClick")(cr.segQueue)
+    Win.Render()
+    local queueNames = 0
+    for _, qr in ipairs(Win.Lists().queue.rows) do
+      if qr:IsShown() and qr.entry and g.quality[qr.entry.outItem] then
+        Same(qr.name.qualityColor[1],g.quality[qr.entry.outItem]/16,"queue output name is colored")
+        queueNames = queueNames + 1
+      end
+    end
+    Same(queueNames,2,"both queued output names were checked")
+    Win.SetMode("shop"); Win.Render()
+    local shopNames = 0
+    for _, sr in ipairs(Win.Lists().shop.rows) do
+      if sr:IsShown() and sr.data and g.quality[sr.data.item] then
+        Same(sr.name.qualityColor[1],g.quality[sr.data.item]/16,"Shopping material name is colored")
+        shopNames = shopNames + 1
+      end
+    end
+    Check(shopNames>=1,"at least one actual Shopping row was checked")
+    g.names,g.quality,c.C_Item.GetItemQualityColor=oldNames,oldQuality,oldGetter
+    Fire("GET_ITEM_INFO_RECEIVED",501,true); Flush()
+    Win.SetMode("craft"); Win.Render()
+    if wasRecipes then cr.segRecipes:GetScript("OnClick")(cr.segRecipes) end
+  end
   -- Healing Potion x2: cost 2 x 200, sells 2 x 1000, profit 2 x 800. Mana Potion x1: cost 100 + 50, sells 300, profit 150.
   local byId, tot = S.PlanEstimates()
   Same(byId[1].cost, 400); Same(byId[1].sellLow, 2000); Same(byId[1].profitLow, 1600)
@@ -1001,13 +1105,138 @@ do
   Same(d.qty[1].l:GetText(), "Needed in total"); Same(d.qty[1].v:GetText(), "5")
   Same(d.qty[2].l:GetText(), "In your bags"); Same(d.qty[2].v:GetText(), "0")
   Same(d.qty[3].l:GetText(), "To get"); Same(d.qty[3].v:GetText(), "5")
-  Check(d.usedFor:GetText():find("Needed for: Healing Potion, Mana Potion", 1, true), d.usedFor:GetText())
+  local consumerNames, consumerRecords = S.NeededFor(10)
+  Same(#consumerNames, 2, "legacy name-list contract")
+  Same(consumerRecords[1].item, 501, "relationship carries recorded output identity")
+  Same(d.neededHead:GetText(), "Needed for")
+  -- The real pane is 409px tall after shell/page/footer insets. MIFake does
+  -- not resolve anchors: assert the reserved viewport itself, not just row data.
+  Check(d.consumers.box:GetHeight() - 8 >= 2 * d.consumers.rowH,
+    "Needed for must expose two complete rows, including scroll-frame insets")
+  Check(d.neededSection:GetHeight() >= d.consumers.box:GetHeight() + 24,
+    "consumer section includes its heading and viewport")
+  Same(d.scroll.parent, d.head)
+  Same(d.body.parent, d.scroll, "upper evidence scrolls independently of consumers")
+  Same(d.scroll.child, d.body)
+  Same(d.scroll.points[2][2], d.neededSection, "upper evidence stops above the reserved section")
+  Same(d.scroll.points[2][3], "TOPRIGHT")
+  Same(#d.consumers.data, 2, "both queued consumers")
+  Same(d.consumers.rows[1].name:GetText(), "Healing Potion")
+  Same(d.consumers.rows[2].name:GetText(), "Mana Potion")
+  Same(d.consumers.rows[1].iconFrame.tex.texture, 5501, "verified output item icon")
+  Same(consumerRecords[1].recipe, 1, "recorded recipe spell identity survives adaptation")
+  Same(consumerRecords[1].icon, Q.Find(1).icon, "recorded recipe icon survives adaptation")
+  local consumer = d.consumers.rows[1]
+  local info, qualityColor = c.C_Item.GetItemInfo, c.C_Item.GetItemQualityColor
+  local itemTip, spellTip = c.GameTooltip.SetItemByID, c.GameTooltip.SetSpellByID
+  local modified, insertLink = c.IsModifiedClick, c.ChatEdit_InsertLink
+  local setColor = consumer.name.SetTextColor
+  consumer.name.SetTextColor = function(self, r, g, b) self.consumerColor = { r, g, b } end
+  c.C_Item.GetItemInfo = function(id)
+    local name, link = info(id)
+    return name, link, id == 501 and 3 or nil
+  end
+  c.C_Item.GetItemQualityColor = function(q) Same(q, 3); return 0, 0.44, 0.87 end
+  local hoveredItem, hoveredSpell, linked
+  c.GameTooltip.SetItemByID = function(_, id) hoveredItem = id end
+  c.GameTooltip.SetSpellByID = function(_, id) hoveredSpell = id end
+  Win.Render()
+  Same(consumer.name.consumerColor[2], 0.44, "item name uses native quality color")
+  consumer:GetScript("OnEnter")(consumer)
+  Same(hoveredItem, 501, "name region shows native item tooltip")
+  hoveredItem = nil
+  consumer.iconBtn:GetScript("OnEnter")(consumer.iconBtn)
+  Same(hoveredItem, 501, "icon shows the same item tooltip")
+  consumer.iconBtn:GetScript("OnLeave")(consumer.iconBtn)
+  Check(not c.GameTooltip:IsShown(), "leaving the icon hides the tooltip")
+  c.GameTooltip.SetItemByID = function() error("Synthetic unavailable item tooltip") end
+  consumer:GetScript("OnEnter")(consumer)
+  Check(not c.GameTooltip:IsShown(), "failed item tooltip never reveals stale contents")
+  c.GameTooltip.SetItemByID = function(_, id) hoveredItem = id end
+  c.IsModifiedClick = function() return true end
+  c.ChatEdit_InsertLink = function(link) linked = link end
+  consumer:GetScript("OnClick")(consumer, "LeftButton")
+  local _, expectedLink = info(501)
+  Same(linked, expectedLink, "Shift-click links the output item")
+  -- Synthetic enchant fixture: recorded recipe spell/icon, with no output item.
+  local consumersBefore = S.NeededFor
+  S.NeededFor = function() return {}, { { name = "Synthetic enchant", recipe = 9001, icon = 9002 } } end
+  hoveredItem = nil
+  Win.Render()
+  Check(consumer.iconBtn:IsShown(), "non-item recipe retains its recorded icon")
+  Same(consumer.iconFrame.tex.texture, 9002)
+  consumer:GetScript("OnEnter")(consumer)
+  Same(hoveredSpell, 9001, "enchant name shows its spell tooltip")
+  Same(hoveredItem, nil, "recipe identity is never sent to item tooltip API")
+  Same(consumer.name.consumerColor[1], W.UI.K.text[1], "no item quality is invented for an enchant")
+  consumer.iconBtn:GetScript("OnEnter")(consumer.iconBtn)
+  Same(hoveredSpell, 9001, "enchant icon shares its spell tooltip")
+  S.NeededFor = consumersBefore
+  c.C_Item.GetItemInfo, c.C_Item.GetItemQualityColor = info, qualityColor
+  c.GameTooltip.SetItemByID, c.GameTooltip.SetSpellByID = itemTip, spellTip
+  c.IsModifiedClick, c.ChatEdit_InsertLink = modified, insertLink
+  consumer.name.SetTextColor = setColor
+  Win.Render()
+  local originalNeededFor = S.NeededFor
+  S.NeededFor = function() return {}, {
+    { name = string.rep("Long recipe name ", 8), item = 501 },
+    { name = "Output not recorded" },
+    {},
+  } end
+  local instant = c.C_Item.GetItemInfoInstant
+  c.C_Item.GetItemInfoInstant = function() return nil end
+  Win.Render()
+  Same(d.consumers.rows[1].name:GetText(), string.rep("Long recipe name ", 8), "missing item name retains complete recipe text")
+  Check(not d.consumers.rows[1].iconBtn:IsShown(), "unknown icon is text-only")
+  Same(d.consumers.rows[2].name:GetText(), "Output not recorded")
+  d.consumers.scroll:SetVerticalScroll(34)
+  d.consumers:Layout()
+  Same(d.consumers.rows[2].name:GetText(), "Unknown recipe", "missing identity has no guessed icon/name")
+  S.NeededFor = function() return {}, {} end
+  Win.Render()
+  Same(d.consumers.empty:GetText(), "No queued recipe reference available.")
+  Check(not d.consumers.rows[1]:IsShown(), "stale consumers hidden")
+  S.NeededFor, c.C_Item.GetItemInfoInstant = originalNeededFor, instant
+  Win.Render()
   Same(d.cost:GetText(), "500c", "5 at 100 each"); Check(d.costNote:GetText():find("Auction house", 1, true), d.costNote:GetText())
   Same(row10.kind:GetText(), "Auction"); Check(not d.act:IsShown(), "Auction has no action here: nothing is bought for you")
   Same(d.kindWord:GetText(), "Buy at Auction House", "the details say the acquisition in full")
   Check(d.choose.auction.on and d.choose.auction.enabled and not d.choose.vendor.enabled, "only the possible sources can be chosen")
   Check(shop.counts.auction.n:GetText() == "2" and shop.counts.vendor.n:GetText() == "0" and shop.counts.make.n:GetText() == "0" and shop.counts.collect.n:GetText() == "0", "the plan counts")
   Check(shop.total:GetText():find("Estimated spending: 550c", 1, true), shop.total:GetText())
+  local shoppingPlan = S.ShoppingPlan
+  S.ShoppingPlan = function()
+    local plan, ctx, engine = shoppingPlan()
+    local copy, context = {}, {}
+    for k, v in pairs(plan) do copy[k] = v end
+    for k, v in pairs(ctx) do context[k] = v end
+    copy.rows = {}
+    for i, r in ipairs(plan.rows) do
+      copy.rows[i] = {}
+      for k, v in pairs(r) do copy.rows[i][k] = v end
+      copy.rows[i].source = "vendor"
+    end
+    context.sellers = { [10] = {} }
+    return copy, context, engine
+  end
+  Win.Render()
+  Check(d.act:IsShown(), "vendor action occupies the footer")
+  Same(d.neededSection.points[1][3], 52, "section clears the visible action")
+  Check(d.consumers.box:GetHeight() - 8 >= 2 * d.consumers.rowH,
+    "action cannot squeeze the consumer viewport")
+  S.ShoppingPlan = shoppingPlan
+  Win.Render()
+  Same(d.neededSection.points[1][3], 12, "hidden action returns space to upper evidence")
+  d.scroll:SetVerticalScroll(50)
+  -- Choosing a different material drops the prior material's consumers and scroll.
+  for _, row in ipairs(SL.rows) do
+    if row:IsShown() and row.item == 11 then row:GetScript("OnClick")(row); break end
+  end
+  Same(#d.consumers.data, 1)
+  Same(d.consumers.rows[1].name:GetText(), "Mana Potion")
+  Same(d.consumers.scroll:GetVerticalScroll(), 0)
+  Same(d.scroll:GetVerticalScroll(), 0, "new selection starts upper evidence at the top")
+  row10:GetScript("OnClick")(row10)
   -- only collect rows
   g.bags = { [10] = 0, [11] = 0 }
   W.Storage.StoreBank({ ids = { 6 }, tabs = { [6] = { [10] = 5, [11] = 1 } }, incomplete = 0 }, Q.Now() - 600)
@@ -1018,10 +1247,14 @@ do
   local cd = shop.detail
   Check(not cd.choose.vendor:IsShown() and not cd.act:IsShown(), "collect: no source choice, no action")
   Same(cd.cost:GetText(), "Already owned")
+  Same(#cd.consumers.data, 2, "collect-only still shows both consumers")
   g.bags = { [10] = 4, [11] = 1 }
   W.Storage.Reset = nil
   c.TwichUIDB.workshop.storage = nil
   for _, e in ipairs({ unpack(Q.Entries()) }) do Q.Remove(e.id) end
+  Win.Render()
+  Check(d.empty:IsShown() and not d.head:IsShown(), "empty plan hides consumer section")
+  Same(#d.consumers.data, 0, "empty plan clears consumers")
   Win.SetMode("overview")
   f:Hide()
 end
@@ -1510,6 +1743,65 @@ do
   f:Show()
   Same(Win.Mode(), "overview", "the page shown is kept while the game runs")
   f:Hide()
+end
+
+-- Queue context actions use the existing native menu and capture the intended row.
+do
+  for _, e in ipairs({ unpack(Q.Entries()) }) do Q.Remove(e.id) end
+  local rec = { id=8001, name="Synthetic menu craft", prof=171, profName="Alchemy", icon=1,
+    outItem=501, outMin=1, outMax=1, mats={{item=10,qty=2}} }
+  Check(Q.Add(rec, 3))
+  Win.Show(); Win.SetMode("craft")
+  Win.Craft().segQueue:GetScript("OnClick")(Win.Craft().segQueue)
+  local row = Win.Lists().queue.rows[1]
+  local originalMenu, opened = c.MenuUtil
+  c.MenuUtil = { CreateContextMenu=function(owner, build)
+    opened = { owner=owner, entries={} }
+    function opened:CreateButton(text, action)
+      local entry={text=text,action=action,enabled=true}
+      function entry:SetEnabled(on) self.enabled=on end
+      self.entries[#self.entries+1]=entry
+      return entry
+    end
+    build(owner, opened)
+  end }
+  row:GetScript("OnClick")(row,"RightButton")
+  Same(opened.owner,row)
+  Same(#opened.entries,2)
+  Same(opened.entries[1].text,"Open recipe")
+  Same(opened.entries[2].text,"Remove from queue")
+  Same(Q.Find(8001).crafts,3,"opening menu preserves quantity")
+  local before=#g.opened
+  opened.entries[1].action()
+  Same(#g.opened,before+1); Same(g.opened[#g.opened],8001,"menu opens intended recipe")
+  local openRecipe=c.C_TradeSkillUI.OpenRecipe
+  c.C_TradeSkillUI.OpenRecipe=function() error("Synthetic unavailable profession") end
+  opened.entries[1].action()
+  Check(S.Note():find("Open Alchemy first",1,true),"unavailable profession retains existing guidance")
+  c.C_TradeSkillUI.OpenRecipe=openRecipe
+  row.countButton:GetScript("OnClick")(row.countButton,"RightButton")
+  Check(not row.countEdit:IsShown(),"right-click quantity opens menu rather than editor")
+  row.iconBtn:GetScript("OnClick")(row.iconBtn,"RightButton")
+  Same(opened.owner,row,"output icon opens the same queue menu")
+  local held=Q.Held;Q.Held=function() return true end
+  row:GetScript("OnClick")(row,"RightButton")
+  Check(not opened.entries[2].enabled,"read-only queue disables removal")
+  Q.Held=held
+  row:GetScript("OnClick")(row,"RightButton")
+  local staleRemove=opened.entries[2].action
+  row.id=8002
+  staleRemove()
+  Check(Q.Find(8001),"recycled row cannot apply a stale menu action")
+  row.id=8001;row:Hide();staleRemove()
+  Check(Q.Find(8001),"hidden owner cannot apply a stale menu action")
+  Win.Render()
+  row:GetScript("OnClick")(row,"RightButton")
+  opened.entries[2].action()
+  Check(not Q.Find(8001),"menu removal goes through Session.Remove")
+  Q.Unload();Q.Load()
+  Check(not Q.Find(8001),"menu removal persists")
+  c.MenuUtil=originalMenu
+  Win.Hide()
 end
 
 print("PASSED")

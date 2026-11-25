@@ -54,6 +54,42 @@ UI.ICON_BLANK = 134400   -- the game's question-mark icon, for a recipe or item 
 ---------------------------------------------------------------------------
 function UI.Paint(fs, c, a) fs:SetTextColor(c[1], c[2], c[3], a or 1) end
 
+-- Only verified item quality belongs here; nil is unknown, never common.
+-- Reset on every fill so a recycled row cannot keep the previous item's color.
+local function ItemColor(quality)
+    quality = W.Int(W.Plain(quality), 0, 8)
+    if quality == nil then return end
+    if C_Item and C_Item.GetItemQualityColor then
+        local ok, r, g, b = pcall(C_Item.GetItemQualityColor, quality)
+        r, g, b = W.Plain(r), W.Plain(g), W.Plain(b)
+        if ok and W.Finite(r) and W.Finite(g) and W.Finite(b)
+            and r >= 0 and r <= 1 and g >= 0 and g <= 1 and b >= 0 and b <= 1 then return r, g, b end
+    end
+    local c = ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
+    if c then
+        local r, g, b = W.Plain(c.r), W.Plain(c.g), W.Plain(c.b)
+        if W.Finite(r) and W.Finite(g) and W.Finite(b)
+            and r >= 0 and r <= 1 and g >= 0 and g <= 1 and b >= 0 and b <= 1 then return r, g, b end
+    end
+end
+-- A recipe label can also be the actual output item's name. Only color that
+-- case; actions such as "Smelt Bronze" and non-item recipes remain neutral.
+function UI.OutputQuality(rec)
+    if not (rec and rec.outItem and W.Observe) then return nil end
+    local name, _, quality = W.Observe.ItemFacts(rec.outItem)
+    if name and name == rec.name then return quality end
+end
+function UI.ItemQuality(fs, quality)
+    local r, g, b = ItemColor(quality)
+    if r then fs:SetTextColor(r, g, b) else UI.Paint(fs, UI.K.text) end
+end
+-- For names sharing a font string with quantity or status, limit color to the name.
+function UI.QualityText(text, quality)
+    local r, g, b = ItemColor(quality)
+    if not r then return text end
+    return ("|cff%02x%02x%02x%s|r"):format(math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5), text)
+end
+
 function UI.Text(parent, size, color, role, layer)
     local fs = L.Text(parent, "body", layer)
     CL.Font(fs, size or 14, false, role)
@@ -417,8 +453,12 @@ function UI.List(parent, rowH, make, minH, surface)
         for i = count + 1, #rows do rows[i]:Hide() end
         if self.fit then self.fit(#data * rowH) end
     end
-    sf:HookScript("OnVerticalScroll", function() list:Layout() end)
-    sf:HookScript("OnSizeChanged", function() list:Layout() end)
+    local function Viewport()
+        list:Layout()
+        if list.onViewport then list.onViewport()end
+    end
+    sf:HookScript("OnVerticalScroll", Viewport)
+    sf:HookScript("OnSizeChanged", Viewport)
     function list:SetData(d, emptyText)
         self.data = d
         self.empty:SetText(emptyText or "")

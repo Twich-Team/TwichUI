@@ -121,7 +121,7 @@ Everyday                  Notifications, Reminders › Known ammunition, Quality
 Journey                   Journey Chronicle › Appearance, Cozy Sleeping Bag
 Map                       Pins and Pings (Pins, Pings, Appearance), Map Toolbar, World map › Places, Navigation › Appearance, Vendors and trainers › Your list and sharing
 Gear & class              Gear comparison › Stat weights, Mage (Mages only) › Refreshment shares, Class resource bars › Layout, Appearance, Effects
-Other addons              Addon skins, RestedXP (map waypoint, guide window look, timer bars), Target dragon artwork
+Other addons              Addon skins, RestedXP (map waypoint, guide window look, timer bars), Target Portrait Decorations
 Your configuration        Configuration sharing, Profiles, Troubleshooting
 ```
 
@@ -138,7 +138,7 @@ when it has settings with defaults, **Reset this page** at the bottom. A top-lev
 
 **Home** opens with three ways in, side by side; choosing one shows it beneath (kept for the session, never saved):
 **Explore features** (every page in the list with its icon and its `overview.status`, each opening its page),
-**Adjust appearance** (the Appearance tabs, Addon skins and Target dragon artwork) and **Review changed settings**
+**Adjust appearance** (the Appearance tabs, Addon skins and Target Portrait Decorations) and **Review changed settings**
 (`K.Changed()`: every setting whose value now differs from its default, compared with the feature's own `DEFAULTS` or
 `DEFAULT_MODULES`, each opening its control; opening pages or playing samples never counts). Nothing is turned on from
 Home and there is no wizard. Help and General follow.

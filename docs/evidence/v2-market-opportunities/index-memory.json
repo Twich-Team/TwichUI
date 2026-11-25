@@ -1,0 +1,155 @@
+{
+  "source": "725519e6be87f3e3b9c75d8f7ad271572cb60a1f",
+  "harness_sha256": "d3f90b67696adf9ce785bff6d9df95d0b7ce9750573221720975241c47efa180",
+  "index_harness_sha256": "1973827e13a6165a6f06f83dcb9d9468513de1fcaabeea61167b9b83a7378f18",
+  "host": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "python": "3.12.14",
+  "clock": "Lua os.clock CPU; Python perf_counter subprocess elapsed",
+  "limitations": "Synthetic 60Hz minimum timer delay; not the WoW scheduler. Peak heap sampled at callbacks/lookups, not exact peak. Includes harness observer overhead.",
+  "samples": [
+    {
+      "case": [
+        "index",
+        "numeric",
+        32,
+        2
+      ],
+      "runs": [
+        {
+          "count": 32,
+          "cpu_ms": 1,
+          "index16_build_us": 31,
+          "index16_bytes": 21824,
+          "index1_build_us": 5,
+          "index1_bytes": 1424,
+          "index2_build_us": 7,
+          "index2_bytes": 2784,
+          "index4_build_us": 9,
+          "index4_bytes": 5504,
+          "index64_build_us": 135,
+          "index64_bytes": 87104,
+          "index8_build_us": 17,
+          "index8_bytes": 10944,
+          "mode": "index",
+          "synthetic": true,
+          "subprocess_wall_seconds": 0.004028415999982826
+        },
+        {
+          "count": 32,
+          "cpu_ms": 1,
+          "index16_build_us": 31,
+          "index16_bytes": 21824,
+          "index1_build_us": 4,
+          "index1_bytes": 1424,
+          "index2_build_us": 6,
+          "index2_bytes": 2784,
+          "index4_build_us": 44,
+          "index4_bytes": 5504,
+          "index64_build_us": 138,
+          "index64_bytes": 87104,
+          "index8_build_us": 16,
+          "index8_bytes": 10944,
+          "mode": "index",
+          "synthetic": true,
+          "subprocess_wall_seconds": 0.004474509000147009
+        },
+        {
+          "count": 32,
+          "cpu_ms": 1,
+          "index16_build_us": 30,
+          "index16_bytes": 21824,
+          "index1_build_us": 4,
+          "index1_bytes": 1424,
+          "index2_build_us": 6,
+          "index2_bytes": 2784,
+          "index4_build_us": 11,
+          "index4_bytes": 5504,
+          "index64_build_us": 131,
+          "index64_bytes": 87104,
+          "index8_build_us": 16,
+          "index8_bytes": 10944,
+          "mode": "index",
+          "synthetic": true,
+          "subprocess_wall_seconds": 0.004524984999989101
+        }
+      ],
+      "metrics": {
+        "count": {
+          "median": 32,
+          "minimum": 32,
+          "maximum": 32
+        },
+        "cpu_ms": {
+          "median": 1,
+          "minimum": 1,
+          "maximum": 1
+        },
+        "index16_build_us": {
+          "median": 31,
+          "minimum": 30,
+          "maximum": 31
+        },
+        "index16_bytes": {
+          "median": 21824,
+          "minimum": 21824,
+          "maximum": 21824
+        },
+        "index1_build_us": {
+          "median": 4,
+          "minimum": 4,
+          "maximum": 5
+        },
+        "index1_bytes": {
+          "median": 1424,
+          "minimum": 1424,
+          "maximum": 1424
+        },
+        "index2_build_us": {
+          "median": 6,
+          "minimum": 6,
+          "maximum": 7
+        },
+        "index2_bytes": {
+          "median": 2784,
+          "minimum": 2784,
+          "maximum": 2784
+        },
+        "index4_build_us": {
+          "median": 11,
+          "minimum": 9,
+          "maximum": 44
+        },
+        "index4_bytes": {
+          "median": 5504,
+          "minimum": 5504,
+          "maximum": 5504
+        },
+        "index64_build_us": {
+          "median": 135,
+          "minimum": 131,
+          "maximum": 138
+        },
+        "index64_bytes": {
+          "median": 87104,
+          "minimum": 87104,
+          "maximum": 87104
+        },
+        "index8_build_us": {
+          "median": 16,
+          "minimum": 16,
+          "maximum": 17
+        },
+        "index8_bytes": {
+          "median": 10944,
+          "minimum": 10944,
+          "maximum": 10944
+        },
+        "subprocess_wall_seconds": {
+          "median": 0.004474509000147009,
+          "minimum": 0.004028415999982826,
+          "maximum": 0.004524984999989101
+        }
+      }
+    }
+  ]
+}

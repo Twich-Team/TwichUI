@@ -1,0 +1,56 @@
+## Interface: 16001
+## Title: |cffC9A24ATwich|rUI Fishing
+## Notes: One key that fishes for you to press: equips your pole, applies a lure, casts, reels in and opens the clams you catch, each on your own key press. Keeps a record of your fishing sessions and catches, and Fishing Mode shows them: a fishing cast bar, your catches beside the water and a calmer screen. Loaded when you bind its key or type /tui fish; keep it turned on alongside TwichUI.
+## Author: twichie
+## Version: 1.0.0
+## RequiredDeps: !!!TwichUI
+## LoadOnDemand: 1
+## SavedVariables: TwichUIFishingDB
+## IconTexture: Interface\AddOns\!!!TwichUI\media\icon
+## X-License: MIT (code); see !!!TwichUI\LICENSE
+## Category: Interface Enhancements
+
+# Names, seed data and small helpers (no frames, no game state); creates R.Fishing
+Data.lua
+# TwichUIFishingDB: schema, defaults, migrations and retention (docs/fishing.md, "Saved data")
+Store.lua
+# Fishing sessions, casts and lifetime totals
+Session.lua
+# The fishing pole, the optional outfit, and putting your own gear back
+Gear.lua
+# Fishing lures on the pole: what is on it, what is in the bags, which to use
+Lure.lua
+# Clams and other containers caught while fishing: the queue, opening and what they held
+Containers.lua
+# Loot windows: catches and the items taken from them
+Loot.lua
+# The fishing key: the next action, the secure buttons, reeling and combat
+Action.lua
+# The read-only interface later stages use, and the diagnostics
+Api.lua
+Economy.lua
+# Start-up, events and /tui fish
+Main.lua
+# Stage 2, Fishing Mode: what the heads-up pieces share (artwork in media\, built by tools/make_fishing_art.py)
+Hud.lua
+# The Fishing Mode camera, put back as it was afterwards
+Camera.lua
+# EllesmereUI's frames, by role, for Fishing Mode's fading (read only)
+Ellesmere.lua
+# Concealing the minimap in Immersive Fishing Mode (a real Hide, restored after)
+Conceal.lua
+# Fading the interface around Fishing Mode, and bringing it back
+Fade.lua
+# The fishing cast bar
+CastBar.lua
+# The catch list on the right of the screen
+CatchList.lua
+# Catch notifications
+Toast.lua
+# Stage 3A, the Fishing Journal: its data (read from the interface only), then its window and the session summary
+Journal.lua
+JournalUI.lua
+# Fishing Mode itself: presentations, on and off, recovery, and its /tui fish words
+Present.lua
+# Current-market estimates through the existing presentation interfaces
+EconomyPresent.lua

@@ -1,16 +1,35 @@
 -- Optional EllesmereUI item-ID marking. Shares the tooltip's Advisor policy;
--- never sells, unmarks, writes EllesmereUI saved data or loads either addon.
+-- Reconciles only its own marks; never sells, writes EllesmereUI data or loads addons.
 local R = TwichUI
 local W = R.Workshop
 local J = {}
 W.Junk = J
 local frame, active, pending, generation = nil, false, false, 0
 local epoch=0
+-- Only held slots and their at-most-four price dependencies survive a scan.
+local held, dependents, saleReady = {}, {}, {}
+local queuedFull, queuedItems = false, {}
+local runningFull, runningTargets = false, nil
+local function PriceStamp()
+    local p=W.Pricing
+    local source=W.Session.PriceSource()
+    local m=source and source.market
+    -- The facade's generation includes every partial completion. Only its source
+    -- context and underlying local market invalidate unrelated held decisions.
+    if m and m.pricing then m=m.localMarket end
+    local age=m and type(m.at)=="number" and time()-m.at
+    local freshness=not age and "none" or age<0 and "future" or age>W.Valuation.FAIR_AGE and "stale"
+        or age>W.Valuation.GOOD_AGE and "old" or "current"
+    return (p and p.ContextGeneration() or "").."|"..tostring(m and W.Valuation.Generation(m) or "")
+        .."|"..tostring(m and m.key).."|"..freshness.."|"..tostring(p and p.Source().referenceWhy)
+        .."|"..tostring(W.Queue.Count()>0 and W.Strategy.epoch or "")
+end
 local professionItems,classItems={},{}
 local needWear,needUpgrade,needRecipe,needAdvisor=false,false,false,false
 local touched, touchedCount = {}, 0 -- bounded; respect a manual unmark this session
 local EVENTS = {"BAG_UPDATE_DELAYED", "GET_ITEM_INFO_RECEIVED", "PLAYER_REGEN_ENABLED", "PLAYER_REGEN_DISABLED",
-    "PLAYER_ENTERING_WORLD", "PLAYER_LEAVING_WORLD", "ADDON_LOADED", "SPELLS_CHANGED", "SKILL_LINES_CHANGED", "PLAYER_EQUIPMENT_CHANGED", "PLAYER_TALENT_UPDATE"}
+    "PLAYER_ENTERING_WORLD", "PLAYER_LEAVING_WORLD", "ADDON_LOADED", "SPELLS_CHANGED", "SKILL_LINES_CHANGED", "PLAYER_EQUIPMENT_CHANGED", "PLAYER_TALENT_UPDATE",
+    "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED"}
 -- Why an item may never be marked, or nil. The Cozy Sleeping Bag and the player's Never mark list are one
 -- protection ("never"); Mage Sell's exclusions and vendor restocking each keep their own reason.
 local function Why(id)
@@ -88,6 +107,8 @@ local function Gather(bag, slot, wear, upgrade, recipe)
     facts.armor = class == 4 and (ARMOR[subclass] or "other") or class ~= nil and "none" or nil
     facts.tool = (class == 2 and (subclass == 14 or subclass == 20)) or TOOL_IDS[id] == true
     facts.camping = Camping(id)
+    -- Raw fish and meat are both trade goods of the cooking subclass; the name tells them apart (unverified on a Forever client).
+    facts.food = class ~= nil and (class == 7 and subclass == 8 and (name:lower():find("fish",1,true) and "fish" or "meat") or "none") or nil
     -- Mage scrolls that drop everywhere before a Mage deciphers them are consumables named "Scroll: WORD WORD"
     -- (deciphered ones are "Scroll of ..."). One sample item is the evidence; see docs/workshop/item-advisor.md.
     facts.mageScroll = class == 0 and name:sub(1, 8) == "Scroll: "
@@ -117,7 +138,7 @@ end
 
 -- The Advisor's answer for one gathered copy: true when it recommends Vendor, false for anything else, nil when
 -- the item's own numbers are unusable (which vetoes marking). `advice` is the full answer, for the item test.
-local function Advise(info)
+local function Advise(info, memo)
     local x, link, level = info.x, info.link, info.level
     local f = {item=info.id, count=W.Int(W.Plain(x.stackCount),1,W.MAX_ID), sell=W.Plain(info.sell), quality=info.quality,
         itemLevel=W.Int(W.Plain(level),1,1000), classID=info.class, equipLoc=W.Plain(info.equip), bindType=W.Plain(info.bind),
@@ -133,22 +154,29 @@ local function Advise(info)
     end
     local source=W.Session.PriceSource()
     f.marketTable=source.market
-    local advice=W.AdvisorData.Tooltip(f)
+    -- Share the canonical valuation across identical copies in this scan only.
+    -- Bag/source changes cancel the job; no snapshot survives into a later scan.
+    local key=table.concat({info.id,link,f.count,tostring(f.bound),tostring(f.bindType),f.sell,
+        tostring(f.itemLevel),tostring(f.actualLevel)},"|")
+    local advice=memo and memo[key]
+    if not advice then advice=W.AdvisorData.Tooltip(f);if memo then memo[key]=advice end end
+    if advice.pending or advice.action=="unknown" then return nil,advice end
     return advice.action=="vendor", advice
 end
 
-local function Read(bag, slot)
+local function Read(bag, slot, memo)
     local info = Gather(bag, slot, needWear, needUpgrade, needRecipe)
     if info == nil or info == false then return info end
-    if info.veto then return info.id end
+    if info.veto then return info.id, info.veto=="protected" and "protected" or "blocked" end
     local L = R.WorkshopLauncher
     local verdict = L.JunkVerdict(info.id, info.class, info.facts)
     -- Workshop's advice is only asked for when a rule's answer depends on it: it is the costly fact.
+    local advice
     if verdict == "unknown" and needAdvisor then
-        info.facts.vendor = (Advise(info))
+        info.facts.vendor, advice = Advise(info, memo)
         verdict = L.JunkVerdict(info.id, info.class, info.facts)
     end
-    return info.id, verdict == "match", info.quality
+    return info.id, verdict, info.quality, advice and advice.dependencies
 end
 
 -- What the "Recipe material" and "Class reagent" conditions know: remembered recipes and this class's reagents.
@@ -166,9 +194,10 @@ local function Learn()
     for _,entry in ipairs(R.Restock and R.Restock.Suggestions and R.Restock.Suggestions() or {}) do classItems[entry.id]=true end
 end
 
-local function Scan()
+local function Scan(targets)
     if not Ready() or not (C_Container and C_Container.GetContainerNumSlots and C_Container.GetContainerItemInfo
         and C_Item and C_Item.GetItemInfo) then return end
+    local stamp=PriceStamp()
     Learn()
     for _,rule in ipairs(R.WorkshopLauncher.JunkRules()) do
         if rule.on then
@@ -178,37 +207,77 @@ local function Scan()
         end
     end
     needAdvisor=R.WorkshopLauncher.JunkNeedsAdvisor()
-    local candidates, order, slots = {}, {}, 0
-    for bag=0,math.min(NUM_TOTAL_EQUIPPED_BAG_SLOTS or NUM_BAG_SLOTS or 4,10) do
-        local n=W.Int(W.Plain(C_Container.GetContainerNumSlots(bag)),0,200)
-        if not n then return end
-        for slot=1,n do
-            local id, vendor, quality=Read(bag,slot)
-            if id==false then return end -- an unreadable occupied slot may be another copy
-            if id then
-                if not candidates[id] then candidates[id]={ok=true,quality=quality};order[#order+1]=id end
-                if not vendor then candidates[id].ok=false end -- (third value: this copy matched a rule)
+    local candidates, order, slots, memo = {}, {}, 0, {}
+    local function Visit(bag,slot,expected)
+        local id, verdict, quality, dependencies=Read(bag,slot,memo)
+        if id==false or expected and id~=expected then return false end
+        if id then
+            local c=candidates[id]
+            if not c then c={ok=true,quality=quality,slots={},dependencies={}};candidates[id]=c;order[#order+1]=id end
+            c.slots[#c.slots+1]={bag,slot}
+            if verdict~="match" then c.ok=false end
+            if verdict=="nomatch" or verdict=="protected" or verdict=="class" then c.reject=true end
+            for dependency in pairs(dependencies or {}) do
+                c.dependencies[dependency]=true
+                -- A decoder may finish while the full inventory job is yielded.
+                dependents[dependency]=dependents[dependency] or {};dependents[dependency][id]=true
             end
-            slots=slots+1
-            if slots%40==0 then coroutine.yield() end
+        end
+        slots=slots+1
+        if slots%40==0 then coroutine.yield() end
+        return true
+    end
+    if targets then
+        for id in pairs(targets) do
+            for _,at in ipairs(held[id] and held[id].slots or {}) do
+                -- A moved/replaced copy needs the normal full bag reconciliation.
+                if not Visit(at[1],at[2],id) then J.Request();return end
+            end
+        end
+    else
+        for bag=0,math.min(NUM_TOTAL_EQUIPPED_BAG_SLOTS or NUM_BAG_SLOTS or 4,10) do
+            local n=W.Int(W.Plain(C_Container.GetContainerNumSlots(bag)),0,200)
+            if not n then return end
+            for slot=1,n do if not Visit(bag,slot) then return end end
+        end
+    end
+    if stamp~=PriceStamp() then J.Request();return end
+    -- Publish dependency changes only after all copies were safely read.
+    if not targets then held,dependents={},{} end
+    for _,id in ipairs(order) do
+        for dependency in pairs(held[id] and held[id].dependencies or {}) do
+            if dependents[dependency] then dependents[dependency][id]=nil;if not next(dependents[dependency]) then dependents[dependency]=nil end end
+        end
+        held[id]=candidates[id]
+        for dependency in pairs(candidates[id].dependencies) do
+            dependents[dependency]=dependents[dependency] or {};dependents[dependency][id]=true
         end
     end
     local changed=false
     for index,id in ipairs(order) do
-        if not Ready() then return end
+        if not Ready() or stamp~=PriceStamp() then return end
         local c=candidates[id]
-        -- No stale planning or prices: reread the crafting reservation immediately
-        -- before marking. Bag/price changes invalidate the whole pending job.
         local reserved, unresolved=W.AdvisorData.Reserved(id)
-        if c.ok and reserved==0 and not unresolved and not Protected(id) and not touched[id] and touchedCount<2048 then
-            local result=R.EllesmereJunk.Mark(id,c.quality)
-            if result=="marked" or result=="failed" then
-                touched[id]=true;touchedCount=touchedCount+1
+        local ej=R.EllesmereJunk
+        saleReady[id]=nil
+        if c.ok and reserved==0 and not unresolved and not Protected(id) then
+            if ej.Owned(id) then saleReady[id]=stamp
+            elseif not touched[id] and touchedCount<2048 then
+                local result=ej.MarkOwned(id,c.quality)
+                if result=="marked" or result=="failed" then
+                    touched[id]=true;touchedCount=touchedCount+1
+                end
+                if result=="marked" then J.marked=J.marked+1;changed=true;saleReady[id]=stamp end
             end
-            if result=="marked" then J.marked=J.marked+1;changed=true end
+        elseif c.reject or reserved>0 or Protected(id) then
+            if ej.UnmarkOwned(id)=="unmarked" then
+                if touched[id] then touched[id]=nil;touchedCount=touchedCount-1 end
+                changed=true
+            end
         end
+        -- Unknown/pending keeps the assignment stable, but cannot authorize selling.
         if index%20==0 then
-            if changed then R.EllesmereJunk.Repaint();changed=false end
+            if changed then ej.Repaint();changed=false end
             coroutine.yield()
         end
     end
@@ -344,8 +413,22 @@ function J.Survey(rule, done)
     return true
 end
 
-function J.Request()
+function J.ItemsChanged(items)
+    local targets={}
+    for dependency in pairs(items or {}) do
+        for id in pairs(dependents[dependency] or {}) do targets[id]=true end
+    end
+    if next(targets) then J.Request(targets) end
+end
+function J.Request(targets)
     generation=generation+1 -- a changed bag/price must invalidate an in-flight scan
+    if runningFull then queuedFull=true end
+    for id in pairs(runningTargets or {}) do queuedItems[id]=true end
+    if type(targets)~="table" then
+        queuedFull,queuedItems=true,{};saleReady={}
+    else
+        for id in pairs(targets) do queuedItems[id]=true;saleReady[id]=nil end
+    end
     if not active or pending or not Wanted() then return end
     pending=true
     local scheduled=epoch
@@ -354,14 +437,18 @@ function J.Request()
         pending=false
         if not Ready() then return end
         local mine=generation
-        local job=coroutine.create(Scan)
+        local targets=not queuedFull and queuedItems or nil
+        queuedFull,queuedItems=false,{}
+        runningFull,runningTargets=targets==nil,targets
+        local job=coroutine.create(function() Scan(targets) end)
         local function Step()
             if mine~=generation or not Ready() then return end
             local pt=R.Perf and R.Perf.on and R.Perf.Start("workshop.junk")
             local ok,err=coroutine.resume(job)
             if pt then R.Perf.Stop(pt) end
-            if not ok then if R.Fault then R.Fault("workshop.junk",err) end;return end
-            if coroutine.status(job)~="dead" then C_Timer.After(0,Step) end
+            if not ok then runningFull,runningTargets=false,nil;if R.Fault then R.Fault("workshop.junk",err) end;return end
+            if coroutine.status(job)~="dead" then C_Timer.After(0,Step)
+            else runningFull,runningTargets=false,nil end
         end
         Step()
     end)
@@ -369,13 +456,34 @@ end
 function J.Stop()
     active,pending=false,false;generation=generation+1
     epoch=epoch+1
+    saleReady={};queuedFull,queuedItems=false,{}
+    runningFull,runningTargets=false,nil
     if frame then frame:UnregisterAllEvents() end
 end
 function J.Start()
     J.Stop()
     if not Wanted() or not CreateFrame then return end
     active=true
-    if not frame then frame=CreateFrame("Frame");frame:SetScript("OnEvent",function() J.Request() end) end
+    local function Guard()
+        local ej=R.EllesmereJunk
+        if not ej or not ej.Guard then return end
+        ej.Guard(function(id)
+            return Ready() and not Protected(id) and saleReady[id]==PriceStamp()
+        end)
+        if ej.OnManual then ej.OnManual(function(id)
+            saleReady[id]=nil
+            if not touched[id] and touchedCount<2048 then touched[id]=true;touchedCount=touchedCount+1 end
+        end) end
+    end
+    Guard()
+    if not frame then frame=CreateFrame("Frame");frame:SetScript("OnEvent",function(_,event,addon)
+        if event=="ADDON_LOADED" then
+            -- Prepared Market addons notify only their affected price identities.
+            if addon~="EllesmereUI" and addon~="EllesmereUIBags" and addon~="TwichUI_Workshop" then return end
+            Guard()
+        end
+        J.Request()
+    end) end
     for _,e in ipairs(EVENTS) do frame:RegisterEvent(e) end
     J.Request()
 end

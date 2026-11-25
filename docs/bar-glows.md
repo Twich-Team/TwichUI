@@ -56,6 +56,9 @@ done or 1-30 s), repeat (off or 5-60 s), message, sound (TwichUI's and LibShared
 it glows as it comes back, not merely because a fight started ("also at the start of a fight" changes that; so does a
 glow time of "until done"). "Stay quiet in towns" holds back everything while resting out of combat, except Alert in town.
 
+At 100% size, every look fits within the button and follows its size. Larger sizes are explicit choices; the renderer
+does not add Blizzard's extra enlargement. Switching between still, breathing and moving resets the flipbook crop.
+
 ## Messages
 
 A reminder whose message is on shows a small card as it starts (and again with each repeat): an optional icon of the

@@ -1,0 +1,227 @@
+{
+  "schema": 1,
+  "kind": "twichui-map-diagnostics",
+  "id": "MAP1-synthetic-example-1",
+  "units": {
+    "angle": "radians",
+    "timing": "relative seconds; R.Perf milliseconds",
+    "viewport": "UI units",
+    "world": "uiMap 947 normalized east/south",
+    "zoom": "whole-world fit = 1"
+  },
+  "provenance": "production map snapshots and bounded event taps; no reimplemented map transforms",
+  "redaction": {
+    "description": "player-supplied, sanitized, untrusted",
+    "playerPosition": "never queried",
+    "privateIdentifiers": "not collected",
+    "viewCoordinates": false
+  },
+  "truncation": {
+    "coalescedEvents": 0,
+    "eventsDropped": 0,
+    "findingsDropped": 0,
+    "incidentsDropped": 0,
+    "reportBytesLimited": false,
+    "snapshotsDropped": 0
+  },
+  "current": {
+    "provenance": "production snapshots; map/View.lua, Art.lua, Detail.lua, Pictures.lua, Caves.lua",
+    "artwork": {
+      "available": true,
+      "built": true,
+      "cities": 1,
+      "cityLayers": [],
+      "layers": [
+        {
+          "kind": "world",
+          "alpha": 1,
+          "level": 12,
+          "shown": true
+        },
+        {
+          "kind": "cont",
+          "alpha": 1,
+          "level": 13,
+          "shown": true
+        },
+        {
+          "kind": "zone",
+          "alpha": 1,
+          "level": 14,
+          "shown": true
+        }
+      ],
+      "layouts": 481,
+      "loaded": 0,
+      "loads": 902,
+      "masks": {
+        "city": "round feather",
+        "continent": "wide feather",
+        "territory": false,
+        "zone": "thin feather"
+      },
+      "shown": 2,
+      "textures": 53,
+      "unloads": 902,
+      "zones": 3,
+      "zonesBuilt": 3
+    },
+    "cave": {
+      "available": true,
+      "caves": 3,
+      "floorChanges": 1,
+      "strength": 0,
+      "times": 30
+    },
+    "detailEnabled": true,
+    "dungeon": {
+      "available": true,
+      "open": false,
+      "opened": 1,
+      "refused": 1
+    },
+    "enabled": true,
+    "interiors": {
+      "active": 0,
+      "available": true,
+      "binds": 7,
+      "failures": [
+        {
+          "fileId": false,
+          "reason": "load-timeout"
+        }
+      ],
+      "made": 3,
+      "pending": 0,
+      "pendingTextures": [],
+      "pictures": [],
+      "picturesOmitted": 0,
+      "pooled": 3
+    },
+    "markers": {
+      "coordinateSource": "existing native host / MapWorld conversions; no player coordinate query",
+      "guild": {
+        "available": false,
+        "reason": "module or API unavailable"
+      },
+      "npcs": {
+        "available": false,
+        "reason": "module or API unavailable"
+      },
+      "personal": {
+        "available": true,
+        "drawn": 2,
+        "installed": true,
+        "layouts": 93,
+        "open": false,
+        "pool": 2,
+        "refused": 0,
+        "unplaced": 0
+      },
+      "places": {
+        "available": true,
+        "clicks": 7,
+        "forwarded": 1,
+        "labels": 0,
+        "layouts": 12567,
+        "menus": 3,
+        "places": 9,
+        "pool": 6,
+        "shown": 1,
+        "travels": 3
+      }
+    },
+    "terrain": {
+      "alpha": 0,
+      "available": true,
+      "binds": 4260,
+      "budget": 80,
+      "continents": 1,
+      "fadeFrom": 20,
+      "fadeTo": 36,
+      "failed": 0,
+      "failedIds": [],
+      "failedIdsOmitted": 0,
+      "level": 6,
+      "made": 64,
+      "pooled": 64,
+      "requested": 0,
+      "showing": false,
+      "strength": 70,
+      "textures": [],
+      "texturesOmitted": 0,
+      "tiles": 0,
+      "tooMany": 10,
+      "updates": 10098
+    },
+    "view": {
+      "active": true,
+      "animating": false,
+      "animationMode": "none",
+      "available": true,
+      "back": 0,
+      "center": {
+        "available": false,
+        "reason": "withheld"
+      },
+      "clicks": 742,
+      "combat": false,
+      "coordinates": "withheld",
+      "deferred": false,
+      "dragged": 1,
+      "enabled": true,
+      "following": false,
+      "frames": 3,
+      "glides": 459,
+      "hooked": true,
+      "installed": true,
+      "max": "unavailable",
+      "minimumZoom": 1,
+      "nativeMap": 1415,
+      "notified": 10098,
+      "pendingZoom": false,
+      "pressed": 2,
+      "ready": false,
+      "resized": 4,
+      "shown": false,
+      "switches": 39,
+      "uiScale": 1,
+      "viewportHeight": 666,
+      "viewportWidth": 1000,
+      "waits": 1,
+      "wheel": 2486,
+      "zoom": "unavailable"
+    }
+  },
+  "description": "Map issue captured; no description supplied.",
+  "durationSeconds": 0,
+  "environment": {
+    "addonVersion": "unavailable",
+    "buildIdentity": "unavailable: release metadata has no build hash",
+    "clientBuild": "70009",
+    "clientVersion": "1.60.1",
+    "interface": 16001
+  },
+  "eventTotals": [],
+  "events": [],
+  "findings": [],
+  "incidents": [],
+  "limitations": [
+    "No native screenshot or texture pixels; file IDs do not prove art availability or alignment.",
+    "No player, account, guild, chat or full SavedVariables capture; no upload or chat send.",
+    "No history exists before explicit recording. Normal boundary clamps are informational, not anchor anomalies.",
+    "No automatic floor detection. Missing Fargodeep/edited-art references are documented coverage gaps.",
+    "Heuristic findings are suspicions; no anomalies found does not prove native visual fidelity."
+  ],
+  "limits": {
+    "durationSeconds": 0,
+    "events": 256,
+    "snapshots": 24
+  },
+  "performance": {
+    "available": false
+  },
+  "snapshots": [],
+  "stopReason": "snapshot",
+  "synthetic": true
+}

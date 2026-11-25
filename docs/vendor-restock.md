@@ -68,7 +68,7 @@ merchant call TwichUI makes is one that file makes:
 3. One plan (`RS.Plan`, read only). If a listing or an item's details haven't arrived, wait for `MERCHANT_UPDATE` /
    `GET_ITEM_INFO_RECEIVED` (or 1 s), at most three times, then plan with what is known; what isn't is left out with a
    reason.
-4. Ask: the question is TwichUI's own window (`modules/RestockPrompt.lua`, drawn with the shared `Look`): one row per
+4. Ask: the question is TwichUI's own window (`modules/RestockPrompt.lua`, drawn with the shared `CraftLook` and `FrameLook`): one row per
    item (up to eight; the rest are counted in the total) with its icon, its name in the item's quality color, how many,
    what you carry against the target, and the price with the g/s/c letters colored (`RS.ColorMoney`); a row that falls
    short says how many and why; under the list a card with the total, your money and the limit, and what couldn't be
@@ -136,22 +136,18 @@ panel and the pin windows (`K.Appearance` over `MenuStyle.New("restockPromptStyl
 changes only the frame: what is asked, the rows, the total and the Purchase and Cancel answers are untouched. The
 section is not tied to the "Restock from merchants" switch, so the look can be set before restocking is on.
 
-* **Default:** the framed look's frame (`FrameLook.lua`, compact: its illustrated rails, no interior of its own) over the
-  look's espresso (`FrameLook.PANEL_BG`) at 98 %, with the framed look's buttons. The frame is a border id of the
-  look's own (`RestockPrompt.FRAMED`, "TwichUI frame (default)"); `MenuStyle.Apply` draws no edge for it and says
-  `"custom"`, and `FrameLook.Frame(frame, look)` then shows the frame, once built, over the player's own background.
-  The older TwichUI rim (`Look.Shell`'s bronze edge, corner brackets, grain and shade over `ff232221`) is still in the
-  border list as `RestockPrompt.LEDGER` ("TwichUI rim"); a profile that saved it, or any other value, is drawn as it
-  always was. Only keys the player never saved read the new defaults (read lazily, never written).
-* **Any other border** (none, a solid line, the game's, EllesmereUI's, LibSharedMedia's) hides the rim, the corner
-  brackets, the grain and the shade (`Look.ShellParts`, which uses the pieces `Look.Frame` now keeps in
-  `frame.twichShell`). The title band moves in to the border's reach (`frame.twichBand`), and a border thicker than the
-  rim (4 px) pushes the content in by the difference and grows the window by twice it, so nothing is covered. A thinner
-  border leaves the content where it was. A textured background also drops the rim's grain and shade.
-* **Greyed out with a reason:** thickness, color and opacity while the frame or the rim is chosen (their width and colors
-  are fixed) or no border is.
-* **Not covered:** the title band, the list and the total panel keep their own tint (only the window behind them
-  fades); text fonts, sizes and colors, the rim's color, and the Purchase and Cancel buttons are the shared look's.
+* **Default:** the crafted Settings frame (`FrameLook.CRAFTED_BORDER`) over espresso
+  (`FrameLook.PANEL_BG`) at 98%, with a walnut title and total panel, a recessed item list and painted buttons.
+  `MenuStyle.Apply` draws the background and `FrameLook.Frame(frame, look)` draws the chosen TwichUI frame.
+  The original TwichUI frame (`RestockPrompt.FRAMED`) and rim (`RestockPrompt.LEDGER`) remain available.
+  Saved appearance fields keep their values. Unsaved fields inherit defaults, which are read lazily.
+* **Other borders:** the title band follows the border's reach. A border thicker than 4 UI units pushes the
+  content in by the difference and grows the window by twice that amount. The legacy rim's grain and shade
+  appear with a solid background only.
+* **Fixed settings:** the crafted frame, original frame and rim have their own width and colors. Thickness,
+  color and opacity controls are disabled for those borders and when no border is selected.
+* **Local surfaces:** the title band, item list and total panel retain their own tint while background opacity
+  controls the surrounding window.
 * **Redraws:** a change while the window is open redraws it once, in place, with the same plan (`Redraw`; no frame,
   texture or hook is created). A profile change goes through `MenuStyle`'s own notification. Border thickness is in
   screen pixels, worked out when the window is shown or redrawn.

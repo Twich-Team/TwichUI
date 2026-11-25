@@ -43,7 +43,17 @@ Check(f.craftedFrame and f.bankSummary.shown, "crafted bank review built")
 Check(Has(f, "Deposit 35 · Bags 55 → 20") and Has(f, "Withdraw 9 · Bags 1 → 10"), "concise item intentions and bag counts")
 Check(not Has(f, "Reserved by other rules") and not Find(f, "Deposit 1 stack"), "old verbose groups and staged actions absent")
 Check(f.bankSummary.deposit.value.text == "35 items" and f.bankSummary.withdraw.value.text == "9 items", "summary separates both quantities")
+local autoSort = f.bankAutoSort
+local function ClickAutoSort()
+  autoSort:Fire("OnClick", "LeftButton"); Flush()
+end
+Check(autoSort:IsShown() and autoSort:GetChecked() and autoSort.w == 42 and Has(f, "Auto-sort"),
+  "bank review displays the shared default-on switch")
+ClickAutoSort()
+Check(not autoSort:GetChecked() and MI.BankAutoSort() == false, "the switch saves and displays Off")
 Click(f, "Run rules")
+ClickAutoSort()
+Check(not autoSort:GetChecked() and MI.BankAutoSort() == false, "the sorting choice is disabled during a transfer")
 Check(Run.Current() and not f.bankGo.shown and f.stop.shown, "one action starts whole batch; Stop replaces it")
 Check(f.bankProgress.shown and not f.bankProgress.fill.shown, "attempted moves do not fill progress")
 Check(not f.manage.enabled and not f.again.enabled, "review controls disabled while running")
@@ -78,23 +88,28 @@ c.CloseBank(); Flush()
 Check(not Win.IsShown(), "closing bank closes bank review")
 c.OpenBank(); Flush(); Win.Show(); Flush()
 Check(Win.Plan().manual == nil and Find(f, "Run rules"), "one-visit override cleared by bank close")
+Check(not autoSort:GetChecked(), "reopening the bank preserves the switch state")
+ClickAutoSort()
+Check(autoSort:GetChecked() and MI.BankAutoSort(), "turning sorting back on updates the saved choice")
 -- Stale override selection is discarded when its rule is removed.
 Click(f, "Rule actions"); Click(f, "Withdraw all")
 MI.DeleteRule(herbs); Flush()
 Check(not Win.Plan().manual, "deleted manual rule falls back to regular review")
 Win.Show(true); Flush()
-Check(not f.bankGo.shown and Win.Context() == nil and #c.PENDING_MOVES == 0, "settings preview cannot execute bank batch")
+Check(not f.bankGo.shown and not f.bankAutoSort.shown and Win.Context() == nil and #c.PENDING_MOVES == 0, "settings preview cannot execute bank batch")
 -- Pools and hooks stay bounded across repeated visits.
 c.CloseBank(); Flush(); c.OpenBank(); Flush(); Win.Show(); Flush()
 Click(f, "Rule actions"); Click(f, "Back")
 local frames, listeners = Win.FrameCount(), Run.ListenerCount()
 for _ = 1, 10 do c.CloseBank(); Flush(); c.OpenBank(); Flush(); Win.Show(); Flush(); Click(f, "Rule actions"); Click(f, "Back") end
 Check(Win.FrameCount() == frames and Run.ListenerCount() == listeners, "repeated visits reuse rows and listeners")
--- At the 40-rule limit, pooled heading buttons must adopt the compact per-rule width.
+-- At the rule limit, pooled heading buttons must adopt the compact per-rule width.
 for i = #MI.Rules() + 1, MI.MAX_RULES do
   MI.SaveRule({ name = "Expedition supplies for a very long journey " .. i, kind = "bank", flow = "balance", keep = 20,
     enabled = false, include = { [2447] = true } })
 end
+local rejected = MI.SaveRule({ name = "One over the limit", kind = "bank", include = { [2447] = true } })
+Check(not rejected and #MI.Rules() == MI.MAX_RULES, "the rule limit is enforced without dropping saved rules")
 Flush()
 Click(f, "Rule actions")
 local shown = 0
@@ -104,9 +119,9 @@ for _, row in ipairs(f.content.children) do
     Check(row.action.w == 102 and row.withdrawAll.w == 102, "reused manual controls keep their compact width")
   end
 end
-Check(shown == 40, "every saved bank rule has both manual actions")
+Check(shown == MI.MAX_RULES and MI.MAX_RULES > 40, "every saved bank rule has both manual actions")
 frames = Win.FrameCount()
 Click(f, "Back"); Click(f, "Rule actions")
-Check(Win.FrameCount() == frames, "40-rule review reuses its warmed row pool")
+Check(Win.FrameCount() == frames, "full rule review reuses its warmed row pool")
 if failures > 0 then os.exit(1) end
 print("PASSED test_magic_inventory_bank_ui")

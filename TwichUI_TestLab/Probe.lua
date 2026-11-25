@@ -25,7 +25,7 @@ P.MAX_EVENTS = 24
 P.QUIET = 0.35          -- seconds without a new record before a click is taken as finished
 P.ARENA_W, P.ARENA_H = 580, 340
 
-local SCRIPTS = { "OnClick", "OnEnter", "OnLeave", "OnMouseDown", "OnMouseUp", "PreClick", "PostClick" }
+local SCRIPTS = { "OnEvent", "OnClick", "OnEnter", "OnLeave", "OnMouseDown", "OnMouseUp", "PreClick", "PostClick" }
 local pool, kinds, defaults, pieceOf, pieceByName = {}, {}, {}, {}, {}
 local trial
 
@@ -64,6 +64,7 @@ end
 -- The pool
 ---------------------------------------------------------------------------
 function P.Reset(f, kind)
+    P.Do(f, "UnregisterAllEvents")
     P.Do(f, "Hide")
     P.Do(f, "ClearAllPoints")
     for _, s in ipairs(SCRIPTS) do P.Do(f, "SetScript", s, nil) end

@@ -81,7 +81,26 @@ end
 ---------------------------------------------------------------------------
 -- Time
 ---------------------------------------------------------------------------
--- Seconds left to choose: the game's own clock when it answers, else the one this record started with. nil when there is no deadline.
+-- Presentation belongs to this unique roll key, never to an item ID or card slot.
+function Ro.DisplayMode(roll)
+    return roll.manualDisplay or roll.displayMode or "expanded"
+end
+function Ro.RefreshDisplay(roll, notify)
+    local decision = R.LootRules.DecideDisplay(LR.Active(), roll.obs or {})
+    local mode = decision.status == "match" and decision.rule.display or "expanded"
+    local ruleId = decision.status == "match" and decision.rule.id or nil
+    if roll.displayMode == mode and roll.displayRuleId == ruleId then return end
+    roll.displayMode, roll.displayRuleId = mode, ruleId
+    if notify then Tell("updated", roll) end
+end
+function Ro.SetDisplay(roll, mode)
+    if not roll or Ro.ByKey(roll.key) ~= roll or (mode ~= "collapsed" and mode ~= "expanded") then return false end
+    roll.manualDisplay = mode
+    Tell("updated", roll)
+    return true
+end
+
+-- Seconds left to choose: the game's clock when available, else this record's deadline.
 function Ro.Remaining(roll)
     if not (roll and (roll.state == "pending" or roll.state == "scheduled")) then return 0 end
     local ms
@@ -99,7 +118,7 @@ end
 ---------------------------------------------------------------------------
 local professionNames, professionAt = nil, -100
 
--- The names of the player's professions (the game's own words, as GetItemSubClassInfo says them for recipes), read at most every 20 seconds.
+-- Cache the localized skill names used to match C_Item recipe subclasses.
 local function Professions()
     local t = Now()
     if professionNames and t - professionAt < 20 then return professionNames end
@@ -110,7 +129,7 @@ local function Professions()
             for i = 1, n do
                 local info = SI.GetSkillLineInfo(i)
                 if type(info) == "table" and Plain(info.isHeader) ~= true then
-                    local name = Plain(info.skillName)
+                    local name = Plain(info.name)
                     if type(name) == "string" and name ~= "" then names[name] = true end
                 end
             end
@@ -129,7 +148,7 @@ local function Lines(rollID)
     local TI = C_TooltipInfo
     if not (TI and TI.GetLootRollItem) then return nil end
     local ok, data = Call(TI.GetLootRollItem, rollID)
-    if ok and type(data) == "table" and type(data.lines) == "table" then return data.lines end
+    if ok and type(data) == "table" and type(data.lines) == "table" then return data.lines, Plain(data.dataInstanceID) end
 end
 
 local function HasKnownLine(lines)
@@ -148,11 +167,13 @@ local function RecipeFacts(roll, obs, lines)
     local facts = { isRecipe = true }
     local names = Professions()
     local sub = obs.subClassID
-    if names and type(sub) == "number" and GetItemSubClassInfo then
-        local ok, name = Call(GetItemSubClassInfo, 9, sub)
-        if ok and type(name) == "string" and name ~= "" then facts.profession = names[name] == true end
+    local subclassName = C_Item and C_Item.GetItemSubClassInfo or GetItemSubClassInfo
+    if names and type(sub) == "number" then
+        local ok, name = Call(subclassName, 9, sub)
+        name = ok and Plain(name)
+        if type(name) == "string" and name ~= "" then facts.profession = names[name] == true end
     end
-    if lines then
+    if lines and #lines > 0 then
         facts.known = HasKnownLine(lines)
         local D = R.GearData
         if facts.known == false and D and D.RedLines then facts.canLearn = D.RedLines(lines) == 0 end
@@ -249,7 +270,8 @@ function Ro.Observe(roll)
         if I and I.GetItemInfo then
             local ok, name, _, quality, _, _, typeName, subType, _, equipLoc, _, sellPrice, classID, subClassID, bindType = Call(I.GetItemInfo, roll.link)
             if ok and type(Plain(name)) == "string" then
-                obs.quality = Plain(quality) or obs.quality
+                -- Match the quality shown on this loot roll; the item lookup is only a fallback.
+                obs.quality = obs.quality or Plain(quality)
                 obs.equipLoc = Plain(equipLoc) or obs.equipLoc
                 obs.classID, obs.subClassID = Plain(classID) or obs.classID, Plain(subClassID) or obs.subClassID
                 obs.bindType = Plain(bindType)
@@ -259,13 +281,15 @@ function Ro.Observe(roll)
             end
         end
     end
-    local lines = Lines(id)
+    local lines, tooltipDataID = Lines(id)
+    roll.tooltipDataID = tooltipDataID
     obs.recipe = RecipeFacts(roll, obs, lines)
     obs.equippable = EquippableFact(obs, lines)
     obs.upgrade, roll.judged = UpgradeFact(roll.link, lines)
     roll.upgrade = obs.upgrade
     obs.context = ContextFacts()
     obs.ready = roll.itemKnown == true
+    Ro.RefreshDisplay(roll)
     return obs.ready
 end
 
@@ -274,7 +298,7 @@ end
 ---------------------------------------------------------------------------
 -- Whether a choice can be sent now, and if not, why (words for a tooltip).
 function Ro.CanChoose(roll, choice)
-    if not roll or not IsLive(roll) then return false, "This roll is over." end
+    if not roll or roll.victoryOwned or not IsLive(roll) then return false, "This roll is over." end
     if roll.state == "submitted" then return false, "You have already chosen." end
     if choice == "need" then
         if not roll.canNeed then
@@ -575,16 +599,36 @@ function Ro.OnConfirm(rollID, rollType)
     Tell("updated", roll)
 end
 
--- Item data arrives late: read the rolls that were not complete again, a few times each.
-local function Retry()
+local function RefreshFacts(r)
+    Ro.Observe(r)
+    Scan(r)
+    Tell("updated", r)
+end
+
+local function IsRecipe(r)
+    return r.obs and r.obs.recipe and r.obs.recipe.isRecipe == true
+end
+
+-- Recipe tooltip/skill facts can arrive after the basic item is already ready.
+-- Event-driven refreshes are limited to open choices, and a tooltip's own roll when known.
+local function RefreshRecipes(dataID)
     for _, r in ipairs(rolls) do
-        if IsLive(r) and not r.obs.ready then
+        if (r.state == "pending" or r.state == "scheduled") and IsRecipe(r)
+            and (dataID == nil or r.tooltipDataID == nil or r.tooltipDataID == dataID) then
+            RefreshFacts(r)
+        end
+    end
+end
+
+-- Item data arrives late: read incomplete items a few times, plus open recipe facts.
+local function Retry()
+    RefreshRecipes()
+    for _, r in ipairs(rolls) do
+        if IsLive(r) and not r.obs.ready and not IsRecipe(r) then
             local n = (retryAt[r.key] or 0) + 1
             retryAt[r.key] = n
             if n <= 6 then
-                Ro.Observe(r)
-                Scan(r)
-                Tell("updated", r)
+                RefreshFacts(r)
             end
         end
     end
@@ -598,12 +642,13 @@ local function OnEvent(_, event, a, b, c)
     elseif event == "CONFIRM_LOOT_ROLL" then Ro.OnConfirm(a, b)
     elseif event == "LOOT_HISTORY_UPDATE_DROP" then Absorb(a, b)
     elseif event == "GET_ITEM_INFO_RECEIVED" then Retry()
-    elseif event == "SKILL_LINES_CHANGED" then Ro.ForgetProfessions()
+    elseif event == "TOOLTIP_DATA_UPDATE" then RefreshRecipes(Plain(a))
+    elseif event == "SKILL_LINES_CHANGED" then Ro.ForgetProfessions(); RefreshRecipes()
     elseif event == "PLAYER_ENTERING_WORLD" then Ro.Adopt() end
 end
 
 local EVENTS = { "START_LOOT_ROLL", "CANCEL_LOOT_ROLL", "CANCEL_ALL_LOOT_ROLLS", "LOOT_ROLLS_COMPLETE", "CONFIRM_LOOT_ROLL",
-    "LOOT_HISTORY_UPDATE_DROP", "GET_ITEM_INFO_RECEIVED", "SKILL_LINES_CHANGED", "PLAYER_ENTERING_WORLD" }
+    "LOOT_HISTORY_UPDATE_DROP", "GET_ITEM_INFO_RECEIVED", "TOOLTIP_DATA_UPDATE", "SKILL_LINES_CHANGED", "PLAYER_ENTERING_WORLD" }
 Ro.EVENTS = EVENTS
 
 -- Rolls already open when this starts (a reload, or the feature switched on mid-roll): taken in as they are, with the time they have left.
@@ -644,3 +689,11 @@ end
 
 function Ro.Listening() return frame ~= nil and active end
 function Ro.EventCount() local n = 0 if active then n = #EVENTS end return n end
+
+-- Display-only rules work with automation off/paused and never touch a countdown.
+LR.Subscribe(function(what)
+    if what ~= "rules" and what ~= "profile" then return end
+    for _, roll in ipairs({ unpack(rolls) }) do
+        if IsLive(roll) then Ro.RefreshDisplay(roll, true) end
+    end
+end)

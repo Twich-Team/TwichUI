@@ -13,6 +13,11 @@
 --                           Q.SetLeaveAlone). The row says On or Off; it is On when both are on. Turning it on
 --                           turns on whichever was off; turning it off turns off only what it turned on. The
 --                           exceptions chosen in the settings (friends, guild members) still apply.
+--   Narrate quests      only while the Spoken addon is loaded (modules/SpokenReading.lua): turns every "What Spoken
+--                           reads" switch (quests, gossip, places, readables, any other part) on or off together,
+--                           through Spoken's own SetPartOn, so it is Spoken's saved choice and the same as ticking
+--                           them on its page. On when all are on, Some when the player left some off there; a click
+--                           on Some turns them all on.
 --   Guild Locations         Sharing my location / Invisible (still see others), through GL.SetState, the same
 --                           call the settings page makes (guildloc/State.lua is the one authority). Greyed out,
 --                           with the reason in the row, while the feature is Off or its saved data is held: the
@@ -64,6 +69,17 @@ local QUIET_TIP = "Keeps notification cards, reminders, action bar glows, the He
     .. "Favor's list off the screen, with their sounds, until you turn this off or log out. Nothing in the settings "
     .. "changes, and what happens meanwhile is not shown afterwards."
 
+local SPOKEN_TIP = "Turns everything Spoken reads aloud (quests, gossip, places, readables) on or off together. These "
+    .. "are Spoken's own switches, so the choice stays after you log out and shows on Spoken's settings page. "
+    .. "Some means you left some of them off there; clicking turns all of them on."
+
+local function SpokenState()
+    local state = R.SpokenReading.State()
+    if state == "on" then return true end
+    if state == "some" then return "some" end
+    return false
+end
+
 -- The development Test Lab (TwichUI_TestLab, docs/testlab.md) is never in a release: its row exists only while its folder is installed.
 local LAB = "TwichUI_TestLab"
 local function LabInstalled()
@@ -96,7 +112,7 @@ local SPEC = {
     { kind = "divider" },
     {
         key = "quiet", label = "Quiet the screen",
-        state = function() return R.QuietScreen ~= nil and R.QuietScreen.On() end,
+        state = function() local Q = R.QuietScreen return Q ~= nil and (Q.Player and Q.Player() or Q.On()) end,
         words = { [true] = "On", [false] = "Off" },
         enabled = function() return R.QuietScreen ~= nil end,
         why = "Unavailable",
@@ -111,6 +127,16 @@ local SPEC = {
         why = "Unavailable",
         tip = LEAVE_TIP,
         act = function() local Q = R.QoL; Q.SetLeaveAlone(not Q.LeaveAloneOn()) end,
+    },
+    {
+        key = "spoken", label = "Narrate quests",
+        shown = function() return R.SpokenReading ~= nil and R.SpokenReading.Available() end,
+        state = SpokenState,
+        words = { [true] = "On", [false] = "Off", some = "Some" },
+        enabled = function() return R.SpokenReading ~= nil and R.SpokenReading.Available() end,
+        why = "Unavailable",
+        tip = SPOKEN_TIP,
+        act = function() R.SpokenReading.Set(R.SpokenReading.State() ~= "on") end,
     },
     { kind = "divider", shown = GLShown },
     { kind = "heading", label = "Guild Locations", shown = GLShown },
@@ -293,6 +319,7 @@ function M.IsOpen() return menu ~= nil and menu:IsShown() end
 function M.Open(frame)
     Build()
     owner = frame
+    if R.SpokenReading then R.SpokenReading.Watch() end
     Restyle()
     Render()
     SM.PlaceNear(menu, frame)
@@ -345,6 +372,9 @@ end
 if R.Switches and R.Switches.OnChange then
     R.Switches.OnChange(function() M.Refresh() end)
 end
+
+-- Spoken's parts switched on its own page while the menu is open (the row is only drawn while Spoken is loaded).
+if R.SpokenReading then R.SpokenReading.OnChange(function() M.Refresh() end) end
 
 -- Quiet screen turned on or off by something else while the menu is open.
 if R.QuietScreen then R.QuietScreen.OnChange(function() M.Refresh() end) end

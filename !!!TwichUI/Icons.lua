@@ -54,6 +54,7 @@ local list = {
     profilesSharing = Sheet("profilesSharing"),   -- two portrait medallions
     -- the second sheet (assets/settings-icons-2-source.png)
     classPortrait = { file = R.PATH .. [[media\guildloc\class-WARRIOR]], small = R.PATH .. [[media\guildloc\class-WARRIOR-small]], size = 64, pad = 3, source = "guildLocations" },
+    executeRange = { file = ICONS .. "executeRange", small = ICONS .. "executeRange-small", size = 64, pad = 3, source = "executeRange" }, -- assets/execute-range-source.png
     targetArt = Sheet("targetArt"),               -- a dragon head in a bronze corner frame
     mapPins = Sheet("mapPins"),                   -- a red map pin with teal ripple rings
     mapToolbar = Sheet("mapToolbar"),             -- a parchment map with a brass compass
@@ -115,6 +116,7 @@ local list = {
     -- Action bar glows' settings illustration (assets/bar-glows-source.png, cut by tools/make_bar_glows_art.py)
     barGlows = { file = R.PATH .. [[media\barglows\settings]], small = R.PATH .. [[media\barglows\settings-small]], size = 64, pad = 2, source = "barGlows" },   -- a leather action bar strip with three ability icons, the middle one glowing
     camping = { file = R.PATH .. [[media\camping\settings]], small = R.PATH .. [[media\camping\settings-small]], size = 64, pad = 3, source = "camping" },   -- a campfire ringed with stones in a bronze octagonal frame (assets/camping-source.png)
+    fishing = { file = R.PATH .. [[media\fishing\settings]], small = R.PATH .. [[media\fishing\settings-small]], size = 64, pad = 3, source = "fishing" },   -- the leaping fish in a bronze frame (TwichUI Fishing's texture pack, branding/feature_icon; tools/make_fishing_art.py)
 }
 Icons.list = list
 

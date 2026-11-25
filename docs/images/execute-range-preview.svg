@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="660" viewBox="0 0 900 660">
+<rect width="900" height="660" fill="#211a15"/>
+<text x="28" y="36" font-family="serif" font-size="25" fill="#e9dcc5">Execute Range — before / after</text>
+<text x="28" y="62" font-family="serif" font-size="15" fill="#baaa93">Offline capture of actual decoration geometry and colors. Not a native EUI screenshot.</text>
+<text x="280" y="98" font-family="serif" font-size="15" fill="#e9dcc5">Health 80% — above threshold</text>
+<text x="580" y="98" font-family="serif" font-size="15" fill="#e9dcc5">Health 15% — below threshold</text>
+<text x="28" y="145" font-family="serif" font-size="16" fill="#e9dcc5">Existing: Marker</text>
+<rect x="280" y="130" width="240" height="22" fill="#19120e"/>
+<rect x="280" y="130" width="192" height="22" fill="#57261f"/>
+<rect x="339.5" y="130" width="1" height="22" fill="#d4a652" opacity="0.7"/>
+<rect x="580" y="130" width="240" height="22" fill="#19120e"/>
+<rect x="580" y="130" width="36" height="22" fill="#57261f"/>
+<rect x="639.5" y="130" width="1" height="22" fill="#d4a652" opacity="0.7"/>
+<text x="28" y="210" font-family="serif" font-size="16" fill="#e9dcc5">Existing: Active Edge</text>
+<rect x="280" y="195" width="240" height="22" fill="#19120e"/>
+<rect x="280" y="195" width="192" height="22" fill="#57261f"/>
+<rect x="580" y="195" width="240" height="22" fill="#19120e"/>
+<rect x="580" y="195" width="36" height="22" fill="#57261f"/>
+<rect x="580" y="216" width="240" height="1" fill="#d97847" opacity="0.65"/>
+<rect x="580" y="195" width="240" height="1" fill="#d97847" opacity="0.65"/>
+<rect x="580" y="196" width="1" height="20" fill="#d97847" opacity="0.65"/>
+<rect x="819" y="196" width="1" height="20" fill="#d97847" opacity="0.65"/>
+<text x="28" y="275" font-family="serif" font-size="16" fill="#e9dcc5">Existing: Both</text>
+<rect x="280" y="260" width="240" height="22" fill="#19120e"/>
+<rect x="280" y="260" width="192" height="22" fill="#57261f"/>
+<rect x="339.5" y="260" width="1" height="22" fill="#d4a652" opacity="0.7"/>
+<rect x="580" y="260" width="240" height="22" fill="#19120e"/>
+<rect x="580" y="260" width="36" height="22" fill="#57261f"/>
+<rect x="639.5" y="260" width="1" height="22" fill="#d4a652" opacity="0.7"/>
+<rect x="580" y="281" width="240" height="1" fill="#d97847" opacity="0.65"/>
+<rect x="580" y="260" width="240" height="1" fill="#d97847" opacity="0.65"/>
+<rect x="580" y="261" width="1" height="20" fill="#d97847" opacity="0.65"/>
+<rect x="819" y="261" width="1" height="20" fill="#d97847" opacity="0.65"/>
+<text x="28" y="340" font-family="serif" font-size="16" fill="#e9dcc5">New: Execute Zone</text>
+<rect x="280" y="325" width="240" height="22" fill="#19120e"/>
+<rect x="280" y="325" width="192" height="22" fill="#57261f"/>
+<rect x="280" y="325" width="60" height="22" fill="#cc7847" opacity="0.25"/>
+<rect x="580" y="325" width="240" height="22" fill="#19120e"/>
+<rect x="580" y="325" width="36" height="22" fill="#57261f"/>
+<rect x="580" y="325" width="60" height="22" fill="#cc7847" opacity="0.25"/>
+<text x="28" y="405" font-family="serif" font-size="16" fill="#e9dcc5">New: Active Health</text>
+<rect x="280" y="390" width="240" height="22" fill="#19120e"/>
+<rect x="280" y="390" width="192" height="22" fill="#57261f"/>
+<rect x="580" y="390" width="240" height="22" fill="#19120e"/>
+<rect x="580" y="390" width="36" height="22" fill="#57261f"/>
+<rect x="580" y="390" width="36" height="22" fill="#cc7847" opacity="0.25"/>
+<text x="28" y="470" font-family="serif" font-size="16" fill="#e9dcc5">New: Marker + Zone</text>
+<rect x="280" y="455" width="240" height="22" fill="#19120e"/>
+<rect x="280" y="455" width="192" height="22" fill="#57261f"/>
+<rect x="280" y="455" width="60" height="22" fill="#cc7847" opacity="0.25"/>
+<rect x="339.5" y="455" width="1" height="22" fill="#d4a652" opacity="0.7"/>
+<rect x="580" y="455" width="240" height="22" fill="#19120e"/>
+<rect x="580" y="455" width="36" height="22" fill="#57261f"/>
+<rect x="580" y="455" width="60" height="22" fill="#cc7847" opacity="0.25"/>
+<rect x="639.5" y="455" width="1" height="22" fill="#d4a652" opacity="0.7"/>
+<text x="28" y="535" font-family="serif" font-size="16" fill="#e9dcc5">New: Marker + Zone + Edge</text>
+<rect x="280" y="520" width="240" height="22" fill="#19120e"/>
+<rect x="280" y="520" width="192" height="22" fill="#57261f"/>
+<rect x="280" y="520" width="60" height="22" fill="#cc7847" opacity="0.25"/>
+<rect x="339.5" y="520" width="1" height="22" fill="#d4a652" opacity="0.7"/>
+<rect x="580" y="520" width="240" height="22" fill="#19120e"/>
+<rect x="580" y="520" width="36" height="22" fill="#57261f"/>
+<rect x="580" y="520" width="60" height="22" fill="#cc7847" opacity="0.25"/>
+<rect x="639.5" y="520" width="1" height="22" fill="#d4a652" opacity="0.7"/>
+<rect x="580" y="541" width="240" height="1" fill="#d97847" opacity="0.65"/>
+<rect x="580" y="520" width="240" height="1" fill="#d97847" opacity="0.65"/>
+<rect x="580" y="521" width="1" height="20" fill="#d97847" opacity="0.65"/>
+<rect x="819" y="521" width="1" height="20" fill="#d97847" opacity="0.65"/>
+<text x="28" y="624" font-family="serif" font-size="16" fill="#baaa93">25% threshold · default 25% warm fill · flat texture · legacy colors preserved</text>
+</svg>

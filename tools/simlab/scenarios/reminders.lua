@@ -546,13 +546,21 @@ Lab.Step("pose", function()
                 first:GetScript("OnEnter")(first); Lab.Settle(0.05)
             elseif view == "pickerRender" then
                 -- every catalogued picture, chosen through the picker's own path and drawn by the real renderer in the live preview
+                -- Logical art IDs need not be filenames: approved standalone art has explicit mappings
+                -- (for example art-tabard -> media\npcs\tabard). Offline gallery tests pin those mappings/files.
                 local bad, n = {}, 0
                 for _, e in ipairs(G.Entries()) do
                     local ok = G.Choose(id, e)
                     Lab.Settle(0.05)
+                    local art = PV.Parts().surface.art
+                    local size = math.max(art:GetWidth(), art:GetHeight())
+                    local expected = e.kind == "art" and RM.ArtTexture(e.target, size) or R.Icons.Path(e.target, size)
+                    local registered = e.kind == "art" and RM.Art(e.target) or (e.kind == "icon" and RM.ValidIcon(e.target))
+                    local current = G.Current(D())
                     local tex = PreviewArt()
                     n = n + 1
-                    if not ok or tex == "" or (e.kind == "art" and not tex:find(e.target, 1, true)) then bad[#bad + 1] = e.id end
+                    if not ok or not registered or not current or current.id ~= e.id or not art:IsShown()
+                        or not expected or tex ~= expected then bad[#bad + 1] = e.id end
                 end
                 Lab.Check("construct", "every catalogued picture is selectable and drawn by the preview renderer (" .. n .. ")", "", table.concat(bad, ","))
                 G.Choose(id, G.ForArt("reminder-low-health")); Lab.Settle(0.2)
@@ -593,6 +601,27 @@ Lab.Step("pose", function()
         for _ in pairs(Draw.Owned("reminders")) do mine = mine + 1 end
         Lab.Check("state", "an off reminder lights no action button", 0, mine)
         UI.RevealFrame(glow); Lab.Settle(0.2)
+        local overlay
+        for _, child in ipairs({ glow.sample:GetChildren() }) do
+            if child.inner then overlay = child; break end
+        end
+        Lab.Check("geometry", "sample has a shared glow overlay", true, overlay ~= nil)
+        if overlay then
+            for _, look in ipairs({ "proc", "ants", "soft", "pixel" }) do
+                RM.SetGlow(id, "look", look)
+                for _, motion in ipairs({ "still", "breathing", "moving" }) do
+                    RM.SetGlow(id, "motion", motion); Lab.Settle(0.1)
+                    glow.sample:SetSize(48, 32); Lab.Settle(0.1)
+                    Lab.Check("geometry", look .. "/" .. motion .. " fits the resized sample", true,
+                        math.abs(overlay:GetWidth() - glow.sample:GetWidth()) < 0.01
+                        and math.abs(overlay:GetHeight() - glow.sample:GetHeight()) < 0.01
+                        and math.abs(overlay:GetLeft() - glow.sample:GetLeft()) < 0.01
+                        and math.abs(overlay:GetTop() - glow.sample:GetTop()) < 0.01)
+                end
+            end
+            RM.SetGlow(id, "look", "proc"); RM.SetGlow(id, "motion", "moving")
+            UI.Refresh(); Lab.Settle(0.2)
+        end
     end
     if view:find("^advanced") then
         local UI, a = R.SettingsUI, Ed.sections[3]
@@ -642,6 +671,7 @@ Lab.Step("pose", function()
         Ed.placementOpen, Ed.moreOpen = true, true
         P.Refresh(); UI.Refresh(); Lab.Settle(.1)
         UI.RevealFrame(Ed.sections[3].font)
+        Lab.EmulateNativeScrollRect(Ed.sections[3].font)
         Ed.sections[3].font:OpenMenu()
         Lab.Settle(.1)
         local menu, font = TwichUISettingsMenu, Ed.sections[3].font

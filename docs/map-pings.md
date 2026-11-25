@@ -177,3 +177,24 @@ is as `AddOverlayFrames` says on this client, that WaypointUI's handler (priorit
 7. **Switches.** B turns Take in pings off: A's pings are ignored. B turns Map pings off, then on: no duplicate
    clicks or frames. **Test ping** in the options shows a ping named Test ping and sends nothing (check A sees none).
 8. **Reload.** B `/reload`s: the list is empty afterwards.
+
+## Batch 10 — P02 verified existing
+
+**Verified Existing, offline/source evidence.** No replay behavior was rewritten.
+`tests/test_map_ping.lua` passes on the batch baseline and covers receipt sound
+policy, recent-entry sound/animation, replay after native-map navigation is
+announced, unchanged entry/network-send counts, mute, replay/sound throttles,
+reduced motion, timeout, stale callback tokens, manual map changes, newer
+selections, closing/reopening and feature disable. `pins/Ping.lua` owns receipt/
+sound policy and `pins/PingMap.lua` owns the recent list, drawing and replay.
+The player clicking a replay never sends another network ping.
+
+No defect was reproduced. The final batch also selects this same module with
+affected Navigation/Settings tests. Native-only checks remain: with two real
+TwichUI group members, confirm the selected sound is audible on receipt and on
+an allowed replay; select an entry for another map and confirm the real map's
+navigation notification produces its visual replay. Check the actual chosen
+sound asset/fallback and native ring/still-marker appearance at the player's
+scale. Offline tests simulate routing, API callbacks and playback calls; they do
+not establish real network delivery, audible output or native rendering. No
+simulator or real-client acceptance is claimed.

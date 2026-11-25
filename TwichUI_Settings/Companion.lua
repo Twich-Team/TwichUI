@@ -161,6 +161,8 @@ function C.Update(view)
     local key, UI = view.page.key, R.SettingsUI
     local family = families[key]
     if not (family and UI and UI.IsPageActive(key)) then return end
+    -- The artwork chooser owns this companion position until its session closes.
+    if R.SettingsArtworkPicker and R.SettingsArtworkPicker.Shown() then C.Hide(); return end
     if view.sampleButton then view.sampleButton.text:SetText(muted[family] and "Show sample" or "Hide sample") end
     if muted[family] then C.Hide(); return end
     local pt = R.Perf.on and R.Perf.Start("settings.companion")
@@ -214,7 +216,10 @@ function C.Update(view)
         f.pick:SetChoices(choices); f.pick:SetValue(s.choice, label)
         local page = R.LootRulesPage
         local rule = key == "lootRules" and page and page.Selected and page.Selected() or nil
-        if key == "lootRules" and s.task ~= key then s.choice = "auto"; s.task = key; label = "A rule is about to roll"; f.pick:SetValue("auto", label) end
+        if key == "lootRules" and (s.task ~= key or (rule and rule.action == "none" and s.choice == "auto")) then
+            s.choice = rule and rule.action == "none" and "manual" or "auto"; s.task = key
+            label = s.choice == "manual" and "Waiting for your choice" or "A rule is about to roll"; f.pick:SetValue(s.choice, label)
+        end
         if key ~= "lootRules" then s.task = nil end
         local h = LC.Draw(s.card, LC.SampleView(s.choice, rule))
         local fit = math.min(1, (WIDTH - PAD * 2 - 8) / 384, (238 - 12) / h)

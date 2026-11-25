@@ -46,7 +46,7 @@ local EVENTS = {
     TRADE_SKILL_SHOW = "read", TRADE_SKILL_LIST_UPDATE = "read", TRADE_SKILL_DATA_SOURCE_CHANGED = "read",
     PLAYER_REGEN_ENABLED = "read",
     MERCHANT_SHOW = "merchant", MERCHANT_UPDATE = "merchant",
-    BAG_UPDATE_DELAYED = "draw", GET_ITEM_INFO_RECEIVED = "draw",
+    BAG_UPDATE_DELAYED = "draw", GET_ITEM_INFO_RECEIVED = "draw", ITEM_DATA_LOAD_RESULT = "draw",
     MODIFIER_STATE_CHANGED = "modifier",
     SKILL_LINES_CHANGED = "draw",
     AUCTION_HOUSE_SHOW = "draw", AUCTION_HOUSE_CLOSED = "draw", AUCTION_HOUSE_DISABLED = "draw",
@@ -111,6 +111,7 @@ end
 function Win.SetMode(m)
     if not UI.pages[m] then return end
     mode = m
+    if m~='opps'and m~='overview'and m~='craft'then S.PauseOpportunities()end
     if not f then return end
     for key, page in pairs(pages) do page:SetShown(key == m) end
     PaintNav()
@@ -363,7 +364,9 @@ local function Build()
             local row = UI.hoverRow
             if row and row:IsShown() then row:ShowTip() end   -- Shift pressed or released while over a row: the other tooltip
         elseif kind then
-            if event=="GET_ITEM_INFO_RECEIVED" and mode=="advisor" and UI.Advisor then UI.Advisor.ItemReady(a,b) end
+            if event=='PLAYER_REGEN_ENABLED'then S.RetryOpportunities()end
+            if (event=='GET_ITEM_INFO_RECEIVED' or event=='ITEM_DATA_LOAD_RESULT')and type(a)=='number'then S.ItemsChanged({[a]=true});UI.itemInfoRevision=(UI.itemInfoRevision or 0)+1 end
+            if (event=="GET_ITEM_INFO_RECEIVED" or event=="ITEM_DATA_LOAD_RESULT") and mode=="advisor" and UI.Advisor then UI.Advisor.ItemReady(a,b) end
             if event == "BAG_UPDATE_DELAYED" then W.Strategy.Bump(); dirtyBags = true end   -- what is owned changed: plans are worked out again
             Schedule(kind)
         end
@@ -473,6 +476,7 @@ W.Toggle = Win.Toggle
 function W.Suspend()
     if W.suspended then return end
     W.suspended = true
+    if W.MerchantReview then W.MerchantReview.Stop() end
     if W.AuctionUI then W.AuctionUI.Hide() end
     if W.Compact then W.Compact.Hide() end
     Win.Hide()
@@ -496,6 +500,7 @@ function W.Resume()
     W.suspended = nil
     if not W.Active() then return end
     if W.Bridge and W.Bridge.RecognizeSummary then W.Bridge.RecognizeSummary() end
+    if W.MerchantReview then W.MerchantReview.Start() end
     if W.Watch then W.Watch.Start() end
     if W.Bank then W.Bank.Start() end
     if W.WorthTip then W.WorthTip.Start() end

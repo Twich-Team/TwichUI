@@ -261,7 +261,7 @@ local bools={wearable=true,upgrade=true,classReagent=true,profession=true,vendor
     professionMaterial=true,tool=true,camping=true,mageScroll=true}
 L.JUNK_MAX_RULES=32
 local MAX_RULES=L.JUNK_MAX_RULES
-local kinds={gear=true,materials=true,recipes=true,consumables=true,other=true}
+local kinds={gear=true,materials=true,recipes=true,consumables=true,other=true,fish=true,meat=true}
 local armors={cloth=true,leather=true,mail=true,plate=true,shield=true,other=true}
 function T.Copy(node)
     local count,seen=0,{}
@@ -324,7 +324,10 @@ function T.Eval(n,f,trace)
             end
             if unknown and (n.strict or (n.match=="all" and yes) or (n.match=="any" and not yes)) then v=nil else v=yes end
         end
-    elseif n.type=="kind" then v=f.kind==n.value
+    elseif n.type=="kind" then
+        -- fish and meat are told apart from the cooking trade goods by the "food" fact, not by the item class
+        if n.value=="fish" or n.value=="meat" then if f.food~=nil then v=f.food==n.value end
+        else v=f.kind==n.value end
     elseif n.type=="armor" then if f.armor~=nil then v=f.armor==n.value end
     elseif n.type=="quality" then
         if type(f.quality)=="number" then v=f.quality>=n.min and f.quality<=n.max end
@@ -336,7 +339,7 @@ function T.Eval(n,f,trace)
 end
 function T.Match(n,f) return T.Eval(n,f) end
 T.ARMOR={{"cloth","Cloth"},{"leather","Leather"},{"mail","Mail"},{"plate","Plate"},{"shield","Shields"},{"other","Other armor"}}
-T.KINDS={{"gear","Gear"},{"materials","Materials"},{"recipes","Recipes"},{"consumables","Supplies"},{"other","Other"}}
+T.KINDS={{"gear","Gear"},{"materials","Materials"},{"recipes","Recipes"},{"consumables","Supplies"},{"other","Other"},{"fish","Fish"},{"meat","Meat"}}
 T.QUALITY={"Poor","Common","Uncommon","Rare","Epic","Legendary"}
 local kindLabel={};for _,k in ipairs(T.KINDS) do kindLabel[k[1]]=k[2] end
 local armorLabel={};for _,k in ipairs(T.ARMOR) do armorLabel[k[1]]=k[2] end
@@ -450,6 +453,9 @@ local function RuleCopy(r)
         out[key]=r[key] or "any"
     end
     if r.tree~=nil then out.tree=T.Copy(r.tree);if not out.tree or out.tree.type~="group" then return nil end end
+    -- A picked icon is cosmetic: an unreadable one falls back to the automatic icon and never costs the rule.
+    local art=r.artwork~=nil and R.Artwork and R.Artwork.Check(r.artwork) or nil
+    if art and art.kind~="automatic" then out.artwork={kind=art.kind,id=art.id} end
     return out
 end
 function L.JunkRules()
@@ -474,6 +480,7 @@ local function SameRows(expected,rows)
         local e=expected[i]
         if type(e)~="table" or not T.Equal(e.tree,r.tree) then return false end
         for _,key in ipairs(RULE_KEYS) do if e[key]~=r[key] then return false end end
+        if not T.Equal(e.artwork,r.artwork) then return false end
     end
     return true
 end

@@ -719,7 +719,7 @@ do
   local p = io.popen('find "' .. LAB .. '" -name "*.lua" | sort')
   for path in p:lines() do files[#files + 1] = path end
   p:close()
-  Check(#files == 24, "the scan found the Lab's files (" .. #files .. ")")
+  Check(#files == 25, "the scan found the Lab's files (" .. #files .. ")")
   -- every file the .toc loads is scanned, and nothing is loaded that is not
   local scanned = {}
   for _, path in ipairs(files) do scanned[path:sub(#LAB + 1)] = true end
@@ -817,6 +817,60 @@ do
   Check(s.items[1]:find("20 x2", 1, true), s.items[1])
   local c = TL.cases["crafting.progress.events"]
   Check(c and c.class == "guided" and c.cat == "progress", "the probe is a guided, opt-in case")
+end
+
+-- W13: observed shape, redaction, bounded reports, SENT identity and abort cleanup.
+do
+  local t = Setup()
+  t.Load(LabFiles())
+  local TL, ids = t.TL, {}
+  local secret = setmetatable({}, { __tostring = function() error("secret formatted") end,
+    __index = function() error("secret indexed") end })
+  t.c.issecretvalue = function(v) return rawequal(v, secret) end
+  local sent = TL.ProgressCapture(ids, "UNIT_SPELLCAST_SENT", "player", "Private Target", "RawGUID", 500, nil)
+  local ok = TL.ProgressCapture(ids, "UNIT_SPELLCAST_SUCCEEDED", "player", "RawGUID", 500)
+  Same(sent.n, 5, "trailing nil counted")
+  Same(sent.args[3], ok.args[2], "SENT uses GUID slot 3, not target")
+  Check(not sent.text:find("Private", 1, true) and not sent.text:find("RawGUID", 1, true), "private strings redacted")
+  local restricted = TL.ProgressCapture(ids, "TRADE_SKILL_ITEM_CRAFTED_RESULT", secret)
+  Check(restricted.text:find("secret", 1, true), "secret never inspected")
+  local result = TL.ProgressCapture(ids, "TRADE_SKILL_ITEM_CRAFTED_RESULT", { itemID = 20, quantity = 2, operationID = 7, name = "Private" })
+  Check(result.text:find("quantity=2", 1, true) and not result.text:find("Private", 1, true), "allowlisted result fields")
+  local invalid = TL.ProgressCapture(ids, "TRADE_SKILL_CRAFT_BEGIN", 0/0, math.huge, -math.huge)
+  Check(not invalid.text:find(":nan", 1, true) and not invalid.text:find(":inf", 1, true), "nonfinite identifiers omitted")
+  local positional = TL.ProgressCapture(ids, "TRADE_SKILL_ITEM_CRAFTED_RESULT", 20, 2, 7)
+  Check(positional.text:find("RESULT(3)", 1, true), "unexpected positional shape preserved without reinterpretation")
+  local log = { sent, ok, result, restricted, positional }
+  local summary = TL.ProgressSummary(log)
+  Same(summary.succeeded, 1, "SENT and success share one cast")
+  for i = 6, 400 do log[i] = ok end
+  local notes = TL.ProgressReport(log, { "OK=yes", "RESULT=raised" }, 12, true)
+  Check(#notes <= 16, "fits note contract")
+  local text = table.concat(notes, " ")
+  Check(text:find("TRUNCATED", 1, true) and text:find("dropped=12", 1, true), "capture/report loss explicit")
+  Check(text:find("INCONCLUSIVE", 1, true) and not text:find("EVIDENCE OK:", 1, true), "no unsupported success verdict")
+  for _, note in ipairs(notes) do Check(#note <= 400, "no silent note clipping: " .. #note) end
+  local fr = TL.Probe.Get("progress.listen", "Frame")
+  fr:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
+  fr:SetScript("OnEvent", function() end)
+  TL.Probe.Release()
+  Same(fr:IsEventRegistered("UNIT_SPELLCAST_SUCCEEDED"), false, "abort cleanup unregisters listener")
+  Same(fr:GetScript("OnEvent"), nil, "abort cleanup releases recording closure")
+  local realRegister = fr.RegisterEvent
+  fr.RegisterEvent = function(self, event)
+    if event == "TRADE_SKILL_ITEM_CRAFTED_RESULT" then error("private error detail") end
+    if event == "TRADE_SKILL_CRAFT_BEGIN" then return false end
+    return realRegister(self, event)
+  end
+  TL.Guided.Begin = function() return true end
+  TL.Guided.Choice = function() return "Done" end
+  TL.Guided.Say = function() end
+  local record = TL.NewT(TL.cases["crafting.progress.events"])
+  TL.cases["crafting.progress.events"].run(record)
+  local report = table.concat(record.notes, " ")
+  Check(report:find("RESULT=raised", 1, true) and report:find("BEGIN=no", 1, true), "registration failures visible")
+  Check(not report:find("private error", 1, true), "raw errors omitted")
+  Same(fr:GetScript("OnEvent"), nil, "normal completion releases listener")
 end
 
 print("PASSED test_testlab")

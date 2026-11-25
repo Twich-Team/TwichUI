@@ -48,15 +48,16 @@ Methods = {
   CreateAnimationGroup = function(s) local a = Anim(); a.parent = s; return a end,
   SetText = function(s, v) s.text = v end, GetText = function(s) return s.text end,
   GetStringWidth = function(s) return #(s.text or "") * 8 end, GetStringHeight = function(s) return s.fontSize or 18 end,
-  SetPoint = function(s, ...) s.points[#s.points + 1] = { ... } end, ClearAllPoints = function(s) s.points = {} end,
+  SetPoint = function(s, ...) s.points[#s.points + 1] = { ... } end, ClearAllPoints = function(s) s.points = {}; s.allPoints = nil end,
   SetSize = function(s, w, h) s.w, s.h = w, h end, SetWidth = function(s, w) s.w = w end, SetHeight = function(s, h) s.h = h end,
-  GetWidth = function(s) return s.w end, GetHeight = function(s) return s.h end,
+  GetWidth = function(s) return s.allPoints and s.allPoints:GetWidth() or s.w end, GetHeight = function(s) return s.allPoints and s.allPoints:GetHeight() or s.h end,
   SetAlpha = function(s, a) s.alpha = a end, GetAlpha = function(s) return s.alpha end,
   SetScale = function(s, v) s.scale = v end, GetEffectiveScale = function() return 1 end,
   SetFrameLevel = function(s, l) s.level = l end, GetFrameLevel = function(s) return s.level end,
   SetFrameStrata = function(s, v) s.strata = v end, EnableMouse = function(s, v) s.mouse = v and true or false end,
   SetAtlas = function(s, a) s.atlas = a end, SetTexture = function(s, p) s.texture = p; return true end,
   SetTexCoord = function(s, ...) s.coords = { ... } end,
+  SetAllPoints = function(s, target) s.allPoints = target end,
   SetVertexColor = function(s, r, g, b) s.color = { r, g, b } end, SetColorTexture = function(s, r, g, b) s.color = { r, g, b } end,
   SetTextColor = function(s, r, g, b) s.color = { r, g, b } end,
   SetFont = function(s, path, size, flags) s.font = { path, size, flags }; s.fontSize = size; return true end,
@@ -71,6 +72,9 @@ c.CreateFrame = function(kind, name, parent)
 end
 c.UIParent = Fake("UIParent")
 c.UIParent.w, c.UIParent.h = 1024, 768
+c.C_Texture = { GetAtlasInfo = function()
+  return { leftTexCoord = 0.1, rightTexCoord = 0.9, topTexCoord = 0.2, bottomTexCoord = 0.8 }
+end }
 c.STANDARD_TEXT_FONT = "Fonts\\FRIZQT__.TTF"
 c.Enum = { PowerType = { ComboPoints = 4, Mana = 0 }, ItemClass = { Weapon = 2, Armor = 4 }, ItemArmorSubclass = { Shield = 6 },
   ItemWeaponSubclass = { Fishingpole = 20 }, SpellBookSpellBank = { Player = 0 } }
@@ -201,7 +205,7 @@ Slots({ [1] = { "spell", 403 }, [2] = { "spell", 324 }, [3] = { "spell", 529 }, 
 
 for _, f in ipairs({ "QuietScreen.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/Media.lua", "Icons.lua",
   "chronicle/Style.lua", "Look.lua", "FrameLook.lua", "modules/Notify.lua", "modules/NotifyLook.lua", "modules/Arrival.lua",
-  "reminders/AmmoItems.lua", "reminders/ArtData.lua", "reminders/Config.lua", "reminders/Gallery.lua", "reminders/Conditions.lua",
+  "reminders/AmmoItems.lua", "reminders/ArtData.lua", "artwork/Catalog.lua", "reminders/Config.lua", "reminders/Gallery.lua", "reminders/Conditions.lua",
   "reminders/Ammunition.lua", "reminders/Evaluate.lua", "reminders/State.lua", "reminders/Auras.lua", "reminders/Display.lua",
   "reminders/ButtonGlow.lua", "reminders/Controller.lua",
   "glows/Catalog.lua", "glows/Config.lua", "glows/Logic.lua", "glows/Buttons.lua", "glows/State.lua", "glows/Draw.lua",
@@ -336,6 +340,36 @@ Fire("SPELLS_CHANGED"); Settle()
 Check(o1.flip.group.plays == plays and D.made == made, "the same look again: no new frame, the animation is not restarted")
 RM.SetGlow(bolt, "look", "pixel")
 Check(not o1.flip.tex.shown and o1.lines and o1.lines[1].shown, "another look on the same overlay")
+-- Every look uses the button's own bounds at 100%, including rectangular EllesmereUI buttons.
+-- Anchors follow later button resizes without restarting the animation or allocating frames.
+for _, button in ipairs({ AB[1], EAB[1] }) do
+  local overlay = Overlay(button)
+  local oldW, oldH = button.w, button.h
+  for _, look in ipairs({ "proc", "ants", "soft", "pixel" }) do
+    RM.SetGlow(bolt, "look", look)
+    for _, motion in ipairs({ "still", "breathing", "moving" }) do
+      RM.SetGlow(bolt, "motion", motion)
+      local beforePlays = overlay.flip and overlay.flip.group.plays
+      local beforeMade = D.made
+      for _, size in ipairs({ { 24, 24 }, { 48, 32 }, { 36, 36 } }) do
+        button:SetSize(size[1], size[2])
+        Check(overlay:GetWidth() == size[1] and overlay:GetHeight() == size[2],
+          look .. "/" .. motion .. " stays within the resized button")
+      end
+      Check(D.made == beforeMade and (not overlay.flip or overlay.flip.group.plays == beforePlays),
+        "resizing reuses the overlay without restarting its animation")
+      if look == "proc" or look == "ants" then
+        local coords = overlay.flip.tex.coords
+        local moving = motion == "moving"
+        Check(coords and math.abs(coords[2] - (moving and 0.9 or 0.26)) < 0.001
+          and math.abs(coords[4] - (moving and 0.8 or 0.3)) < 0.001,
+          look .. "/" .. motion .. " uses the full flipbook only while moving")
+      end
+    end
+  end
+  button:SetSize(oldW, oldH)
+end
+RM.SetGlow(bolt, "motion", "moving")
 RM.SetGlow(bolt, "look", "proc"); RM.SetGlow(bolt, "color", RM.GLOW_DEFAULTS.color)
 RM.SetGlow(bolt, "enabled", false)
 Check(Shown(bolt) and not Lit(AB[1]), "glow turned off: the reminder stays, the glow goes")
@@ -528,6 +562,19 @@ BCT.Refresh(); Settle()
 Check(Lit(sample), "Action bar glows' drawing doesn't clear the sample")
 GW.Sample(sample, nil)
 Check(not Lit(sample), "sample stopped")
+-- Action bar glows still honors its explicit size setting when reusing a default-size overlay.
+local sized = BG.Style("proc", "overpower")
+local custom = {}
+for k, v in pairs(sized) do custom[k] = v end
+custom.size = 140
+D.Set(sample, custom)
+local sizedOverlay = Overlay(sample)
+Check(sizedOverlay:GetWidth() == sample:GetWidth() * 1.4, "an explicit larger size is honored")
+custom.size = 100
+D.Set(sample, custom)
+Check(sizedOverlay:GetWidth() == sample:GetWidth(), "resetting the size restores button bounds")
+D.Clear(sample)
+
 
 ---------------------------------------------------------------------------
 -- 13. Never acts; no per-frame Lua

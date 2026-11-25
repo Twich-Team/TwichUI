@@ -68,10 +68,12 @@ pages\JunkSession.lua
 pages\JunkBuilder.lua
 pages\JunkMarking.lua
 pages\Workshop.lua
+pages\Fishing.lua
 pages\Skins.lua
 pages\RestedXP.lua
 pages\TargetArt.lua
 pages\ClassPortrait.lua
+pages\ExecuteRange.lua
 pages\Sharing.lua
 pages\Profiles.lua
 pages\Troubleshooting.lua
@@ -81,6 +83,7 @@ pages\Troubleshooting.lua
 Search.lua
 Widgets.lua
 Material.lua
+ArtworkPicker.lua
 Craft.lua
 Design.lua
 Companion.lua
@@ -88,6 +91,7 @@ Previews.lua
 previews\QoL.lua
 previews\ReturnTheFavor.lua
 Cards.lua
+QoLCards.lua
 Home.lua
 QuickAccess.lua
 Window.lua

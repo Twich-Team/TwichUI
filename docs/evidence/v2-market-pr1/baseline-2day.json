@@ -1,0 +1,739 @@
+{
+  "source": "725519e6be87f3e3b9c75d8f7ad271572cb60a1f",
+  "harness_sha256": "d3f90b67696adf9ce785bff6d9df95d0b7ce9750573221720975241c47efa180",
+  "index_harness_sha256": "1973827e13a6165a6f06f83dcb9d9468513de1fcaabeea61167b9b83a7378f18",
+  "host": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "python": "3.12.14",
+  "clock": "Lua os.clock CPU; Python perf_counter subprocess elapsed",
+  "limitations": "Synthetic 60Hz minimum timer delay; not the WoW scheduler. Peak heap sampled at callbacks/lookups, not exact peak. Includes harness observer overhead.",
+  "samples": [
+    {
+      "case": [
+        "opportunities",
+        "session",
+        100,
+        2
+      ],
+      "runs": [
+        {
+          "base_key_calls": 18956.0,
+          "base_key_cpu_ms": 1968.274,
+          "callback_cpu_ms": 3525.205,
+          "callbacks": 453.0,
+          "compile_ms": 2.053,
+          "count": 100.0,
+          "cpu_ms": 3611.078,
+          "crafts": 8800.0,
+          "decoded_partitions": 1.0,
+          "decodes": 64.0,
+          "estimator_instances": 44.0,
+          "execute_ms": 0.036,
+          "explicit_gc_ms": 4.421,
+          "first_cpu_ms": 184.171,
+          "first_model_seconds": 0.2,
+          "full_calculations": 88.0,
+          "heap_drops": 42.0,
+          "history_days": 2.0,
+          "loads": 64.0,
+          "lookup_calls": 18956.0,
+          "memo_asked": 967.0,
+          "memo_hits": 2933.0,
+          "mode": "opportunities",
+          "model_seconds": 6.216667,
+          "pattern": "session",
+          "price_cache_entries": 164.0,
+          "price_calls": 20280.0,
+          "priced": 100.0,
+          "raw_fixture_bytes": 306292.0,
+          "raw_loaded_bytes": 315917.0,
+          "real_client": false,
+          "record_calls": 18956.0,
+          "repeated_decodes": 0.0,
+          "retained_delta_kib": 1287.986328,
+          "rows_per_partition": 32.0,
+          "sampled_peak_delta_kib": 13310.109375,
+          "synthetic": true,
+          "ten_model_seconds": 0.85,
+          "timer_model": "minimum one 60Hz frame per After; CPU reported separately",
+          "unpriced": 0.0,
+          "validation_ms": 611.99,
+          "warm_crafts": 100.0,
+          "warm_estimator_reused": true,
+          "warm_ms": 3.147,
+          "warm_record_calls": 0.0,
+          "worst_callback_ms": 86.191,
+          "subprocess_wall_seconds": 4.398597784000231
+        },
+        {
+          "base_key_calls": 20262.0,
+          "base_key_cpu_ms": 2060.82,
+          "callback_cpu_ms": 3591.239,
+          "callbacks": 444.0,
+          "compile_ms": 1.814,
+          "count": 100.0,
+          "cpu_ms": 3677.967,
+          "crafts": 8200.0,
+          "decoded_partitions": 1.0,
+          "decodes": 64.0,
+          "estimator_instances": 41.0,
+          "execute_ms": 0.036,
+          "explicit_gc_ms": 6.218,
+          "first_cpu_ms": 341.445,
+          "first_model_seconds": 0.3,
+          "full_calculations": 82.0,
+          "heap_drops": 34.0,
+          "history_days": 2.0,
+          "loads": 64.0,
+          "lookup_calls": 20262.0,
+          "memo_asked": 967.0,
+          "memo_hits": 2933.0,
+          "mode": "opportunities",
+          "model_seconds": 6.166667,
+          "pattern": "session",
+          "price_cache_entries": 164.0,
+          "price_calls": 19893.0,
+          "priced": 100.0,
+          "raw_fixture_bytes": 306292.0,
+          "raw_loaded_bytes": 315917.0,
+          "real_client": false,
+          "record_calls": 20262.0,
+          "repeated_decodes": 0.0,
+          "retained_delta_kib": 1287.986328,
+          "rows_per_partition": 32.0,
+          "sampled_peak_delta_kib": 13304.078125,
+          "synthetic": true,
+          "ten_model_seconds": 0.883333,
+          "timer_model": "minimum one 60Hz frame per After; CPU reported separately",
+          "unpriced": 0.0,
+          "validation_ms": 611.359,
+          "warm_crafts": 100.0,
+          "warm_estimator_reused": true,
+          "warm_ms": 3.987,
+          "warm_record_calls": 0.0,
+          "worst_callback_ms": 85.88,
+          "subprocess_wall_seconds": 4.494829954999659
+        },
+        {
+          "base_key_calls": 20157.0,
+          "base_key_cpu_ms": 2097.688,
+          "callback_cpu_ms": 3618.715,
+          "callbacks": 443.0,
+          "compile_ms": 1.549,
+          "count": 100.0,
+          "cpu_ms": 3701.287,
+          "crafts": 8200.0,
+          "decoded_partitions": 1.0,
+          "decodes": 64.0,
+          "estimator_instances": 41.0,
+          "execute_ms": 0.039,
+          "explicit_gc_ms": 5.955,
+          "first_cpu_ms": 331.247,
+          "first_model_seconds": 0.3,
+          "full_calculations": 82.0,
+          "heap_drops": 32.0,
+          "history_days": 2.0,
+          "loads": 64.0,
+          "lookup_calls": 20157.0,
+          "memo_asked": 967.0,
+          "memo_hits": 2933.0,
+          "mode": "opportunities",
+          "model_seconds": 6.066667,
+          "pattern": "session",
+          "price_cache_entries": 164.0,
+          "price_calls": 19846.0,
+          "priced": 100.0,
+          "raw_fixture_bytes": 306292.0,
+          "raw_loaded_bytes": 315917.0,
+          "real_client": false,
+          "record_calls": 20157.0,
+          "repeated_decodes": 0.0,
+          "retained_delta_kib": 1288.636719,
+          "rows_per_partition": 32.0,
+          "sampled_peak_delta_kib": 12593.984375,
+          "synthetic": true,
+          "ten_model_seconds": 0.783333,
+          "timer_model": "minimum one 60Hz frame per After; CPU reported separately",
+          "unpriced": 0.0,
+          "validation_ms": 602.353,
+          "warm_crafts": 100.0,
+          "warm_estimator_reused": true,
+          "warm_ms": 3.65,
+          "warm_record_calls": 0.0,
+          "worst_callback_ms": 111.319,
+          "subprocess_wall_seconds": 4.477652943000066
+        }
+      ],
+      "metrics": {
+        "base_key_calls": {
+          "median": 20157.0,
+          "minimum": 18956.0,
+          "maximum": 20262.0
+        },
+        "base_key_cpu_ms": {
+          "median": 2060.82,
+          "minimum": 1968.274,
+          "maximum": 2097.688
+        },
+        "callback_cpu_ms": {
+          "median": 3591.239,
+          "minimum": 3525.205,
+          "maximum": 3618.715
+        },
+        "callbacks": {
+          "median": 444.0,
+          "minimum": 443.0,
+          "maximum": 453.0
+        },
+        "compile_ms": {
+          "median": 1.814,
+          "minimum": 1.549,
+          "maximum": 2.053
+        },
+        "count": {
+          "median": 100.0,
+          "minimum": 100.0,
+          "maximum": 100.0
+        },
+        "cpu_ms": {
+          "median": 3677.967,
+          "minimum": 3611.078,
+          "maximum": 3701.287
+        },
+        "crafts": {
+          "median": 8200.0,
+          "minimum": 8200.0,
+          "maximum": 8800.0
+        },
+        "decoded_partitions": {
+          "median": 1.0,
+          "minimum": 1.0,
+          "maximum": 1.0
+        },
+        "decodes": {
+          "median": 64.0,
+          "minimum": 64.0,
+          "maximum": 64.0
+        },
+        "estimator_instances": {
+          "median": 41.0,
+          "minimum": 41.0,
+          "maximum": 44.0
+        },
+        "execute_ms": {
+          "median": 0.036,
+          "minimum": 0.036,
+          "maximum": 0.039
+        },
+        "explicit_gc_ms": {
+          "median": 5.955,
+          "minimum": 4.421,
+          "maximum": 6.218
+        },
+        "first_cpu_ms": {
+          "median": 331.247,
+          "minimum": 184.171,
+          "maximum": 341.445
+        },
+        "first_model_seconds": {
+          "median": 0.3,
+          "minimum": 0.2,
+          "maximum": 0.3
+        },
+        "full_calculations": {
+          "median": 82.0,
+          "minimum": 82.0,
+          "maximum": 88.0
+        },
+        "heap_drops": {
+          "median": 34.0,
+          "minimum": 32.0,
+          "maximum": 42.0
+        },
+        "history_days": {
+          "median": 2.0,
+          "minimum": 2.0,
+          "maximum": 2.0
+        },
+        "loads": {
+          "median": 64.0,
+          "minimum": 64.0,
+          "maximum": 64.0
+        },
+        "lookup_calls": {
+          "median": 20157.0,
+          "minimum": 18956.0,
+          "maximum": 20262.0
+        },
+        "memo_asked": {
+          "median": 967.0,
+          "minimum": 967.0,
+          "maximum": 967.0
+        },
+        "memo_hits": {
+          "median": 2933.0,
+          "minimum": 2933.0,
+          "maximum": 2933.0
+        },
+        "model_seconds": {
+          "median": 6.166667,
+          "minimum": 6.066667,
+          "maximum": 6.216667
+        },
+        "price_cache_entries": {
+          "median": 164.0,
+          "minimum": 164.0,
+          "maximum": 164.0
+        },
+        "price_calls": {
+          "median": 19893.0,
+          "minimum": 19846.0,
+          "maximum": 20280.0
+        },
+        "priced": {
+          "median": 100.0,
+          "minimum": 100.0,
+          "maximum": 100.0
+        },
+        "raw_fixture_bytes": {
+          "median": 306292.0,
+          "minimum": 306292.0,
+          "maximum": 306292.0
+        },
+        "raw_loaded_bytes": {
+          "median": 315917.0,
+          "minimum": 315917.0,
+          "maximum": 315917.0
+        },
+        "record_calls": {
+          "median": 20157.0,
+          "minimum": 18956.0,
+          "maximum": 20262.0
+        },
+        "repeated_decodes": {
+          "median": 0.0,
+          "minimum": 0.0,
+          "maximum": 0.0
+        },
+        "retained_delta_kib": {
+          "median": 1287.986328,
+          "minimum": 1287.986328,
+          "maximum": 1288.636719
+        },
+        "rows_per_partition": {
+          "median": 32.0,
+          "minimum": 32.0,
+          "maximum": 32.0
+        },
+        "sampled_peak_delta_kib": {
+          "median": 13304.078125,
+          "minimum": 12593.984375,
+          "maximum": 13310.109375
+        },
+        "ten_model_seconds": {
+          "median": 0.85,
+          "minimum": 0.783333,
+          "maximum": 0.883333
+        },
+        "unpriced": {
+          "median": 0.0,
+          "minimum": 0.0,
+          "maximum": 0.0
+        },
+        "validation_ms": {
+          "median": 611.359,
+          "minimum": 602.353,
+          "maximum": 611.99
+        },
+        "warm_crafts": {
+          "median": 100.0,
+          "minimum": 100.0,
+          "maximum": 100.0
+        },
+        "warm_ms": {
+          "median": 3.65,
+          "minimum": 3.147,
+          "maximum": 3.987
+        },
+        "warm_record_calls": {
+          "median": 0.0,
+          "minimum": 0.0,
+          "maximum": 0.0
+        },
+        "worst_callback_ms": {
+          "median": 86.191,
+          "minimum": 85.88,
+          "maximum": 111.319
+        },
+        "subprocess_wall_seconds": {
+          "median": 4.477652943000066,
+          "minimum": 4.398597784000231,
+          "maximum": 4.494829954999659
+        }
+      }
+    },
+    {
+      "case": [
+        "opportunities",
+        "session",
+        1000,
+        2
+      ],
+      "runs": [
+        {
+          "base_key_calls": 195793.0,
+          "base_key_cpu_ms": 20508.695,
+          "callback_cpu_ms": 31211.16,
+          "callbacks": 490.0,
+          "compile_ms": 2.118,
+          "count": 1000.0,
+          "cpu_ms": 31979.665,
+          "crafts": 86000.0,
+          "decoded_partitions": 1.0,
+          "decodes": 64.0,
+          "estimator_instances": 43.0,
+          "execute_ms": 0.039,
+          "explicit_gc_ms": 44.327,
+          "first_cpu_ms": 1513.733,
+          "first_model_seconds": 0.2,
+          "full_calculations": 86.0,
+          "heap_drops": 58.0,
+          "history_days": 2.0,
+          "loads": 64.0,
+          "lookup_calls": 195793.0,
+          "memo_asked": 7296.0,
+          "memo_hits": 31704.0,
+          "mode": "opportunities",
+          "model_seconds": 6.2,
+          "pattern": "session",
+          "price_cache_entries": 1064.0,
+          "price_calls": 148192.0,
+          "priced": 960.0,
+          "raw_fixture_bytes": 306292.0,
+          "raw_loaded_bytes": 315917.0,
+          "real_client": false,
+          "record_calls": 195793.0,
+          "repeated_decodes": 0.0,
+          "retained_delta_kib": 10329.939453,
+          "rows_per_partition": 32.0,
+          "sampled_peak_delta_kib": 51870.213867,
+          "synthetic": true,
+          "ten_model_seconds": 0.2,
+          "timer_model": "minimum one 60Hz frame per After; CPU reported separately",
+          "unpriced": 40.0,
+          "validation_ms": 747.448,
+          "warm_crafts": 1000.0,
+          "warm_estimator_reused": true,
+          "warm_ms": 43.947,
+          "warm_record_calls": 0.0,
+          "worst_callback_ms": 761.253,
+          "subprocess_wall_seconds": 32.872546673000215
+        },
+        {
+          "base_key_calls": 189066.0,
+          "base_key_cpu_ms": 19559.73,
+          "callback_cpu_ms": 29656.224,
+          "callbacks": 484.0,
+          "compile_ms": 2.02,
+          "count": 1000.0,
+          "cpu_ms": 30386.481,
+          "crafts": 84000.0,
+          "decoded_partitions": 1.0,
+          "decodes": 64.0,
+          "estimator_instances": 42.0,
+          "execute_ms": 0.043,
+          "explicit_gc_ms": 31.888,
+          "first_cpu_ms": 2714.965,
+          "first_model_seconds": 0.3,
+          "full_calculations": 84.0,
+          "heap_drops": 55.0,
+          "history_days": 2.0,
+          "loads": 64.0,
+          "lookup_calls": 189066.0,
+          "memo_asked": 7296.0,
+          "memo_hits": 31704.0,
+          "mode": "opportunities",
+          "model_seconds": 6.133333,
+          "pattern": "session",
+          "price_cache_entries": 1064.0,
+          "price_calls": 143674.0,
+          "priced": 960.0,
+          "raw_fixture_bytes": 306292.0,
+          "raw_loaded_bytes": 315917.0,
+          "real_client": false,
+          "record_calls": 189066.0,
+          "repeated_decodes": 0.0,
+          "retained_delta_kib": 10329.777344,
+          "rows_per_partition": 32.0,
+          "sampled_peak_delta_kib": 46347.176758,
+          "synthetic": true,
+          "ten_model_seconds": 0.3,
+          "timer_model": "minimum one 60Hz frame per After; CPU reported separately",
+          "unpriced": 40.0,
+          "validation_ms": 733.215,
+          "warm_crafts": 1000.0,
+          "warm_estimator_reused": true,
+          "warm_ms": 58.34,
+          "warm_record_calls": 0.0,
+          "worst_callback_ms": 700.676,
+          "subprocess_wall_seconds": 31.250721234000594
+        },
+        {
+          "base_key_calls": 195270.0,
+          "base_key_cpu_ms": 20253.785,
+          "callback_cpu_ms": 30597.614,
+          "callbacks": 490.0,
+          "compile_ms": 1.933,
+          "count": 1000.0,
+          "cpu_ms": 31359.721,
+          "crafts": 86000.0,
+          "decoded_partitions": 1.0,
+          "decodes": 64.0,
+          "estimator_instances": 43.0,
+          "execute_ms": 0.039,
+          "explicit_gc_ms": 24.071,
+          "first_cpu_ms": 2799.5,
+          "first_model_seconds": 0.3,
+          "full_calculations": 86.0,
+          "heap_drops": 58.0,
+          "history_days": 2.0,
+          "loads": 64.0,
+          "lookup_calls": 195270.0,
+          "memo_asked": 7296.0,
+          "memo_hits": 31704.0,
+          "mode": "opportunities",
+          "model_seconds": 6.2,
+          "pattern": "session",
+          "price_cache_entries": 1064.0,
+          "price_calls": 147936.0,
+          "priced": 960.0,
+          "raw_fixture_bytes": 306292.0,
+          "raw_loaded_bytes": 315917.0,
+          "real_client": false,
+          "record_calls": 195270.0,
+          "repeated_decodes": 0.0,
+          "retained_delta_kib": 10329.777344,
+          "rows_per_partition": 32.0,
+          "sampled_peak_delta_kib": 52212.208008,
+          "synthetic": true,
+          "ten_model_seconds": 0.3,
+          "timer_model": "minimum one 60Hz frame per After; CPU reported separately",
+          "unpriced": 40.0,
+          "validation_ms": 733.536,
+          "warm_crafts": 1000.0,
+          "warm_estimator_reused": true,
+          "warm_ms": 61.409,
+          "warm_record_calls": 0.0,
+          "worst_callback_ms": 704.386,
+          "subprocess_wall_seconds": 32.24754736700015
+        }
+      ],
+      "metrics": {
+        "base_key_calls": {
+          "median": 195270.0,
+          "minimum": 189066.0,
+          "maximum": 195793.0
+        },
+        "base_key_cpu_ms": {
+          "median": 20253.785,
+          "minimum": 19559.73,
+          "maximum": 20508.695
+        },
+        "callback_cpu_ms": {
+          "median": 30597.614,
+          "minimum": 29656.224,
+          "maximum": 31211.16
+        },
+        "callbacks": {
+          "median": 490.0,
+          "minimum": 484.0,
+          "maximum": 490.0
+        },
+        "compile_ms": {
+          "median": 2.02,
+          "minimum": 1.933,
+          "maximum": 2.118
+        },
+        "count": {
+          "median": 1000.0,
+          "minimum": 1000.0,
+          "maximum": 1000.0
+        },
+        "cpu_ms": {
+          "median": 31359.721,
+          "minimum": 30386.481,
+          "maximum": 31979.665
+        },
+        "crafts": {
+          "median": 86000.0,
+          "minimum": 84000.0,
+          "maximum": 86000.0
+        },
+        "decoded_partitions": {
+          "median": 1.0,
+          "minimum": 1.0,
+          "maximum": 1.0
+        },
+        "decodes": {
+          "median": 64.0,
+          "minimum": 64.0,
+          "maximum": 64.0
+        },
+        "estimator_instances": {
+          "median": 43.0,
+          "minimum": 42.0,
+          "maximum": 43.0
+        },
+        "execute_ms": {
+          "median": 0.039,
+          "minimum": 0.039,
+          "maximum": 0.043
+        },
+        "explicit_gc_ms": {
+          "median": 31.888,
+          "minimum": 24.071,
+          "maximum": 44.327
+        },
+        "first_cpu_ms": {
+          "median": 2714.965,
+          "minimum": 1513.733,
+          "maximum": 2799.5
+        },
+        "first_model_seconds": {
+          "median": 0.3,
+          "minimum": 0.2,
+          "maximum": 0.3
+        },
+        "full_calculations": {
+          "median": 86.0,
+          "minimum": 84.0,
+          "maximum": 86.0
+        },
+        "heap_drops": {
+          "median": 58.0,
+          "minimum": 55.0,
+          "maximum": 58.0
+        },
+        "history_days": {
+          "median": 2.0,
+          "minimum": 2.0,
+          "maximum": 2.0
+        },
+        "loads": {
+          "median": 64.0,
+          "minimum": 64.0,
+          "maximum": 64.0
+        },
+        "lookup_calls": {
+          "median": 195270.0,
+          "minimum": 189066.0,
+          "maximum": 195793.0
+        },
+        "memo_asked": {
+          "median": 7296.0,
+          "minimum": 7296.0,
+          "maximum": 7296.0
+        },
+        "memo_hits": {
+          "median": 31704.0,
+          "minimum": 31704.0,
+          "maximum": 31704.0
+        },
+        "model_seconds": {
+          "median": 6.2,
+          "minimum": 6.133333,
+          "maximum": 6.2
+        },
+        "price_cache_entries": {
+          "median": 1064.0,
+          "minimum": 1064.0,
+          "maximum": 1064.0
+        },
+        "price_calls": {
+          "median": 147936.0,
+          "minimum": 143674.0,
+          "maximum": 148192.0
+        },
+        "priced": {
+          "median": 960.0,
+          "minimum": 960.0,
+          "maximum": 960.0
+        },
+        "raw_fixture_bytes": {
+          "median": 306292.0,
+          "minimum": 306292.0,
+          "maximum": 306292.0
+        },
+        "raw_loaded_bytes": {
+          "median": 315917.0,
+          "minimum": 315917.0,
+          "maximum": 315917.0
+        },
+        "record_calls": {
+          "median": 195270.0,
+          "minimum": 189066.0,
+          "maximum": 195793.0
+        },
+        "repeated_decodes": {
+          "median": 0.0,
+          "minimum": 0.0,
+          "maximum": 0.0
+        },
+        "retained_delta_kib": {
+          "median": 10329.777344,
+          "minimum": 10329.777344,
+          "maximum": 10329.939453
+        },
+        "rows_per_partition": {
+          "median": 32.0,
+          "minimum": 32.0,
+          "maximum": 32.0
+        },
+        "sampled_peak_delta_kib": {
+          "median": 51870.213867,
+          "minimum": 46347.176758,
+          "maximum": 52212.208008
+        },
+        "ten_model_seconds": {
+          "median": 0.3,
+          "minimum": 0.2,
+          "maximum": 0.3
+        },
+        "unpriced": {
+          "median": 40.0,
+          "minimum": 40.0,
+          "maximum": 40.0
+        },
+        "validation_ms": {
+          "median": 733.536,
+          "minimum": 733.215,
+          "maximum": 747.448
+        },
+        "warm_crafts": {
+          "median": 1000.0,
+          "minimum": 1000.0,
+          "maximum": 1000.0
+        },
+        "warm_ms": {
+          "median": 58.34,
+          "minimum": 43.947,
+          "maximum": 61.409
+        },
+        "warm_record_calls": {
+          "median": 0.0,
+          "minimum": 0.0,
+          "maximum": 0.0
+        },
+        "worst_callback_ms": {
+          "median": 704.386,
+          "minimum": 700.676,
+          "maximum": 761.253
+        },
+        "subprocess_wall_seconds": {
+          "median": 32.24754736700015,
+          "minimum": 31.250721234000594,
+          "maximum": 32.872546673000215
+        }
+      }
+    }
+  ]
+}

@@ -15,7 +15,7 @@ dofile(TESTS .. "mi_mock.lua")
 local failures = 0
 local function Check(cond, msg) if not cond then failures = failures + 1; print("FAIL: " .. msg) end end
 
-local c = MIClient("Rich", { files = { "inventory/Rules.lua", "inventory/Items.lua", "inventory/Plan.lua" } })
+local c = MIClient("Rich", { files = { "Icons.lua", "reminders/ArtData.lua", "artwork/Catalog.lua", "inventory/Rules.lua", "inventory/Items.lua", "inventory/Plan.lua" } })
 local MI = c.TwichUI.MagicInventory
 Check(MI ~= nil, "Magic Inventory is loaded")
 Check(c.TwichUIDB.modules.magicInventory == false, "off by default (explicit true only)")
@@ -60,6 +60,64 @@ plan = MI.CurrentPlan(nil)
 Check(not Entry(plan, 2592), "Never include: an excluded item never matches the rule")
 Check(not Entry(plan, 2447), "Never include wins over Also include in the same rule")
 Check(Entry(plan, 2589) ~= nil, "the rest of the category still matches")
+
+do
+  Reset()
+  c.Bags({})
+  local key = MI.WAYLAID_CATEGORY
+  local id = Save({ name = "Waylaid crates to bank", cats = { key } })
+  local rule = MI.Rule(id)
+  Check(rule and rule.enabled and rule.cats[1] == key and not next(rule.include),
+    "a category-only crate rule persists and can be enabled with empty bags")
+  local crateIDs = {
+    248549,
+    248682, 248683, 248684, 248685, 248686, 248687, 248688, 248689, 248690,
+    248691, 248692, 248693, 248694, 248695, 248696, 248697, 248698, 248699,
+    248702, 248703, 248704, 248705, 248706, 248707, 248708, 248709, 248710, 248711, 248712, 248713,
+    248765, 248766, 248767, 248768, 248769, 248770, 248771, 248772, 248773, 248774,
+    248775, 248776, 248777, 248778, 248779,
+  }
+  for _, item in ipairs(crateIDs) do
+    Check(MI.Match(rule, { id = item, name = "Localized name" }) == "matched", "Forever crate matches by ID " .. item)
+  end
+  for _, item in ipairs({ 1179, 248700, 248701, 248714, 248764, 248780 }) do
+    Check(MI.Match(rule, { id = item, classID = 0, subclassID = 8 }) == nil, "unrelated item is excluded " .. item)
+  end
+
+  c.ITEMS[248549] = { name = "Waylaid Crate", class = 15, sub = 0, maxStack = 20, quality = 2 }
+  c.ITEMS[248682] = { name = "Waylaid Crate: Apprentice Herbs", class = 0, sub = 8, maxStack = 5, quality = 1 }
+  c.ITEMS[248765] = { name = "Sealed Apprentice Crate", class = 15, sub = 0, maxStack = 5, quality = 1, bind = 1 }
+  c.Bags({ [0] = { size = 16, slots = { { 248549, 1 }, { 248682, 2 }, { 248765, 1, quest = true, bound = true }, { 1179, 1 } } } })
+  local plan = MI.CurrentPlan(nil)
+  Check(Entry(plan, 248549) and Entry(plan, 248682) and not Entry(plan, 1179), "a saved category picks up newly carried crates only")
+  Check(not Entry(plan, 248765) and Find(plan.skipped, 248765, "reason", "quest"), "category cannot override a quest item")
+  rule.qualities[2], rule.exclude[248549] = true, true
+  Check(MI.Match(rule, MI.ItemFacts(248682)) == nil, "quality still filters the crate category")
+  Check(MI.Match(rule, MI.ItemFacts(248549)) == "excluded", "rule exclusions still override the crate category")
+  MI.SetNever(248549, true)
+  plan = MI.CurrentPlan(nil)
+  Check(not Entry(plan, 248549) and Find(plan.skipped, 248549, "reason", "never"), "Never transfer still protects a matching crate")
+  Reset()
+end
+
+do
+  local key = MI.WRITS_CATEGORY
+  local rule = MI.Rule(Save({ name = "Writs to bank", cats = { key } }))
+  Check(rule and rule.enabled and rule.cats[1] == key, "the writ family persists as one enabled category")
+  for _, id in ipairs({ 248206, 262887, 262888, 262889, 262890, 264011, 264056, 264116, 264160 }) do
+    Check(MI.Match(rule, { id = id, name = "Localized name" }) == "matched", "Forever writ matches by ID " .. id)
+  end
+  for _, id in ipairs({ 22568, 248549, 262886, 262891, 264010, 264161 }) do
+    Check(MI.Match(rule, { id = id, classID = 0, subclassID = 8 }) == nil, "unrelated item is excluded " .. id)
+  end
+  c.ITEMS[262888] = { name = "Sealed Journeyman's Writ", class = 0, sub = 8, maxStack = 1, quality = 3 }
+  c.ITEMS[264011] = { name = "Craftsman's Writ: Ogre Strength", class = 0, sub = 8, maxStack = 1, quality = 2 }
+  c.Bags({ [0] = { size = 16, slots = { { 262888, 1 }, { 264011, 1, quest = true }, { 1179, 1 } } } })
+  local plan = MI.CurrentPlan(nil)
+  Check(Entry(plan, 262888) and not Entry(plan, 1179), "planning finds the carried writ envelope only")
+  Check(not Entry(plan, 264011) and Find(plan.skipped, 264011, "reason", "quest"), "quest protections still apply to writs")
+  Reset()
+end
 
 -- a rule with nothing chosen matches nothing, and can't be turned on
 local empty = Save({ name = "Empty", enabled = true })
@@ -394,5 +452,47 @@ Check(MI.Resolve(copied.dest) == nil and MI.Problem(copied, false) == "no-recipi
 local planned = MI.BuildPlan({ stacks = {}, rules = { copied }, resolve = MI.Resolve, problem = function(x) return MI.Problem(x, false) end })
 Check(#planned.groups == 0, "and moves nothing there")
 c.UnitName = function() return "Rich" end
+
+-- Optional artwork is copied by the canonical cleaner and ignored by matching/planning.
+do
+  Reset()
+  local source = { kind = "art", id = "art-herbs", note = "not persisted" }
+  local id = Save({ name = "Art identity", cats = { "7:5" }, artwork = source })
+  local saved = MI.Rule(id)
+  Check(saved.artwork.id == "art-herbs" and saved.artwork.note == nil and saved.artwork ~= source, "saved artwork is a canonical independent ref")
+  source.id = "shield"; saved.artwork.id = "ammo"
+  Check(MI.Rule(id).artwork.id == "art-herbs", "caller and clean-view refs cannot mutate saved art")
+  local original = MI.Rule(id)
+  local unknown = { kind = "icon", id = "futureIcon" }
+  original.artwork = unknown
+  Check(MI.SaveRuleDraft(original, nil, id) == id and MI.Rule(id).artwork.id == "futureIcon", "unknown valid references survive draft Save")
+  local duplicate = MI.DuplicateRule(id)
+  Check(duplicate and not MI.Rule(duplicate).enabled and MI.Rule(duplicate).artwork.id == "futureIcon", "disabled duplicates preserve artwork")
+  local raw = c.TwichUIDB.ui.magicInventory.rules
+  Check(raw[1].artwork ~= raw[2].artwork, "duplicated saved refs are independent")
+  Check(MI.MoveRule(id, 1) and MI.Rule(id).artwork.id == "futureIcon", "moving rules retains unresolved references")
+  Check(MI.SetRuleEnabled(id, false) and MI.Rule(id).artwork.id == "futureIcon", "enabling/disabling preserves artwork")
+  Check(MI.DeleteRule(duplicate) and MI.Rule(id).artwork.id == "futureIcon", "whole-list deletion preserves another rule's artwork")
+  Check(MI.ReplaceRules(MI.Rules()) and MI.Rule(id).artwork.id == "futureIcon", "arrangement list replacement preserves artwork")
+  for _, ref in ipairs({ {kind="item",id=2147483647}, {kind="art",id="future-art"}, {kind="icon",id="mage"} }) do
+    original = MI.Rule(id); original.artwork = ref
+    Check(MI.SaveRule(original) == id and MI.Rule(id).artwork.id == ref.id, "all bounded reference kinds survive Save")
+  end
+  local before = MI.Generation()
+  original = MI.Rule(id); original.artwork = {kind="item",id=0}
+  Check(not MI.SaveRule(original) and not MI.SaveRuleDraft(original,nil,id) and not MI.ReplaceRules({original})
+      and MI.Generation() == before and MI.Rule(id).artwork.id == "mage", "malformed artwork is rejected atomically by every explicit save path")
+  for _, rule in ipairs(c.TwichUIDB.ui.magicInventory.rules) do if rule.id == id then rule.artwork = {kind="art",id="bad/path"} end end
+  Check(MI.Rule(id).artwork == nil and c.TwichUIDB.ui.magicInventory.rules[1].artwork ~= nil, "reading malformed saved artwork drops only its view and writes nothing")
+  original = MI.Rule(id); original.artwork = {kind="automatic"}
+  Check(MI.SaveRule(original) == id and MI.Rule(id).artwork == nil and c.TwichUIDB.ui.magicInventory.rules[1].artwork == nil, "automatic is canonically absent")
+  c.Bags({ [0] = {size=16,slots={ [1]={2589,20},[2]={2447,10} }} })
+  Check(MI.SetRuleEnabled(id, true), "rule is enabled for plan comparison")
+  local plain = MI.CurrentPlan(nil)
+  original = MI.Rule(id); original.artwork = {kind="item",id=6948}; MI.SaveRule(original)
+  local pictured = MI.CurrentPlan(nil)
+  Check(Entry(plain,2589) and Entry(pictured,2589) and not Entry(plain,2447) and not Entry(pictured,2447)
+      and #plain.groups == #pictured.groups and #plain.skipped == #pictured.skipped, "an unrelated visual item changes no matching or plan membership")
+end
 
 if failures == 0 then print("PASSED test_magic_inventory") else print(failures .. " failures") os.exit(1) end

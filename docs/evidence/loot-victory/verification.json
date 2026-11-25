@@ -1,0 +1,34 @@
+{
+  "feature": {
+    "source": {
+      "commit": "f9028a71a69753f2c696a0fa36e423e365ccb6e3",
+      "dirty": false,
+      "working_tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "complete": true,
+    "passed": true,
+    "modules": 58,
+    "failed": []
+  },
+  "broader": {
+    "source": {
+      "commit": "f9028a71a69753f2c696a0fa36e423e365ccb6e3",
+      "dirty": false,
+      "working_tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "complete": true,
+    "passed": false,
+    "modules": 315,
+    "failed": [
+      {
+        "metrics": null,
+        "test": "test_welcome_back.lua",
+        "passed": false,
+        "exit_code": 1,
+        "timed_out": false,
+        "python_cases": null,
+        "seconds": 0.028133466999861412
+      }
+    ]
+  }
+}

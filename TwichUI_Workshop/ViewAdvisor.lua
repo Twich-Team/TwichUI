@@ -30,14 +30,8 @@ local function RestoreViewport(view)
 end
 local function Name(row) return row.info.name end
 local function Category(info) return (info.category or "Item") .. (info.sub and info.sub ~= "" and (" \194\183 " .. info.sub) or "") end
-local function Color(fs, quality)
-    if quality and C_Item and C_Item.GetItemQualityColor then
-        local r,g,b=C_Item.GetItemQualityColor(quality)
-        if W.Finite(r) and W.Finite(g) and W.Finite(b) then fs:SetTextColor(r,g,b); return end
-    end
-    local c = ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality or 1]
-    if c then fs:SetTextColor(c.r,c.g,c.b) else UI.Paint(fs,K.text) end
-end
+local Color = UI.ItemQuality
+
 local function Select(item)
     selected = item
     D.Select(item); D.Request(item,true)
