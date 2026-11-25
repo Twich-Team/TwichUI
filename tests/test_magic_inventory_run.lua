@@ -557,4 +557,20 @@ for k in pairs(c.TwichUIDB.magicInventory or {}) do
   Check(k == "never" or k == "chars" or k == "shared", "nothing of a run is saved: " .. tostring(k))
 end
 
+-- Forever's full name survives recipient storage, planning, preparation and the SendMail argument.
+Reset()
+c.Bags({ [0] = { size = 16, slots = { [1] = { 2589, 20 } } } })
+local fullName = "Thornbrook Willowmere-OtherRealm"
+local fullDest = MI.AddDest("mail", "Full-name recipient")
+Check(MI.SetRecipient(fullDest, "thornbrook willowmere-Other Realm"), "save a recipient with first and last names")
+Rule({ name = "Cloth to full name", kind = "mail", dest = fullDest, cats = { "7:5" } })
+c.OpenMail()
+FlushTimers()
+local fullPlan = MI.CurrentPlan("mail")
+Check(fullPlan.groups[1].where.recipient == fullName, "the plan keeps the full name and realm")
+Check(Run.PrepareMail(fullPlan, fullPlan.groups[1]), "prepare mail to the full name")
+Check(Run.SendPrepared() and c.LAST_SEND.to == fullName, "SendMail receives the full name and realm")
+c.AnswerSend("success")
+Check(#c.SENT == 1 and c.SENT[1].to == fullName, "the mock confirms mail to the full name")
+
 if failures == 0 then print("PASSED test_magic_inventory_run") else print(failures .. " failures") os.exit(1) end

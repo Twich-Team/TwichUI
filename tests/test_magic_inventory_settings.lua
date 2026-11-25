@@ -158,7 +158,7 @@ box = P.Control("rule1on")
 box.scripts.OnClick(box, "LeftButton"); Flush()
 Check(MI.Rules()[1].enabled, "now it can be turned on")
 P.SetTask("destinations"); Flush()
-rb = P.Control("dest1box"); rb:SetText("Bad Name")
+rb = P.Control("dest1box"); rb:SetText("Bad Name2")
 Click("dest1set")
 Check(MI.Resolve(rule.dest).recipient == "Bankalt" and Has(f, "only letters"), "a name that isn't one is refused and the old one kept")
 
