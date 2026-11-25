@@ -39,7 +39,8 @@ Two parts, both off until the player turns them on.
 | `loot/Cards.lua` | The cards, their stack, the renderer shared with the settings preview. |
 | `loot/Main.lua` | The switch (`LootRolls.Refresh`), the diagnostics snapshot. |
 | `media/loot/*.tga` | Icons cut from the approved mockup by `tools/make_loot_roll_art.py` (sources: `assets/LOOT_ROLLS_*_MOCKUP.png`). |
-| `tests/test_loot_rolls.lua` | Unit tests (fake world), including the end-to-end rule-safety matrix (section 4b). |
+| `tests/test_loot_rolls.lua` | Unit tests (fake world), including the end-to-end rule-safety matrix (section 4b) and and / or blocks (4c). |
+| `tests/test_loot_rule_groups_page.lua` | The Loot rules page with and / or blocks: real page over stand-in frames, clicks through each control's own handler. |
 | `tests/test_loot_rules_engine.lua` | The pure rule engine's safety contract: condition truth tables, all/any against an independent model, and a seeded sweep of the invariants (unknown never matches, forgetting a fact never creates or changes a decision, first non-"no" rule decides). |
 | `tools/simlab/loot.sh`, `scenarios/loot.lua` | Simulator scenarios and screenshots. |
 
@@ -89,6 +90,15 @@ Conditions: item quality (is / at least / at most), item type (equipment, weapon
 game's `INVTYPE_*` and its own words), profession recipe (for one of my professions / one I can learn / one I already know / any), specific
 item, armor type (cloth / leather / mail / plate / shield, from the item's class and sub-class), can I equip it, binding (when picked up / when equipped), potential upgrade (informational; only counts when upgrade-based rules are allowed), where
 you are (outside raids, in raids, in dungeons, outside dungeons).
+
+**And / or blocks.** A rule's conditions are combined by its own *All of / Any of* choice. A condition of type `group`
+(`{ type = "group", match = "all" | "any", conditions = { ... } }`) is a block with an operator of its own, so "(Rare or Epic) and equipment" is
+an *all* rule holding an *any* block and an equipment condition. A block answers like a rule does (three-valued: an unknown inside stays unknown
+unless another branch settles it), is not negated (negate a condition inside it), and is made in the editor with **+ Add and / or block**
+or the **+ Block** button of another block (`LR.AddGroup`; conditions and blocks are addressed by path, `{ 2, 1 }` = first item of the second
+item). Limits: 8 conditions in all (blocks not counted), 4 blocks, 3 levels counting the rule itself as the first. An empty or over-deep block
+makes the rule unfinished (skipped, flagged in the editor). No migration: old rules read exactly as before, and a build from before blocks sees
+a block as a condition of an unknown kind, so that rule is unfinished there and never acts.
 
 Recipe facts: the profession comes from `C_Item.GetItemSubClassInfo(9, subclass)` compared with the localized `name` fields returned by `C_SkillInfo.GetSkillLineInfo`;
 "already known" is the tooltip line equal to the game's `ITEM_SPELL_KNOWN`; "can learn" additionally needs the item to have no red
