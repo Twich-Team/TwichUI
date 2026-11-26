@@ -130,16 +130,14 @@ local function Lines(o)
     return lines
 end
 
--- Reset the atlas bounds on every motion change: a still/breathing look crops to one
--- picture, and a moving look must start from the whole sheet again.
-local function Picture(tex, atlas, first)
+-- Always give the native flipbook the complete atlas bounds, including when paused.
+-- Hand-cropping a cell for still/breathing takes a different rendering path and can
+-- stretch the artwork inside the icon instead of retaining the moving ring's alignment.
+local function Picture(tex, atlas)
     if not (C_Texture and C_Texture.GetAtlasInfo) then return end
     local info = C_Texture.GetAtlasInfo(atlas)
     if type(info) ~= "table" then return end
     local l, r, t, b = Number(info.leftTexCoord, 0), Number(info.rightTexCoord, 1), Number(info.topTexCoord, 0), Number(info.bottomTexCoord, 1)
-    if first then
-        r, b = l + (r - l) / FLIP_COLUMNS, t + (b - t) / FLIP_ROWS
-    end
     tex:SetTexCoord(l, r, t, b)
 end
 
@@ -168,13 +166,19 @@ local function Apply(o, button, s)
         local f = Flip(o)
         local atlas = look == "proc" and PROC_ATLAS or ANTS_ATLAS
         f.tex:SetAtlas(atlas)
-        Picture(f.tex, atlas, motion ~= "moving")
+        Picture(f.tex, atlas)
         f.tex:SetDesaturated(true)
         f.tex:SetVertexColor(r, g, b, 1)
         f.tex:Show()
         if motion == "moving" then
             f.anim:SetDuration(1 / speed)
             f.group:Play()
+        else
+            -- The client's SpellBookFrame.lua uses Play then Pause to hold a flipbook
+            -- on its first frame. Keep native frame selection and padding in every mode;
+            -- breathing animates only the separate inner frame's alpha below.
+            f.group:Play()
+            f.group:Pause()
         end
     elseif look == "soft" then
         local t = Soft(o)
