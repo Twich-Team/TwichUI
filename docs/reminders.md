@@ -443,7 +443,8 @@ is wanted**, coalesced 0.05 s; when the listening starts the buttons are read on
 **Settings (Reminders > a reminder > Action button glow).** A switch; the spell (ID, a pasted link, or a spell dropped from
 the spellbook: `GetCursorInfo`'s fourth answer); the look (spell alert, marching ants, soft frame, pixel border: Action bar
 glows' looks), the motion (moving, breathing, still) and a color, default a warm gold `fff2c14e`. Size, opacity and speed
-are the drawing's defaults: every look fits within the button and follows button resizes. A sample (the spell's icon on a frame of the settings window, never a real button) glows as the
+are the drawing's defaults: spell alert and marching ants keep their native atlas padding so the visible ring aligns
+with the button border; soft frame and pixel border use the button bounds. All follow button resizes. A sample (the spell's icon on a frame of the settings window, never a real button) glows as the
 buttons will, and a line says how many buttons hold the spell now. **Show on screen** (the reminder's preview) also shows
 the glow on the bars, whatever the rules say, without turning the reminder on; the preview ends in combat as before.
 
