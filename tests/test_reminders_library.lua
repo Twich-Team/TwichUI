@@ -204,6 +204,11 @@ do
   -- debuffs read their own list
   Check(Eval({ type = "aura", spells = { 6788 }, harmful = true, what = "present" }, Obs({ [6788] = { ends = NOW + 15 } }, "HARMFUL")) == MATCH, "a debuff on you")
   Check(Eval({ type = "aura", spells = { 6788 }, harmful = true, what = "present" }, Obs({ [6788] = { ends = NOW + 15 } }, "HELPFUL")) == UNKNOWN, "the helpful list says nothing about debuffs")
+  local missing = { type = "aura", spells = AI, what = "missing" }
+  Check(Eval(missing, { auraSpell = { [1459] = "absent", [10157] = "absent" } }) == MATCH, "individual reads can confirm that all ranks are missing")
+  Check(Eval(missing, { auraSpell = { [1459] = "absent" } }) == UNKNOWN, "one unreadable rank leaves absence unknown")
+  Check(Eval(missing, { auraSpell = { [10157] = "HELPFUL" } }) == NOMATCH, "one individually confirmed rank disproves absence")
+  Check(Eval(missing, { auraSpell = { [1459] = "HARMFUL", [10157] = "absent" } }) == UNKNOWN, "a debuff result cannot establish whether a buff of the same spell is absent")
   -- running out: threshold, equality, permanent, unknown, absent, several instances
   local function Exp(set, s) return Eval({ type = "aura", spells = AI, what = "expiring", seconds = s or 60 }, Obs(set)) end
   Check(Exp({ [1459] = { ends = NOW + 59 } }) == MATCH, "expiring: 59 s left is less than 60")

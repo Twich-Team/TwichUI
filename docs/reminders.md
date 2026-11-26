@@ -485,11 +485,11 @@ the looks on real buttons, EllesmereUI's paging events, combat behaviour.
 Read from the Forever UI source (`Gethe/wow-ui-source`, branch `forever`, `734f065`, 2026-11-20); nothing here was tried in
 a client. Prism and other reference addons were not available to this investigation.
 
-* **A. An ordinary reminder.** Its glow is its visibility, so it glows in combat exactly when its conditions are readable
-  and match. The aura provider (`reminders/Auras.lua`) asks `C_Secrets.ShouldAurasBeSecret()` first and reads nothing while
-  it is true; any secret aura makes the list unknown, and unknown never shows. So **"Maelstrom Weapon at least 5 stacks"
-  glows out of combat, and in combat only while the client still gives auras plainly**; where auras are restricted it
-  neither shows nor glows (unit-tested with secret auras). No secret value is compared, formatted or stored.
+* **A. An ordinary reminder.** Its glow follows its visibility in combat. If the full aura list is unreadable, **Is on you**
+  and **Is missing** can use `C_UnitAuras.GetPlayerAuraBySpellID` for spell IDs that `C_Secrets.ShouldSpellAuraBeSecret`
+  reports as readable. One confirmed match establishes presence. Absence requires a readable answer for every selected
+  ID. Restrictions changing cause a fresh read. Stack count and remaining time still require the full list to account for
+  multiple instances of the same spell, so **Maelstrom Weapon at least 5 stacks** requires a readable list (unit-tested).
 * **B. A secure aura-controlled visual.** `CustomAuraContainerTemplate` (`Blizzard_CustomAuraContainer.xml/.lua`) lets an
   addon add an aura slot (`AddAuraSlot(slotKey, filterString, options)`) limited by `SetAuraSlotCandidateFilters`
   (`includeSpellIDs` is permitted for helpful auras on assistable units, so for the player's own Maelstrom Weapon). On the

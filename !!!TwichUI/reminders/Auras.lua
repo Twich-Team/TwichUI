@@ -14,18 +14,19 @@
 --             "missing", a choice of its own: put both in a group where at least one must be true for either).
 --   stacks    one is on you and its stack count (the most of them) is below / at least `stacks` (`compare`). An aura
 --             that doesn't stack counts as one stack. Not on you: no match.
--- Unknown, never "not there": the auras can't be read (hidden from addons, as in some fights; an aura whose spell ID
--- isn't given plainly; more than MAX_AURAS of them), or for expiring, a time that isn't given.
+-- When the list can't be read, present/missing can also use individual spells the game exposes. Unreadable spells
+-- stay unknown. Stack counts and times require the list because they combine multiple instances of the same spell.
 --
 -- The observation obs.aura = { HELPFUL = set, HARMFUL = set }, each set nil (unknown) or { [spellID] = { ends, stacks } }:
 -- ends a GetTime value, false for one that never runs out, nil when not given; stacks a number or nil. Read with
--- C_UnitAuras.GetAuraDataByIndex("player", i, filter) (called protected, as reminders' Well Fed and buffback/Watch.lua
--- do), after C_Secrets.ShouldAurasBeSecret; UNIT_AURA for the player only. Every update reads again, a timer refresh
--- too: renewing a buff moves its end. Only the lists a running reminder asks about are read.
+-- C_UnitAuras.GetAuraDataByIndex after C_Secrets.ShouldAurasBeSecret. obs.auraSpell[spellID] is HELPFUL, HARMFUL,
+-- "absent" or nil, from GetPlayerAuraBySpellID after ShouldSpellAuraBeSecret. Both sources refresh on UNIT_AURA
+-- for the player and when addon restrictions change. Only lists and spell IDs wanted by running reminders are read.
 
 local R = TwichUI
 local C = R.ReminderConditions
 local ST = R.ReminderState
+local Plain, Number = ST.Plain, ST.Number
 
 local MATCH, NOMATCH, UNKNOWN = C.MATCH, C.NOMATCH, C.UNKNOWN
 local Yes = C.Yes
@@ -54,6 +55,12 @@ function AU.Choice(key) return CHOICE[key] end
 
 local function FilterOf(cond) return cond.harmful and "HARMFUL" or "HELPFUL" end
 
+local function UsesPresence(cond) return cond.what == "present" or cond.what == "missing" end
+
+local function CanReadSpell()
+    return C_Secrets and C_Secrets.ShouldSpellAuraBeSecret and C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID
+end
+
 -- A clean list of spell IDs, or nil and why.
 function AU.CleanSpells(raw)
     if raw == nil then return {} end
@@ -80,12 +87,26 @@ function AU.Names(spells)
     return ("%s or %d others"):format(names[1], #names - 1)
 end
 
--- What the chosen auras amount to in one list: nil (unknown) or { present, ends (GetTime, math.huge for never, nil not
+-- One confirmed match settles presence. To confirm absence, every selected spell needs a plain answer of "absent".
+local function LookBySpell(cond, obs, filter)
+    local spells = obs and obs.auraSpell
+    if not (spells and UsesPresence(cond)) then return nil end
+    local absent = true
+    for _, id in ipairs(cond.spells) do
+        local state = spells[id]
+        if state == filter then return { present = true } end
+        if state ~= "absent" then absent = false end
+    end
+    if absent then return { present = false } end
+end
+
+-- What the chosen auras amount to: nil (unknown) or { present, ends (GetTime, math.huge for never, nil not
 -- given), stacks }. Of several instances, the one lasting longest and the most stacks count.
 local function Look(cond, obs)
+    local filter = FilterOf(cond)
     local lists = obs and obs.aura
-    local set = type(lists) == "table" and lists[FilterOf(cond)] or nil
-    if type(set) ~= "table" then return nil end
+    local set = type(lists) == "table" and lists[filter] or nil
+    if type(set) ~= "table" then return LookBySpell(cond, obs, filter) end
     local present, ends, stacks, unknownEnds = false, nil, nil, false
     for _, id in ipairs(cond.spells) do
         local a = set[id]
@@ -133,7 +154,12 @@ C.Register({
         return clean
     end,
 
-    Needs = function(cond, add) add("aura:" .. FilterOf(cond)) end,
+    Needs = function(cond, add)
+        add("aura:" .. FilterOf(cond))
+        if UsesPresence(cond) and CanReadSpell() then
+            for _, id in ipairs(cond.spells) do add("auraSpell:" .. id) end
+        end
+    end,
 
     Evaluate = function(cond, obs)
         local look = Look(cond, obs)
@@ -230,10 +256,8 @@ C.Register({
 })
 
 ---------------------------------------------------------------------------
--- The source: obs.aura[filter]
+-- The sources: obs.aura[filter] and obs.auraSpell[id]
 ---------------------------------------------------------------------------
-local Plain, Number = ST.Plain, ST.Number
-
 -- One list of auras on the player as a set, or nil when it can't be read (see the header).
 local function ReadList(filter)
     if not (C_UnitAuras and C_UnitAuras.GetAuraDataByIndex) then return nil end
@@ -273,14 +297,18 @@ local function Same(a, b)
     return true
 end
 
+local events = {
+    UNIT_AURA = function(unit)
+        if issecretvalue and issecretvalue(unit) then return true end
+        if unit == "player" then return true end
+    end,
+    ADDON_RESTRICTION_STATE_CHANGED = true,
+}
+local units = { UNIT_AURA = "player" }
+
 ST.Source("aura", {
-    events = {
-        UNIT_AURA = function(unit)
-            if issecretvalue and issecretvalue(unit) then return true end
-            if unit == "player" then return true end
-        end,
-    },
-    units = { UNIT_AURA = "player" },
+    events = events,
+    units = units,
     Read = function(filter, into)
         if filter ~= "HELPFUL" and filter ~= "HARMFUL" then return false end
         ST.Counted()
@@ -292,5 +320,31 @@ ST.Source("aura", {
     end,
     Forget = function(filter, into)
         if into.aura then into.aura[filter] = nil end
+    end,
+})
+
+local function ReadSpell(id)
+    if not CanReadSpell() then return nil end
+    local ok, secret = pcall(C_Secrets.ShouldSpellAuraBeSecret, id)
+    if not ok or Plain(secret) ~= false then return nil end
+    local read, aura = pcall(C_UnitAuras.GetPlayerAuraBySpellID, id)
+    if not read or (issecretvalue and issecretvalue(aura)) then return nil end
+    if aura == nil then return "absent" end
+    if type(aura) ~= "table" or Number(aura.spellId) ~= id then return nil end
+    if Plain(aura.isHelpful) == true then return "HELPFUL" end
+    if Plain(aura.isHarmful) == true then return "HARMFUL" end
+end
+
+ST.Source("auraSpell", {
+    events = events,
+    units = units,
+    Read = function(arg, into)
+        local id = tonumber(arg)
+        ST.Counted()
+        into.auraSpell = into.auraSpell or {}
+        return ST.Set(into.auraSpell, id, ReadSpell(id))
+    end,
+    Forget = function(arg, into)
+        if into.auraSpell then into.auraSpell[tonumber(arg)] = nil end
     end,
 })
