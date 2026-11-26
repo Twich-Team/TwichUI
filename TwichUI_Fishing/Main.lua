@@ -21,6 +21,7 @@ local ticker
 
 local function Bags()
     C.Classify()
+    C.ObserveBags()
     if not Lo.Open() and not Lo.Waiting() and not C.Pending() then
         C.Reconcile()
         C.RememberCounts()
@@ -57,6 +58,7 @@ local EVENTS = {
     PLAYER_EQUIPMENT_CHANGED = G.OnEquipmentChanged,
     WEAPON_ENCHANT_CHANGED = L.OnEnchantChanged,
     UNIT_INVENTORY_CHANGED = OnUnitInventory,
+    BAG_UPDATE = C.ObserveBags,
     BAG_UPDATE_DELAYED = Perf.Wrap("fishing.bags", Bags),
     PLAYER_REGEN_DISABLED = A.OnCombatStart,
     PLAYER_REGEN_ENABLED = A.OnCombatEnd,
