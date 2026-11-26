@@ -24,8 +24,10 @@ local PROC_ATLAS = "UI-HUD-ActionBar-Proc-Loop-Flipbook"
 local ANTS_ATLAS = "rotationhelper_ants_flipbook"
 local SOFT_TEXTURE = [[Interface\TargetingFrame\UI-TargetingFrame-Stealable]]
 local FLIP_ROWS, FLIP_COLUMNS, FLIP_FRAMES = 6, 5, 30
--- At 100% every look fits the button. Blizzard enlarges its own alerts, but that spills into
--- adjacent buttons on compact bars. Only an explicit size choice should enlarge our artwork.
+-- These atlases include transparent padding around the ring. Match the client's layout
+-- (ActionButtonSpellAlerts.lua and ActionButtonComponentTemplate.xml), so the visible ring
+-- sits on the button border rather than shrinking into its icon. Plain frames have no atlas padding.
+local ART_SCALE = { proc = 1.4, ants = 66 / 45, soft = 1, pixel = 1 }
 local BREATH_LOW = 0.35
 local BREATH_SECONDS = 0.7
 
@@ -59,15 +61,25 @@ end
 ---------------------------------------------------------------------------
 -- An overlay and its parts (each made on first use)
 ---------------------------------------------------------------------------
+local function Layout(o)
+    local w, h = Number(o:GetWidth(), 36), Number(o:GetHeight(), 36)
+    if w < 8 or h < 8 then w, h = 36, 36 end
+    local grow = o.grow or 1
+    o.inner:SetSize(w * grow, h * grow)
+end
+
 local function Overlay(button)
     local o = overlays[button]
     if o then return o end
     o = CreateFrame("Frame", nil, button)
-    o:SetPoint("CENTER", button, "CENTER", 0, 0)
+    o:SetAllPoints(button)
     o:Hide()
     -- inner: the part that breathes, so the overlay's own alpha (the opacity) is never overwritten
     o.inner = CreateFrame("Frame", nil, o)
-    o.inner:SetAllPoints(o)
+    o.inner:SetPoint("CENTER", o, "CENTER", 0, 0)
+    -- Only our unprotected overlay listens for size changes; the action button is untouched.
+    -- Resizing adjusts geometry without restarting either animation group.
+    o:SetScript("OnSizeChanged", Layout)
     local breath = o.inner:CreateAnimationGroup()
     local fade = breath:CreateAnimation("Alpha")
     fade:SetFromAlpha(1)
@@ -145,18 +157,8 @@ end
 local function Apply(o, button, s)
     HideParts(o)
     local look = s.look or "proc"
-    local w = Number(button:GetWidth(), 36)
-    local h = Number(button:GetHeight(), 36)
-    if w < 8 or h < 8 then w, h = 36, 36 end
-    local grow = Number(s.size, 100) / 100
-    o:ClearAllPoints()
-    if grow == 1 then
-        -- These anchors also follow bar resizes while the glow is already running.
-        o:SetAllPoints(button)
-    else
-        o:SetPoint("CENTER", button, "CENTER", 0, 0)
-        o:SetSize(w * grow, h * grow)
-    end
+    o.grow = (Number(s.size, 100) / 100) * (ART_SCALE[look] or 1)
+    Layout(o)
     o:SetFrameLevel((Number(button:GetFrameLevel(), 1)) + 6)
     o:SetAlpha(Number(s.opacity, 100) / 100)
     local r, g, b = Rgb(s.color)
@@ -181,6 +183,7 @@ local function Apply(o, button, s)
         t:Show()
     else
         local lines = Lines(o)
+        local bounds = o.inner
         local px = Pixel(o)
         local th = math.max(px, Number(s.thickness, 2) * px)
         local top, bottom, left, right = lines[1], lines[2], lines[3], lines[4]
@@ -189,8 +192,8 @@ local function Apply(o, button, s)
             l:SetColorTexture(r, g, b, 1)
             l:Show()
         end
-        top:SetPoint("TOPLEFT", o, "TOPLEFT", 0, 0); top:SetPoint("TOPRIGHT", o, "TOPRIGHT", 0, 0); top:SetHeight(th)
-        bottom:SetPoint("BOTTOMLEFT", o, "BOTTOMLEFT", 0, 0); bottom:SetPoint("BOTTOMRIGHT", o, "BOTTOMRIGHT", 0, 0); bottom:SetHeight(th)
+        top:SetPoint("TOPLEFT", bounds, "TOPLEFT", 0, 0); top:SetPoint("TOPRIGHT", bounds, "TOPRIGHT", 0, 0); top:SetHeight(th)
+        bottom:SetPoint("BOTTOMLEFT", bounds, "BOTTOMLEFT", 0, 0); bottom:SetPoint("BOTTOMRIGHT", bounds, "BOTTOMRIGHT", 0, 0); bottom:SetHeight(th)
         left:SetPoint("TOPLEFT", top, "BOTTOMLEFT", 0, 0); left:SetPoint("BOTTOMLEFT", bottom, "TOPLEFT", 0, 0); left:SetWidth(th)
         right:SetPoint("TOPRIGHT", top, "BOTTOMRIGHT", 0, 0); right:SetPoint("BOTTOMRIGHT", bottom, "TOPRIGHT", 0, 0); right:SetWidth(th)
     end

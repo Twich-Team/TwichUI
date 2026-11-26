@@ -49,7 +49,13 @@ Methods = {
   SetText = function(s, v) s.text = v end, GetText = function(s) return s.text end,
   GetStringWidth = function(s) return #(s.text or "") * 8 end, GetStringHeight = function(s) return s.fontSize or 18 end,
   SetPoint = function(s, ...) s.points[#s.points + 1] = { ... } end, ClearAllPoints = function(s) s.points = {}; s.allPoints = nil end,
-  SetSize = function(s, w, h) s.w, s.h = w, h end, SetWidth = function(s, w) s.w = w end, SetHeight = function(s, h) s.h = h end,
+  SetSize = function(s, w, h)
+    s.w, s.h = w, h
+    if s.scripts.OnSizeChanged then s.scripts.OnSizeChanged(s, w, h) end
+    for _, dependent in ipairs(s.anchored or {}) do
+      if dependent.scripts.OnSizeChanged then dependent.scripts.OnSizeChanged(dependent, w, h) end
+    end
+  end, SetWidth = function(s, w) s.w = w end, SetHeight = function(s, h) s.h = h end,
   GetWidth = function(s) return s.allPoints and s.allPoints:GetWidth() or s.w end, GetHeight = function(s) return s.allPoints and s.allPoints:GetHeight() or s.h end,
   SetAlpha = function(s, a) s.alpha = a end, GetAlpha = function(s) return s.alpha end,
   SetScale = function(s, v) s.scale = v end, GetEffectiveScale = function() return 1 end,
@@ -57,7 +63,13 @@ Methods = {
   SetFrameStrata = function(s, v) s.strata = v end, EnableMouse = function(s, v) s.mouse = v and true or false end,
   SetAtlas = function(s, a) s.atlas = a end, SetTexture = function(s, p) s.texture = p; return true end,
   SetTexCoord = function(s, ...) s.coords = { ... } end,
-  SetAllPoints = function(s, target) s.allPoints = target end,
+  SetAllPoints = function(s, target)
+    s.allPoints = target
+    if target then
+      target.anchored = target.anchored or {}
+      target.anchored[#target.anchored + 1] = s
+    end
+  end,
   SetVertexColor = function(s, r, g, b) s.color = { r, g, b } end, SetColorTexture = function(s, r, g, b) s.color = { r, g, b } end,
   SetTextColor = function(s, r, g, b) s.color = { r, g, b } end,
   SetFont = function(s, path, size, flags) s.font = { path, size, flags }; s.fontSize = size; return true end,
@@ -340,21 +352,26 @@ Fire("SPELLS_CHANGED"); Settle()
 Check(o1.flip.group.plays == plays and D.made == made, "the same look again: no new frame, the animation is not restarted")
 RM.SetGlow(bolt, "look", "pixel")
 Check(not o1.flip.tex.shown and o1.lines and o1.lines[1].shown, "another look on the same overlay")
--- Every look uses the button's own bounds at 100%, including rectangular EllesmereUI buttons.
+-- The overlay follows the button; padded atlas artwork uses the client's border alignment.
+-- A 45px button needs a 63px spell-alert sheet and a 66px ants sheet, not a 45px sheet.
 -- Anchors follow later button resizes without restarting the animation or allocating frames.
 for _, button in ipairs({ AB[1], EAB[1] }) do
   local overlay = Overlay(button)
   local oldW, oldH = button.w, button.h
+  local artScale = { proc = 1.4, ants = 66 / 45, soft = 1, pixel = 1 }
   for _, look in ipairs({ "proc", "ants", "soft", "pixel" }) do
     RM.SetGlow(bolt, "look", look)
     for _, motion in ipairs({ "still", "breathing", "moving" }) do
       RM.SetGlow(bolt, "motion", motion)
       local beforePlays = overlay.flip and overlay.flip.group.plays
       local beforeMade = D.made
-      for _, size in ipairs({ { 24, 24 }, { 48, 32 }, { 36, 36 } }) do
+      for _, size in ipairs({ { 45, 45 }, { 24, 24 }, { 48, 32 }, { 36, 36 } }) do
         button:SetSize(size[1], size[2])
         Check(overlay:GetWidth() == size[1] and overlay:GetHeight() == size[2],
-          look .. "/" .. motion .. " stays within the resized button")
+          look .. "/" .. motion .. " overlay follows the resized button")
+        Check(math.abs(overlay.inner:GetWidth() - size[1] * artScale[look]) < 0.001
+          and math.abs(overlay.inner:GetHeight() - size[2] * artScale[look]) < 0.001,
+          look .. "/" .. motion .. " keeps the client's padded artwork aligned with the border")
       end
       Check(D.made == beforeMade and (not overlay.flip or overlay.flip.group.plays == beforePlays),
         "resizing reuses the overlay without restarting its animation")
@@ -569,10 +586,17 @@ for k, v in pairs(sized) do custom[k] = v end
 custom.size = 140
 D.Set(sample, custom)
 local sizedOverlay = Overlay(sample)
-Check(sizedOverlay:GetWidth() == sample:GetWidth() * 1.4, "an explicit larger size is honored")
+Check(math.abs(sizedOverlay.inner:GetWidth() - sample:GetWidth() * 1.4 * 1.4) < 0.001, "explicit size multiplies the native artwork size")
 custom.size = 100
 D.Set(sample, custom)
-Check(sizedOverlay:GetWidth() == sample:GetWidth(), "resetting the size restores button bounds")
+Check(sizedOverlay:GetWidth() == sample:GetWidth() and sizedOverlay.inner:GetWidth() == sample:GetWidth() * 1.4,
+  "resetting the size restores native border alignment, including atlas padding")
+custom.look, custom.size = "pixel", 140
+D.Set(sample, custom)
+Check(sizedOverlay.inner:GetWidth() == sample:GetWidth() * 1.4
+  and sizedOverlay.lines[1].points[1][2] == sizedOverlay.inner
+  and sizedOverlay.lines[2].points[1][2] == sizedOverlay.inner,
+  "pixel lines follow the requested size rather than the fixed button overlay")
 D.Clear(sample)
 
 

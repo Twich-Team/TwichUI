@@ -607,16 +607,23 @@ Lab.Step("pose", function()
         end
         Lab.Check("geometry", "sample has a shared glow overlay", true, overlay ~= nil)
         if overlay then
+            local artScale = { proc = 1.4, ants = 66 / 45, soft = 1, pixel = 1 }
             for _, look in ipairs({ "proc", "ants", "soft", "pixel" }) do
                 RM.SetGlow(id, "look", look)
                 for _, motion in ipairs({ "still", "breathing", "moving" }) do
                     RM.SetGlow(id, "motion", motion); Lab.Settle(0.1)
                     glow.sample:SetSize(48, 32); Lab.Settle(0.1)
-                    Lab.Check("geometry", look .. "/" .. motion .. " fits the resized sample", true,
+                    Lab.Check("geometry", look .. "/" .. motion .. " overlay follows the resized sample", true,
                         math.abs(overlay:GetWidth() - glow.sample:GetWidth()) < 0.01
                         and math.abs(overlay:GetHeight() - glow.sample:GetHeight()) < 0.01
                         and math.abs(overlay:GetLeft() - glow.sample:GetLeft()) < 0.01
                         and math.abs(overlay:GetTop() - glow.sample:GetTop()) < 0.01)
+                    local x, y = overlay.inner:GetCenter()
+                    local sx, sy = glow.sample:GetCenter()
+                    Lab.Check("geometry", look .. "/" .. motion .. " artwork retains native border alignment", true,
+                        math.abs(overlay.inner:GetWidth() - glow.sample:GetWidth() * artScale[look]) < 0.01
+                        and math.abs(overlay.inner:GetHeight() - glow.sample:GetHeight() * artScale[look]) < 0.01
+                        and math.abs(x - sx) < 0.01 and math.abs(y - sy) < 0.01)
                 end
             end
             RM.SetGlow(id, "look", "proc"); RM.SetGlow(id, "motion", "moving")
