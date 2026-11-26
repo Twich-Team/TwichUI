@@ -59,6 +59,7 @@ Replace `workshop-settings` with one of these nonempty groups:
 
 | Group | Direct scope |
 |---|---|
+| `group-finder` | Five-player native listing adapter, local filters/presets, query ownership and contact safety; existing native zone labels; smoke plus group/recruit/small-scale simulator captures |
 | `ledger` | Gold recorder, exact auction/vendor evidence, mailbox settlement, existing AH controller/reads/Owned/Sell/lifecycle, diagnostics and Ledger page; smoke and normal/narrow auction Ledger poses |
 | `workshop-settings` | Workshop settings, Tooltip Designer, worth layout/tips and Workshop window |
 | `item-advisor` | Advisor recommendations, selling and disenchant evidence, discovery, page, market/crafting dependencies and selected Advisor simulator poses |

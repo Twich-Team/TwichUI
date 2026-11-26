@@ -30,6 +30,7 @@ FULL_SIMULATORS = ('lab-guard', 'smoke', 'interact', 'diagnose', 'auctionproof',
 EXCLUSIVE = ('test_layout',)
 ALIASES = {'development': 'fast', 'release': 'full'}
 COVERAGE = {
+    'groupfinder': ['feature interaction', 'contract validation', 'visual structural checks'],
     'smoke': ['shared UI construction', 'simulator lifecycle'],
     'interact': ['feature interaction', 'replay/determinism', 'negative controls', 'visual structural checks'],
     'diagnose': ['contract validation', 'simulator lifecycle', 'negative controls'],

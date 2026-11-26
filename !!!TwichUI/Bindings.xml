@@ -1,4 +1,7 @@
 <Bindings>
+	<Binding name="TWICHUI_GROUP_FINDER_REFRESH" category="BINDING_HEADER_TWICHUI">
+		TwichUI.GroupFinder.Refresh()
+	</Binding>
 	<!-- TwichUI's key bindings (Options > Key Bindings > TwichUI). Their names are set in
 	     modules/RefreshmentsPanel.lua. The conjure keys click the refreshments panel's own secure buttons,
 	     once per press; with Mage refreshments off, or on another class, they do nothing. -->

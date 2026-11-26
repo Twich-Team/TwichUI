@@ -100,6 +100,13 @@ FrameLook.lua
 # The crafted look's shared pieces (painted sheets, quiet leather, fonts, nav rows, segments, switches, scroll rails): the settings window's
 # approved look, in the core so load-on-demand windows (the Workshop) draw with it without loading TwichUI_Settings; needs Look.lua and FrameLook.lua
 CraftLook.lua
+# A companion browser for Forever's native five-player dungeon listings.
+# Native listing creation, editing and Who remain owned by the game.
+groupfinder\Art.lua
+groupfinder\Data.lua
+groupfinder\Model.lua
+groupfinder\Controller.lua
+groupfinder\Window.lua
 # Feature icons beside names in TwichUI's own windows (media\icons, cut from assets\settings-icons-source.png)
 Icons.lua
 chronicle\Appearance.lua
