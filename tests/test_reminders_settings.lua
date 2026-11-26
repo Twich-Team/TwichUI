@@ -191,6 +191,37 @@ Check(show.shown and show.modes[1].twichSelected and not show.modes[2].twichSele
     and show.imageSource.text == "TwichUI artwork" and show.choose.shown and show.textBox.text == "Equip your shield", "Show: image with text")
 Check(DZ.Frame().workspace.shown and DZ.Frame().rail.rows[1].name.text == "Shield reminder",
     "the dedicated builder rail follows reminder selection")
+-- A fresh image-only surface has no font. Forever can report a negative height
+-- for that uninitialized FontString; it cannot be passed back to SetFont.
+do
+  local rail = R.RemindersBuilderRail.Build(500, 700, function() end).rail
+  local text = rail.surface.text
+  local setFont = text.SetFont
+  local fontCalls = 0
+  text.GetFont = function(self)
+    if self.font then return unpack(self.font) end
+    return nil, -1988.925781
+  end
+  text.SetFont = function(self, file, size, flags)
+    assert(type(file) == "string" and file ~= "" and type(size) == "number" and size > 0,
+      "builder rail passed an uninitialized font to SetFont")
+    fontCalls = fontCalls + 1
+    return setFont(self, file, size, flags)
+  end
+  local view = {}
+  for k, value in pairs(RM.Get(id)) do view[k] = value end
+  view.display = {}
+  for k, value in pairs(RM.Get(id).display) do view.display[k] = value end
+  for _, mode in ipairs({ "artwork", "icon" }) do
+    view.display.mode = mode
+    rail:Draw(view, view)
+    Check(not text.shown and fontCalls == 0, "image-only builder preview does not set an uninitialized font: " .. mode)
+  end
+  view.display.mode, view.display.outline = "artworkText", "thick"
+  rail:Draw(view, view)
+  Check(text.shown and text.font[1] and text.font[2] == view.display.textSize and text.font[3] == "",
+    "switching the builder preview to text keeps the resolved font and size and removes its outline")
+end
 Check(#show.modes == 3 and show.modes[1].text.text == "Image + text" and show.modes[2].text.text == "Image only" and show.modes[3].text.text == "Text only", "Show: the three display modes")
 local cd = when.cards[1]
 Check(not when.isAdvanced and cd.title.text == "Equipment slot" and cd.fields[1].shown and cd.fields[3].shown

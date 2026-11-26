@@ -164,7 +164,10 @@ function Rail.Build(rightWidth, height, onSelect, onEdit)
         D.DrawSurface(surface, draft, w - 34, 78)
         surface.text:SetTextColor(.18, .13, .08, 1)
         local file, size = surface.text:GetFont()
-        surface.text:SetFont(file, size, "")
+        -- Image-only previews may never have initialized this FontString.
+        if type(file) == "string" and file ~= "" and type(size) == "number" and size > 0 then
+            surface.text:SetFont(file, size, "")
+        end
         surface.text:SetShadowOffset(0, 0)
         surface:ClearAllPoints()
         surface:SetPoint("CENTER", sample)
