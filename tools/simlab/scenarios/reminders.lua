@@ -624,6 +624,13 @@ Lab.Step("pose", function()
                         math.abs(overlay.inner:GetWidth() - glow.sample:GetWidth() * artScale[look]) < 0.01
                         and math.abs(overlay.inner:GetHeight() - glow.sample:GetHeight() * artScale[look]) < 0.01
                         and math.abs(x - sx) < 0.01 and math.abs(y - sy) < 0.01)
+                    if look == "proc" or look == "ants" then
+                        Lab.Check("state", look .. "/" .. motion .. " uses native playback or a paused native frame", true,
+                            overlay.flip.group:IsPaused() == (motion ~= "moving")
+                            and (motion ~= "moving" or overlay.flip.group:IsPlaying()))
+                        Lab.Check("state", look .. "/" .. motion .. " breathes only through alpha", motion == "breathing",
+                            overlay.breath:IsPlaying())
+                    end
                 end
             end
             RM.SetGlow(id, "look", "proc"); RM.SetGlow(id, "motion", "moving")

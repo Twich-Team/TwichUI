@@ -60,7 +60,8 @@ At 100% size, the spell-alert and marching-ants artwork retain the client's padd
 so their visible rings align with the border. Their transparent texture bounds extend beyond the button; forcing those
 bounds inside it shrinks the ring into the icon. Soft frame and pixel border use the button bounds. The overlay follows
 button resizes without restarting animations; explicit size settings multiply the artwork size. Switching between still,
-breathing and moving resets the flipbook crop.
+breathing and moving keeps the full atlas: still and breathing pause the native flipbook on its first frame,
+with breathing animating only alpha. Moving retains its running flipbook.
 
 ## Messages
 

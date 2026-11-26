@@ -24,10 +24,12 @@ local function Fake(kind)
 end
 local function Anim()
   local a = Fake("anim")
-  a.playing, a.plays = false, 0
+  a.playing, a.paused, a.plays = false, false, 0
   a.CreateAnimation = function(self) local x = Fake("animation"); x.group = self; return x end
-  a.Play = function(self) self.playing = true; self.plays = self.plays + 1 end
-  a.Stop = function(self) self.playing = false end
+  a.Play = function(self) self.playing, self.paused = true, false; self.plays = self.plays + 1 end
+  a.Stop = function(self) self.playing, self.paused = false, false end
+  a.Pause = function(self) assert(self.playing, "a flipbook must play before it is paused"); self.playing, self.paused = false, true end
+  a.IsPaused = function(self) return self.paused end
   a.Finish = function(self) self.playing = false; if self.scripts.OnFinished then self.scripts.OnFinished(self) end end
   a.IsPlaying = function(self) return self.playing end
   return a
@@ -378,14 +380,24 @@ for _, button in ipairs({ AB[1], EAB[1] }) do
       if look == "proc" or look == "ants" then
         local coords = overlay.flip.tex.coords
         local moving = motion == "moving"
-        Check(coords and math.abs(coords[2] - (moving and 0.9 or 0.26)) < 0.001
-          and math.abs(coords[4] - (moving and 0.8 or 0.3)) < 0.001,
-          look .. "/" .. motion .. " uses the full flipbook only while moving")
+        Check(coords and math.abs(coords[2] - 0.9) < 0.001 and math.abs(coords[4] - 0.8) < 0.001,
+          look .. "/" .. motion .. " gives the same complete atlas to the native flipbook")
+        Check(overlay.flip.group.playing == moving and overlay.flip.group.paused == not moving,
+          look .. "/" .. motion .. " advances only in moving mode; the other modes hold a native frame")
+        Check(overlay.breath.playing == (motion == "breathing"),
+          look .. "/" .. motion .. " only breathing animates alpha")
       end
     end
   end
   button:SetSize(oldW, oldH)
 end
+-- Releasing a still/breathing glow also stops its paused flipbook; a later moving glow resumes normally.
+RM.SetGlow(bolt, "look", "proc"); RM.SetGlow(bolt, "motion", "breathing")
+RM.SetGlow(bolt, "enabled", false)
+Check(not o1.flip.group.paused and not o1.flip.group.playing and not o1.breath.playing,
+  "releasing a breathing glow stops both the paused flipbook and alpha animation")
+RM.SetGlow(bolt, "motion", "moving"); RM.SetGlow(bolt, "enabled", true)
+Check(o1.flip.group.playing and not o1.flip.group.paused, "moving resumes after releasing a paused glow")
 RM.SetGlow(bolt, "motion", "moving")
 RM.SetGlow(bolt, "look", "proc"); RM.SetGlow(bolt, "color", RM.GLOW_DEFAULTS.color)
 RM.SetGlow(bolt, "enabled", false)
