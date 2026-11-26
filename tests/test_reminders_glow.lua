@@ -480,6 +480,48 @@ Check(not Shown(mw) and not Lit(AB[1]) and CT.Status(mw) == "waiting", "auras hi
 G.secretAuras = false; G.auras = {}; Fire("UNIT_AURA", "player"); Settle()
 RM.Delete(mw)
 
+-- In combat the full list can be restricted while the requested proc is still readable by spell ID.
+do
+  local procSpell, otherSpell = 990001, 990002   -- synthetic aura IDs
+  local active, restricted, answer = false, false, nil
+  local lookups = 0
+  c.C_Secrets.ShouldSpellAuraBeSecret = function(id) return restricted or id == otherSpell end
+  c.C_UnitAuras.GetPlayerAuraBySpellID = function(id)
+    Check(id == procSpell and not restricted, "the exact lookup only asks for a non-secret aura")
+    lookups = lookups + 1
+    if answer then return answer end
+    if active then return { spellId = procSpell, isHelpful = true } end
+  end
+  local created, proc = RM.Create("custom")
+  assert(created, proc)
+  RM.SetName(proc, "Holy Purpose")
+  RM.SetDisplay(proc, "mode", "artwork")
+  RM.AddCondition(proc, "aura", nil, { type = "aura", spells = { procSpell, otherSpell }, what = "present" })
+  RM.SetGlow(proc, "spell", 403); RM.SetGlow(proc, "enabled", true)
+  RM.SetEnabled(bolt, false)
+  Check(RM.SetEnabled(proc, true), "the proc reminder turns on")
+  G.secretAuras = true; Fight(true)
+  Fire("ADDON_RESTRICTION_STATE_CHANGED"); Settle()
+  Check(not Shown(proc) and not Mine(AB[1]), "no readable proc yet: neither artwork nor glow")
+  active = true; Fire("UNIT_AURA", "player", Secret()); Settle()
+  local frame = RD.Frame(proc)
+  Check(Shown(proc) and frame.art.shown and Mine(AB[1]), "a readable proc in combat shows artwork and glow even with another aura secret")
+  active = false; Fire("UNIT_AURA", "player"); Settle()
+  Check(not Shown(proc) and not Mine(AB[1]), "consuming the proc clears artwork and glow in combat")
+  active = true; Fire("UNIT_AURA", "player"); Settle()
+  local before = lookups
+  restricted = true; Fire("ADDON_RESTRICTION_STATE_CHANGED"); Settle()
+  Check(lookups == before and not Shown(proc) and not Mine(AB[1]), "an aura becoming secret clears both visuals without querying its data")
+  restricted = false; answer = Secret(); Fire("ADDON_RESTRICTION_STATE_CHANGED"); Settle()
+  Check(not Shown(proc) and not Mine(AB[1]), "a secret exact result cannot activate either visual")
+  answer = nil; Fire("UNIT_AURA", "player"); Settle()
+  Check(Shown(proc) and Mine(AB[1]), "both visuals recover once the proc is readable again")
+  RM.Delete(proc)
+  G.secretAuras = false; Fight(false)
+  c.C_UnitAuras.GetPlayerAuraBySpellID, c.C_Secrets.ShouldSpellAuraBeSecret = nil, nil
+  RM.SetEnabled(bolt, true)
+end
+
 ---------------------------------------------------------------------------
 -- 10. Sharing: the glow goes with the reminder; a bad one is refused whole; an older sender's arrives without one
 ---------------------------------------------------------------------------
