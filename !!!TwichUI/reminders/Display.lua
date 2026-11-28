@@ -671,6 +671,17 @@ function D.DrawSurface(s, view, maxW, maxH, maxScale)
     return w, h, scale
 end
 
+-- A native player buff slot owns visibility. Prepare the same layout without
+-- the live frame's motion or scripts that run when a Lua rule matches.
+function D.DrawAuraSurface(parent, surface, view)
+    local s = surface or D.NewSurface(parent)
+    if not surface then s:SetClampedToScreen(true) end
+    D.Layout(s, view)
+    Place(s, view)
+    s:Show()
+    return s
+end
+
 ---------------------------------------------------------------------------
 -- For /tui diagnostics and the tests: counts only
 ---------------------------------------------------------------------------

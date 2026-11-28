@@ -68,10 +68,8 @@ local function Layout(o)
     o.inner:SetSize(w * grow, h * grow)
 end
 
-local function Overlay(button)
-    local o = overlays[button]
-    if o then return o end
-    o = CreateFrame("Frame", nil, button)
+local function BuildOverlay(parent, button, followSize)
+    local o = CreateFrame("Frame", nil, parent)
     o:SetAllPoints(button)
     o:Hide()
     -- inner: the part that breathes, so the overlay's own alpha (the opacity) is never overwritten
@@ -79,7 +77,7 @@ local function Overlay(button)
     o.inner:SetPoint("CENTER", o, "CENTER", 0, 0)
     -- Only our unprotected overlay listens for size changes; the action button is untouched.
     -- Resizing adjusts geometry without restarting either animation group.
-    o:SetScript("OnSizeChanged", Layout)
+    if followSize then o:SetScript("OnSizeChanged", Layout) end
     local breath = o.inner:CreateAnimationGroup()
     local fade = breath:CreateAnimation("Alpha")
     fade:SetFromAlpha(1)
@@ -87,6 +85,13 @@ local function Overlay(button)
     fade:SetDuration(BREATH_SECONDS)
     breath:SetLooping("BOUNCE")
     o.breath, o.breathFade = breath, fade
+    return o
+end
+
+local function Overlay(button)
+    local o = overlays[button]
+    if o then return o end
+    o = BuildOverlay(button, button, true)
     overlays[button] = o
     D.made = D.made + 1
     return o
@@ -152,11 +157,16 @@ local function StyleKey(s)
     return table.concat({ s.look, s.color, s.opacity, s.size, s.speed, s.motion, s.thickness }, "|")
 end
 
-local function Apply(o, button, s)
+local function Play(group, auraButton)
+    if auraButton then auraButton:AddAuraShownAnimation(group) else group:Play() end
+end
+
+local function Apply(o, button, s, auraButton)
     HideParts(o)
     local look = s.look or "proc"
-    o.grow = (Number(s.size, 100) / 100) * (ART_SCALE[look] or 1)
-    Layout(o)
+    local layout = o.layoutMount or o
+    layout.grow = (Number(s.size, 100) / 100) * (ART_SCALE[look] or 1)
+    Layout(layout)
     o:SetFrameLevel((Number(button:GetFrameLevel(), 1)) + 6)
     o:SetAlpha(Number(s.opacity, 100) / 100)
     local r, g, b = Rgb(s.color)
@@ -172,7 +182,7 @@ local function Apply(o, button, s)
         f.tex:Show()
         if motion == "moving" then
             f.anim:SetDuration(1 / speed)
-            f.group:Play()
+            Play(f.group, auraButton)
         else
             -- The client's SpellBookFrame.lua uses Play then Pause to hold a flipbook
             -- on its first frame. Keep native frame selection and padding in every mode;
@@ -205,8 +215,30 @@ local function Apply(o, button, s)
     local breathes = motion == "breathing" or (motion == "moving" and (look == "soft" or look == "pixel"))
     if breathes then
         o.breathFade:SetDuration(BREATH_SECONDS / speed)
-        o.breath:Play()
+        Play(o.breath, auraButton)
     end
+end
+
+-- Prepare a click-through glow inside a native aura slot while aura frames are accessible.
+-- Blizzard starts and stops the looping animations as the slot shows and hides.
+function D.DrawAuraGlow(mount, auraButton, surface, button, style)
+    local o = surface
+    if not o then
+        o = BuildOverlay(auraButton, mount, false)
+        -- Size changes write to an ordinary anchor. The native slot's regions
+        -- follow it without a Lua resize script touching them in combat.
+        mount.inner = CreateFrame("Frame", nil, mount)
+        mount.inner:SetPoint("CENTER", mount, "CENTER")
+        mount:SetScript("OnSizeChanged", Layout)
+        o.layoutMount = mount
+        o.inner:ClearAllPoints()
+        o.inner:SetAllPoints(mount.inner)
+    end
+    auraButton:ClearAuraShownAnimations()
+    o:SetFrameStrata(button:GetFrameStrata())
+    Apply(o, button, style, auraButton)
+    o:Show()
+    return o
 end
 
 ---------------------------------------------------------------------------

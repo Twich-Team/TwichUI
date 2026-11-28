@@ -13,11 +13,13 @@ local function Check(cond, msg) if not cond then failures = failures + 1; print(
 ---------------------------------------------------------------------------
 local frames = {}
 local Methods
+local GuardAuraMethod
 local function Fake(kind)
   local o = { kind = kind, shown = kind ~= "Frame" and kind ~= "Button", scripts = {}, events = {}, unitEvents = {}, points = {}, attrs = {},
     alpha = 1, scale = 1, w = 36, h = 36, level = 5, children = {} }
   frames[#frames + 1] = o
-  return setmetatable(o, { __index = function(_, k)
+  return setmetatable(o, { __index = function(self, k)
+    if GuardAuraMethod and type(k) == "string" and k:find("^%u") then GuardAuraMethod(self) end
     if Methods[k] then return Methods[k] end
     if type(k) == "string" and k:find("^%u") then return function() end end
   end })
@@ -62,6 +64,7 @@ Methods = {
   SetAlpha = function(s, a) s.alpha = a end, GetAlpha = function(s) return s.alpha end,
   SetScale = function(s, v) s.scale = v end, GetEffectiveScale = function() return 1 end,
   SetFrameLevel = function(s, l) s.level = l end, GetFrameLevel = function(s) return s.level end,
+  GetFrameStrata = function(s) return s.strata or "MEDIUM" end, SetParent = function(s, p) s.parent = p end,
   SetFrameStrata = function(s, v) s.strata = v end, EnableMouse = function(s, v) s.mouse = v and true or false end,
   SetAtlas = function(s, a) s.atlas = a end, SetTexture = function(s, p) s.texture = p; return true end,
   SetTexCoord = function(s, ...) s.coords = { ... } end,
@@ -221,7 +224,7 @@ for _, f in ipairs({ "QuietScreen.lua", "modules/Borders.lua", "modules/MenuStyl
   "chronicle/Style.lua", "Look.lua", "FrameLook.lua", "modules/Notify.lua", "modules/NotifyLook.lua", "modules/Arrival.lua",
   "reminders/AmmoItems.lua", "reminders/ArtData.lua", "artwork/Catalog.lua", "reminders/Config.lua", "reminders/Gallery.lua", "reminders/Conditions.lua",
   "reminders/Ammunition.lua", "reminders/Evaluate.lua", "reminders/State.lua", "reminders/Auras.lua", "reminders/Display.lua",
-  "reminders/ButtonGlow.lua", "reminders/Controller.lua",
+  "reminders/ButtonGlow.lua", "reminders/BuffVisuals.lua", "reminders/Controller.lua",
   "glows/Catalog.lua", "glows/Config.lua", "glows/Logic.lua", "glows/Buttons.lua", "glows/State.lua", "glows/Draw.lua",
   "glows/Notice.lua", "glows/Controller.lua", "setup/TwichConfig.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
@@ -531,6 +534,147 @@ do
   RM.Delete(proc)
   G.secretAuras = false; Fight(false)
   c.C_UnitAuras.GetPlayerAuraBySpellID, c.C_Secrets.ShouldSpellAuraBeSecret = nil, nil
+  RM.SetEnabled(bolt, true)
+end
+
+-- This proc itself is secret. The client shows the configured slot and its
+-- children, including the previously prepared action-button glow.
+do
+  local buff, holyNova = 1284536, 15237
+  local currentAura, nativeContainers, forbidden = nil, {}, 0
+  local oldCreate = c.CreateFrame
+  SPELLS[holyNova] = { "Holy Nova" }
+  c.AuraContainerInbound = {}
+  c.C_Secrets.ShouldSpellAuraBeSecret = function() return G.secretAuras end
+  c.C_UnitAuras.GetPlayerAuraBySpellID = function()
+    if G.secretAuras then forbidden = forbidden + 1; error("secret buff queried") end
+    if currentAura == buff then return { spellId = buff, isHelpful = true } end
+  end
+  GuardAuraMethod = function(f)
+    while G.secretAuras and f do
+      if f.nativeAuraButton then forbidden = forbidden + 1; error("aura slot is forbidden during restrictions") end
+      f = f.parent
+    end
+  end
+  local function Assign(container)
+    local slot = container.slot
+    local shown = slot.enabled and currentAura and slot.ids[currentAura] == true or false
+    if shown ~= slot.button.shown then
+      slot.button.shown = shown
+      for _, animation in ipairs(slot.animations) do
+        if shown then animation:Play() else animation:Stop() end
+      end
+    end
+  end
+  c.CreateFrame = function(kind, name, parent, template)
+    if parent then GuardAuraMethod(parent) end
+    local f = oldCreate(kind, name, parent)
+    if kind ~= "AuraContainer" then return f end
+    Check(not G.secretAuras and template == "CustomAuraContainerTemplate", "builds the native container before restrictions")
+    nativeContainers[#nativeContainers + 1] = f
+    f.SetUnit = function(_, unit) Check(unit == "player", "the native slot only watches the player") end
+    f.AddAuraSlot = function(self, key, filter, options)
+      Check(filter == "HELPFUL", "the native slot only watches helpful auras")
+      local button = oldCreate("Button", nil, self)
+      button.nativeAuraButton = true
+      local slot = { key = key, ids = options.candidateFilters.includeSpellIDs, button = button, enabled = true, animations = {} }
+      self.slot = slot
+      button.ClearAuraShownAnimations = function() GuardAuraMethod(button); slot.animations = {} end
+      button.AddAuraShownAnimation = function(_, anim) GuardAuraMethod(button); slot.animations[#slot.animations + 1] = anim end
+      return button
+    end
+    f.SetAuraSlotEnabled = function(self, key, on)
+      assert(self.slot.key == key)
+      self.slot.enabled = on
+      Assign(self)
+    end
+    f.SetAuraSlotCandidateFilters = function(self, key, filters)
+      GuardAuraMethod(self.slot.button)
+      assert(self.slot.key == key)
+      self.slot.ids = filters.includeSpellIDs
+      Assign(self)
+    end
+    return f
+  end
+  local function Aura(id)
+    currentAura = id
+    for _, container in ipairs(nativeContainers) do Assign(container) end
+  end
+  local function NativeDisplay(target)
+    for _, container in ipairs(nativeContainers) do
+      if container.parent.parent == target and container.parent.alpha > 0 and container.slot.button.shown then
+        for _, f in ipairs(frames) do if f.parent == container.slot.button and f.shown then return f end end
+      end
+    end
+  end
+
+  RM.SetEnabled(bolt, false)
+  local oldSlot = G.slots[4]
+  G.slots[4] = { "spell", holyNova }
+  local made, proc = RM.Create("custom")
+  assert(made, proc)
+  RM.SetName(proc, "Holy Purpose")
+  RM.SetDisplay(proc, "mode", "artwork")
+  RM.AddCondition(proc, "aura", nil, { type = "aura", spells = { buff }, what = "present" })
+  RM.SetGlow(proc, "spell", holyNova); RM.SetGlow(proc, "enabled", true)
+  Check(RM.SetEnabled(proc, true), "the Holy Purpose reminder turns on")
+  Check(#nativeContainers == 2, "one artwork slot and one matching glow slot prepared out of combat")
+  G.auras = { { buff, 1 } }; Aura(buff); Fire("UNIT_AURA", "player"); Settle()
+  Check(Shown(proc) and Mine(AB[4]) and not NativeDisplay(c.UIParent), "readable Holy Purpose only uses the normal reminder")
+
+  G.secretAuras = true; Aura(nil); Fight(true)
+  Fire("ADDON_RESTRICTION_STATE_CHANGED"); Settle()
+  Check(not Shown(proc) and not Mine(AB[4]) and not NativeDisplay(c.UIParent), "a secret buff does not keep its old Lua display")
+  Aura(324)
+  Check(not NativeDisplay(c.UIParent) and not NativeDisplay(AB[4]), "another helpful aura cannot light Holy Purpose")
+  Aura(buff)
+  local display, glow = NativeDisplay(c.UIParent), NativeDisplay(AB[4])
+  Check(CT.Status(proc) == "waiting" and display and display.art.shown and glow and glow.flip.group.playing,
+    "the game displays artwork and runs the Holy Nova glow while Lua's result remains unknown")
+  c.C_Secrets.ShouldSpellAuraBeSecret = function() return false end
+  c.C_UnitAuras.GetPlayerAuraBySpellID = function() return nil end
+  Fire("UNIT_AURA", "player"); Settle()
+  Check(CT.Status(proc) == "hidden" and NativeDisplay(c.UIParent) and NativeDisplay(AB[4]),
+    "an empty exact lookup cannot suppress the native visuals when the full list is restricted")
+  AB[4]:SetSize(42, 42)
+  Check(glow and math.abs(glow.layoutMount.inner.w - 42 * 1.4) < 0.001, "the public anchor follows the button size in combat")
+  AB[4]:SetSize(36, 36)
+  Q.Set(true)
+  Check(not NativeDisplay(c.UIParent) and not NativeDisplay(AB[4]), "Quiet screen suppresses both native visuals")
+  Q.Set(false)
+  Check(NativeDisplay(c.UIParent) and NativeDisplay(AB[4]), "the visuals come back while the buff is still on")
+  G.slots[4], G.slots[5] = nil, { "spell", holyNova }
+  Fire("ACTIONBAR_SLOT_CHANGED", 4); Settle()
+  Check(NativeDisplay(c.UIParent) and not NativeDisplay(AB[4]) and not NativeDisplay(AB[5]), "combat paging clears the old button and defers new anchors")
+  G.slots[4], G.slots[5] = G.slots[5], nil
+  Fire("ACTIONBAR_PAGE_CHANGED"); Settle()
+  Check(NativeDisplay(AB[4]), "returning to a prepared button restores the glow during combat")
+  Aura(nil)
+  Check(not NativeDisplay(c.UIParent) and not NativeDisplay(AB[4]), "the game clears both visuals as Holy Purpose ends")
+  Aura(buff)
+  RM.Delete(proc)
+  Check(not NativeDisplay(c.UIParent) and not NativeDisplay(AB[4]) and R.ReminderBuffVisuals.Snapshot().events == 0,
+    "deleting the rule in combat clears its slots and event subscriptions")
+  Check(forbidden == 0, "combat never touches a managed aura button or reads a secret aura")
+  G.secretAuras, G.auras, G.slots[4] = false, {}, oldSlot
+  Fight(false)
+  local madeAgain, nextProc = RM.Create("custom")
+  assert(madeAgain, nextProc)
+  RM.SetDisplay(nextProc, "mode", "artwork")
+  RM.AddCondition(nextProc, "aura", nil, { type = "aura", spells = { 324 }, what = "present" })
+  RM.SetDisplay(nextProc, "delay", 2)
+  Check(RM.SetEnabled(nextProc, true) and R.ReminderBuffVisuals.Snapshot().events == 0,
+    "native visibility does not bypass a requested delay")
+  RM.SetDisplay(nextProc, "delay", 0)
+  Check(#nativeContainers == 2 and R.ReminderBuffVisuals.Snapshot().spare == 1, "the next eligible rule reuses a slot")
+  G.secretAuras = true; Fight(true); Fire("ADDON_RESTRICTION_STATE_CHANGED"); Settle()
+  Check(not NativeDisplay(c.UIParent), "a reused slot cannot light up for its old buff")
+  Aura(324)
+  Check(NativeDisplay(c.UIParent), "the reused slot follows its new buff")
+  RM.Delete(nextProc)
+  G.secretAuras = false; Fight(false)
+  c.C_UnitAuras.GetPlayerAuraBySpellID, c.C_Secrets.ShouldSpellAuraBeSecret = nil, nil
+  c.CreateFrame, c.AuraContainerInbound, GuardAuraMethod = oldCreate, nil, nil
   RM.SetEnabled(bolt, true)
 end
 
