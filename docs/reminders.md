@@ -480,47 +480,33 @@ deletion; malformed saved values; export, admit, refusal and an older sender; un
 no OnUpdate. Five mutations of the ownership, fading, Quiet and lifecycle code were each caught.) **Not real-client-tested**:
 the looks on real buttons, EllesmereUI's paging events, combat behaviour.
 
-### WoW: Forever in combat: what can drive a glow (investigated 2026-11-21)
+### WoW: Forever in combat
 
-Read from the Forever UI source (`Gethe/wow-ui-source`, branch `forever`, `734f065`, 2026-11-20); nothing here was tried in
-a client. Prism and other reference addons were not available to this investigation.
+If the full aura list is unreadable, **Is on you** and **Is missing** first try
+`C_UnitAuras.GetPlayerAuraBySpellID` for IDs that `C_Secrets.ShouldSpellAuraBeSecret` reports as readable. This was
+insufficient for Holy Purpose in live combat. **Is on you** for a single helpful-aura condition now has a second path
+when the full list is unavailable and the lookup cannot confirm the buff. The condition can name several spell IDs.
+Both Delay and Minimum must be zero. Character and class scope still apply.
 
-* **A. An ordinary reminder.** Its glow follows its visibility in combat. If the full aura list is unreadable, **Is on you**
-  and **Is missing** can use `C_UnitAuras.GetPlayerAuraBySpellID` for spell IDs that `C_Secrets.ShouldSpellAuraBeSecret`
-  reports as readable. One confirmed match establishes presence. Absence requires a readable answer for every selected
-  ID. Restrictions changing cause a fresh read. Stack count and remaining time still require the full list to account for
-  multiple instances of the same spell, so **Maelstrom Weapon at least 5 stacks** requires a readable list (unit-tested).
-* **B. A secure aura-controlled visual.** `CustomAuraContainerTemplate` (`Blizzard_CustomAuraContainer.xml/.lua`) lets an
-  addon add an aura slot (`AddAuraSlot(slotKey, filterString, options)`) limited by `SetAuraSlotCandidateFilters`
-  (`includeSpellIDs` is permitted for helpful auras on assistable units, so for the player's own Maelstrom Weapon). On the
-  slot's `CustomAuraButton`, `SetApplicationBar(statusBar, { minApplications, maxApplications })` hands a StatusBar to
-  secure code, which sets its range and value from the stack count and calls `statusBar:SetShown(applications >=
-  minApplications)` (`Blizzard_CustomAuraButton.lua`, `ApplyApplicationBar`). The bar gets the secret aspect `BarValue` and the
-  forbidden aspects `RemoveSecretAspects` and `ChangeParent` (`Blizzard_AuraContainerUtil.lua`,
-  `InitializeInboundScriptObject`): it must belong to the aura button and cannot be moved to another parent. With
-  `minApplications = 5` such a bar is a visual that appears at five stacks **without Lua learning the count**.
-* **B cannot drive A.** Lua never learns whether the bar is shown (that is the point), so it cannot start the reminder's
-  frame, its sound, its delay or its minimum, nor the `D.Request` glow. A combat-safe Maelstrom glow would be a separate,
-  secure-visual output that is anchored over the matching action buttons and lights itself; it is not the Reminder
-  lifecycle. The Cooldown Manager (`Blizzard_CooldownViewer`) draws stack counts in Blizzard's own secure frames; its API
-  (`C_CooldownViewer.GetCooldownViewerCooldownInfo`) offers `hasAura` and spell IDs but no count. `C_Secrets.
-  ShouldSpellAuraBeSecret(spellID)` and `C_UnitAuras.GetPlayerAuraBySpellID` (`RequiresNonSecretAura`) may allow reading one
-  aura that is never secret while others are; whether Maelstrom Weapon is such an aura on Forever is unknown.
+`reminders/BuffVisuals.lua` prepares `CustomAuraContainerTemplate` slots while aura frames are accessible. It gives
+Blizzard the spell IDs (`includeSpellIDs`, `HELPFUL`, `player`) and puts the reminder's display and each action-button
+glow in their slots. Blizzard assigns and shows the slot while a chosen buff is active, including Holy Purpose
+(`1284536`, the Searing Light proc for Holy Nova). It starts and stops looping glow motion through
+`AddAuraShownAnimation`. TwichUI can suspend these visuals for Quiet screen, settings changes, or deletion through
+the public mount and slot. The live test panel still reports the result of the Lua rule. The Cooldown Manager can
+stay off. [Forever aura container](https://github.com/Gethe/wow-ui-source/blob/d9c22e32cb240afb82bb2ecefbb78ef935333f59/Interface/AddOns/Blizzard_AuraContainer/Blizzard_CustomAuraContainer.lua)
+ · [ProcDoc buff display](https://github.com/wsmaxcy/ProcDoc/blob/1faaab5633cc67f0bd16cca7954e7e86ca17a846/ProcDoc.lua#L5142-L5190)
+ · [Prism action-button glows](https://github.com/clebert/prism/blob/59e84786982c9bf9650608136ef0fff07fe86766/Core.lua#L260-L320)
 
-**Follow-up plan for reliable five-stack glows in combat** (not implemented; each step needs a real client):
-1. In a client, record in and out of combat (open world, dungeon, raid): `C_Secrets.ShouldAurasBeSecret()`,
-   `C_Secrets.ShouldSpellAuraBeSecret(51530)` (and each Maelstrom Weapon ID) and whether `GetPlayerAuraBySpellID` answers
-   plainly. If Maelstrom Weapon is never secret, the smallest change is a per-spell read in the aura source for conditions
-   whose spells are all non-secret, keeping today's unknown answer for everything else; ordinary reminders then work in
-   combat with no new output.
-2. Otherwise, prototype a secure output: one `CustomAuraContainerTemplate` per configured (aura, threshold), created out
-   of combat; an aura slot filtered to the aura's spell IDs; an application bar with `minApplications = threshold` whose
-   fill is the glow art, inside the aura button. Verify in a client that addons may create the container, whether an
-   animation can run on that region (`AddAuraShownAnimation` validates inbound animation groups), and whether the
-   container can be anchored over an action button and re-anchored only out of combat (paging in combat would then leave
-   it on the old button until combat ends; that limit must be accepted or the output not offered).
-3. Offer it as its own choice ("glow in combat from the aura's stacks"), clearly separate from the reminder's display,
-   sound, delay and minimum, which would still follow the readable rule only.
+The native path shows the artwork without its timed fade or pulse and has no sound. It can clear an old button
+after paging and light any already prepared button that now matches. New button bindings and visual changes
+are prepared after restrictions lift. Each restricted buff's glow has its own visibility, so glows for two
+restricted buffs on the same button can overlap. Rules about missing buffs, harmful effects, stacks, duration,
+or combinations of conditions still need readable observations. The native API also has a
+`SetApplicationBar` threshold for stacks, but Reminders currently uses only presence slots.
+
+**Unit-tested** with secret aura data: artwork and glow follow the native slot without a Lua aura result,
+and clear on consumption, Quiet screen, deletion, or a button change. **Not real-client-tested** in TwichUI.
 
 ## Preview, moving, diagnostics
 
@@ -659,8 +645,8 @@ their sources (`ST.Source` after State.lua, with `ST.Plain` / `ST.Number` / `ST.
 - Well Fed: only whether the buff is there, not which food gave it (a buff condition, `aura`, can ask how long a chosen
   buff has left). It is unknown, so nothing shows, while the game hides your buffs from addons.
 - Action button glow: one spell per reminder, every bar (Action bar glows' bar choice doesn't apply), its look's size,
-  opacity and speed fixed at the drawing's defaults; in combat only while the reminder's conditions are readable (see "WoW:
-  Forever in combat").
+  opacity and speed fixed at the drawing's defaults. Restricted helpful aura presence can use native visuals
+  (see "WoW: Forever in combat").
 - Not in this release: Lua, dynamic clones, a volume or channel per sound, sharing your whole list or a profile (one reminder can be
   shared: below), health (always secret to addons),
   swimming (no event), a talent's rank, automation of any kind.
@@ -775,9 +761,11 @@ their sources (`ST.Source` after State.lua, with `ST.Plain` / `ST.Number` / `ST.
     glows' stays. With a faded bar, the glowing button stays in full. Each look and motion, on square and round buttons.
     Check that clicking a glowing button still casts normally in and out of combat, with no taint message.
 31. **Maelstrom Weapon, 5 stacks** ("Buff or debuff on you", Stack count, at least 5, glow on Lightning Bolt): out of combat it
-    shows and glows at five stacks. In combat note whether it still does, or stays hidden (auras restricted: expected and
-    correct), and record `C_Secrets.ShouldAurasBeSecret()` and `C_Secrets.ShouldSpellAuraBeSecret(51530)` for the
-    follow-up in "WoW: Forever in combat".
+    shows and glows at five stacks. In combat it requires readable aura data.
+32. **Holy Purpose** (a Priest with Searing Light). Outside combat, enable one **Is on you** helpful buff condition
+    with ID `1284536`, Artwork, and an action button glow targeting Holy Nova. Leave Delay and Minimum at zero.
+    In combat, let Holy Fire proc Holy Purpose. Confirm both cues appear immediately and clear when Holy Nova
+    consumes the proc. Repeat with the Cooldown Manager off and check that Holy Nova still casts from the lit button.
 
 
 Condition-type art is resolved centrally by `RemindersPlain.ApplyArt`: enchanted blade for weapon enchant, separate

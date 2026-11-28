@@ -360,6 +360,7 @@ reminders\Character.lua
 reminders\Context.lua
 reminders\Display.lua
 reminders\ButtonGlow.lua
+reminders\BuffVisuals.lua
 reminders\Controller.lua
 reminders\Share.lua
 reminders\ShareUI.lua

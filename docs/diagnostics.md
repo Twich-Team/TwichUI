@@ -136,6 +136,7 @@ uses an item, sends anything or makes up events. Each states its cost before you
 | `npcs.import`, `npcs.cleanup` | `npcs/Store.lua` `NS.MergeReported`, `NS.ForgetMany` | bulk |
 | `pins.map.layout` | `pins/Map.lua` `PM.Layout` | layout |
 | `reminders.refresh` (`Perf.Call`), `reminders.decide` | `reminders/Controller.lua` | rebuild, evaluate |
+| `reminders.buffVisuals` (`Perf.Call`), `reminders.buffVisuals.event` | `reminders/BuffVisuals.lua` | rebuild, event |
 | `reminders.designer.layout` (`Perf.Call`) | `TwichUI_Settings/pages/RemindersDesigner.lua` `s:Layout` (visible while the settings window is shown) | layout |
 | `healer.update` | `healer/Watch.lua` `Update` (live path; previews not timed) | update |
 | `camping.look` (`Perf.Call`, after the combat check) | `camping/Bar.lua` `Update`, reached through `Look` (one look per burst of bag, skill, recipe or setting changes, out of combat only) | rebuild |

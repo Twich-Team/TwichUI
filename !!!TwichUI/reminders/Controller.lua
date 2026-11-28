@@ -38,6 +38,7 @@ local E = R.ReminderEval
 local ST = R.ReminderState
 local D = R.ReminderDisplay
 local GW = R.ReminderGlow   -- the action button glow, which follows a reminder's visibility exactly
+local BV = R.ReminderBuffVisuals
 local Perf = R.Perf
 local CT = {}
 R.ReminderController = CT
@@ -137,6 +138,16 @@ end
 local function HardHide(v, r)
     Cancel(r)
     if r.visible then Hide(v, r, true) end
+end
+
+local function NativeBuff(v, r)
+    if not BV then return false end
+    local out = r and r.out
+    local aura = ST.Observations().aura
+    -- A by-ID lookup can answer nil while the full list is inaccessible.
+    -- Let the native slot verify presence if Lua cannot confirm the buff.
+    local useNative = out ~= nil and (out.status == "waiting" or out.status == "hidden") and not (aura and aura.HELPFUL)
+    return BV.UseNative(v.id, useNative)
 end
 
 local function Tell(id)
@@ -252,7 +263,7 @@ function Decide(v, obs, ctx)
     obs.now = GetTime()
     r.out = E.Run(v, obs, ctx, r.out)
     stats.decisions = stats.decisions + 1
-    Act(v, r)
+    if NativeBuff(v, r) then HardHide(v, r) else Act(v, r) end
     Schedule(v, r, obs)
     if pt then Perf.Stop(pt) end
 end
@@ -282,6 +293,7 @@ local function Refresh()
     if not R:Enabled("reminders") then
         running = false
         ST.Stop()
+        if BV then BV.Sync() end
         for _, r in pairs(rt) do Cancel(r); r.visible, r.sounded = false, nil; r.out = nil end
         D.HideAll()
         GW.Clear()
@@ -292,6 +304,7 @@ local function Refresh()
     running = ST.InWorld()
     if not running then
         ST.Want({})
+        if BV then BV.Sync() end
         for _, v in ipairs(views) do HardHide(v, Rec(v.id)) end
         Tell(nil)
         return
@@ -313,6 +326,7 @@ local function Refresh()
             end
         end
     end
+    if BV then BV.Sync(views, active, ctx) end
     ST.Want(want)
     local obs = ST.Observations()
     for _, v in ipairs(views) do
@@ -355,10 +369,17 @@ ST.OnChange(function(changed)
     end
 end)
 
+local function UpdateBuffVisual(v, r)
+    if not (BV and v) then return end
+    BV.Update(v, active[v.id] and E.Applies(v, ST.Context()) == C.MATCH)
+    return NativeBuff(v, r)
+end
+
 -- A reminder changed in the settings (or a profile change, id nil).
 RM.Subscribe(function(id, what)
     if id and what == "sound" then return end   -- read when it next appears; nothing is drawn or decided again
     if id and what == "glow" then                -- only the glow is drawn again; nothing is decided again
+        UpdateBuffVisual(RM.Get(id), rt[id])
         GW.Update(id)
         Tell(id)
         return
@@ -369,12 +390,13 @@ RM.Subscribe(function(id, what)
         if v then
             D.Update(v)
             local r = rt[id]
+            local native = UpdateBuffVisual(v, r)
             if r and r.out and active[id] then
                 -- a changed delay or minimum counts from when the wait began, not from now
                 local since = r.wantSince
                 if r.phase then r.token, r.phase = r.token + 1, nil end
                 r.wantSince = since
-                Act(v, r)
+                if native then HardHide(v, r) else Act(v, r) end
             end
             Tell(id)
         end
