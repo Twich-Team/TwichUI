@@ -1565,9 +1565,9 @@ local function DrawRecipient(x, y, w)
     end)
     box:SetScript("OnEnterPressed", function(self) self:ClearFocus(); P.QueueRefresh() end)
     box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-    R.Interact.Tip(box, "Recipient character", "The character this rule mails to. Type their name, or Name-Realm for a character on another realm. Saving the rule saves it; nothing is sent until you review the mail at a mailbox.")
+    R.Interact.Tip(box, "Recipient character", "The character this rule mails to. Type their name, including their last name if they have one, or Name-Realm for a character on another realm. Saving the rule saves it; nothing is sent until you review the mail at a mailbox.")
     local hint = Text("recipientHint", "small"); hint:SetParent(box); hint:ClearAllPoints(); hint:SetPoint("LEFT", box, "LEFT", 6, 0)
-    hint:SetText("Name, or Name-Realm"); Tone(hint, "quiet"); hint:SetShown(shown == "")
+    hint:SetText("Name or First Last, optionally -Realm"); Tone(hint, "quiet"); hint:SetShown(shown == "")
     if not box.recipientHintHook then
         box.recipientHintHook = true
         box:HookScript("OnTextChanged", function(self) if pool.recipientHint then pool.recipientHint:SetShown((self:GetText() or "") == "" and editing ~= nil) end end)
@@ -1595,7 +1595,7 @@ local function DrawRecipient(x, y, w)
     elseif cur then
         status:SetText(("No recipient on this character yet for \"%s\": type the character's name."):format(cur.label)); Tone(status, "warn")
     else
-        status:SetText("Type the character's name. Use Name-Realm for a character on another realm."); Tone(status, "dim")
+        status:SetText("Type the character's name, including their last name if they have one. Use Name-Realm for a character on another realm."); Tone(status, "dim")
     end
     y = y + H(status) + 4
     local honest = Text("recipientHonest", "small"); Wide(honest, x, y, w)

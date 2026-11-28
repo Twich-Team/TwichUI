@@ -318,7 +318,18 @@ local _2 = herbsBank
 Reset()
 Check(MI.NormalizeRecipient("  bankALT ") == "Bankalt", "trimmed and capitalized as the game does")
 Check(MI.NormalizeRecipient("Bankalt-Other Realm") == "Bankalt-OtherRealm", "another realm, spaces removed")
-Check(MI.NormalizeRecipient("Bank alt") == nil, "a space is refused")
+Check(MI.NormalizeRecipient("  bank ALT  ") == "Bank Alt", "first and last names keep their space and capitalize each part")
+Check(MI.NormalizeRecipient("Thornbrook Willowmere-Other Realm") == "Thornbrook Willowmere-OtherRealm", "a full name longer than 12 letters keeps its surname and realm")
+Check(MI.NormalizeRecipient("Zoë Willowmere") == "Zoë Willowmere", "a full name keeps letters beyond ASCII")
+Check(MI.NormalizeRecipient("Abcdefghijkl Mnopqrstuvwx") == "Abcdefghijkl Mnopqrstuvwx", "both name parts may reach 12 letters")
+for _, name in ipairs({ "Bank  Alt", "Bank\tAlt", "Bank\nAlt", "Bank Alt Extra", "Bank Alt2", "Bank Alt!", "Bank A", "Bank Abcdefghijklm" }) do
+    Check(MI.NormalizeRecipient(name) == nil, "invalid full name is refused: " .. name)
+end
+local unitName = c.UnitName
+c.UnitName = function() return "Rich Willowmere" end
+Check(MI.NormalizeRecipient("rich willowmere-Forever") == nil, "this character's full name on this realm is refused")
+Check(MI.NormalizeRecipient("Rich Willowmere-Other Realm") == "Rich Willowmere-OtherRealm", "the same full name on another realm is allowed")
+c.UnitName = unitName
 Check(MI.NormalizeRecipient("B") == nil, "too short is refused")
 Check(MI.NormalizeRecipient("Abcdefghijklm") == nil, "13 letters is refused")
 Check(MI.NormalizeRecipient("Rich") == nil, "this character is refused")
